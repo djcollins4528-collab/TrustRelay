@@ -846,32 +846,73 @@ function setupHandlers() {
     event.preventDefault();
     const button = event.submitter;
     clearMessage(els.inviteResult);
-    setBusy(button, true, "Accepting…");
+    setBusy(button, true, "Reviewing…");
+    const token = $("inviteToken").value.trim();
     try {
-      const token = $("inviteToken").value.trim();
-      const result = await invokeEdge("trustrelay-invite-accept-v06", {
+      const preview = await invokeEdge("trustrelay-invite-preview-v061", {
         method: "POST",
         body: { token },
       });
-      localStorage.removeItem("trustrelay_pending_invite");
-      const status = result?.grant?.status;
-      setMessage(
-        els.inviteResult,
-        status === "active"
-          ? "Invitation accepted. The grant is active and can now issue a signed credential."
-          : "Invitation accepted. The grant will activate when both participants complete staging verification.",
-        "success"
-      );
-      toast("Authority invitation accepted.", "success");
-      await refreshApp();
+      const grant = preview?.grant || {};
+      const rules = grant.rules || {};
+      const actions = Array.isArray(grant.allowed) ? grant.allowed : [];
+      const resources = Array.isArray(grant.resources) ? grant.resources : [];
+      const currency = Array.isArray(rules.allowedCurrencies) && rules.allowedCurrencies.length ? rules.allowedCurrencies[0] : "USD";
+      const limit = rules.maxAmount != null ? formatMoney(rules.maxAmount, currency) : "No amount cap";
+      const principal = preview?.principal?.displayName || preview?.principal?.email || "Principal";
+      const html =
+        '<p class="eyebrow">REVIEW AUTHORITY</p>' +
+        '<h2>Accept authority from ' + escapeHtml(principal) + '?</h2>' +
+        '<p>Review the exact authority below. Acceptance binds this grant to your authenticated TrustRelay identity. You cannot expand the scope.</p>' +
+        '<dl class="detail-list" style="margin-top:18px">' +
+          '<dt>Principal</dt><dd>' + escapeHtml(preview?.principal?.displayName || preview?.principal?.email || "—") + '</dd>' +
+          '<dt>Starts</dt><dd>' + escapeHtml(formatDate(grant.validFrom, true)) + '</dd>' +
+          '<dt>Expires</dt><dd>' + escapeHtml(formatDate(grant.validUntil, true)) + '</dd>' +
+          '<dt>Allowed actions</dt><dd>' + escapeHtml(actions.join(", ") || "—") + '</dd>' +
+          '<dt>Resources</dt><dd>' + escapeHtml(resources.join(", ") || "—") + '</dd>' +
+          '<dt>Amount limit</dt><dd>' + escapeHtml(limit) + '</dd>' +
+          '<dt>Evidence</dt><dd>' + (rules.requireEvidence ? "Required" : "Not required") + '</dd>' +
+        '</dl>' +
+        '<p class="modal-warning">Only accept if you understand and intend to act within this scope. The principal can revoke the grant at any time.</p>' +
+        '<div class="modal-actions">' +
+          '<button class="button ghost" id="cancelInviteAcceptance" type="button">Cancel</button>' +
+          '<button class="button primary" id="confirmInviteAcceptance" type="button">Accept scoped authority</button>' +
+        '</div>';
+      openModal(html);
+      $("cancelInviteAcceptance").onclick = closeModal;
+      $("confirmInviteAcceptance").onclick = async (confirmEvent) => {
+        const confirmButton = confirmEvent.currentTarget;
+        setBusy(confirmButton, true, "Accepting…");
+        try {
+          const result = await invokeEdge("trustrelay-invite-accept-v06", {
+            method: "POST",
+            body: { token },
+          });
+          localStorage.removeItem("trustrelay_pending_invite");
+          closeModal();
+          const status = result?.grant?.status;
+          setMessage(
+            els.inviteResult,
+            status === "active"
+              ? "Invitation accepted. The grant is active and can now issue a signed credential."
+              : "Invitation accepted. The grant will activate when both participants complete staging verification.",
+            "success"
+          );
+          toast("Authority invitation accepted.", "success");
+          await refreshApp();
+        } catch (error) {
+          toast("Acceptance failed: " + String(error.code || error.message).replaceAll("_", " "), "error");
+          setBusy(confirmButton, false);
+        }
+      };
     } catch (error) {
-      setMessage(els.inviteResult, `Invitation could not be accepted: ${String(error.code || error.message).replaceAll("_", " ")}`, "error");
+      setMessage(els.inviteResult, "Invitation could not be reviewed: " + String(error.code || error.message).replaceAll("_", " "), "error");
     } finally {
       setBusy(button, false);
     }
   });
 
-  els.grantList.addEventListener("click", (event) => {
+    els.grantList.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-action]");
     if (!button) return;
     const grantId = button.dataset.id;
