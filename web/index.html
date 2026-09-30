@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07111f">
+  <meta name="description" content="TrustRelay — scoped authority, exactly as granted.">
+  <title>TrustRelay — Scoped Authority</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="appShell" class="app-shell">
+    <header class="topbar">
+      <button class="brand" id="brandButton" type="button" aria-label="TrustRelay home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 40 40" role="img">
+            <path d="M20 2.5 34 8v10.2c0 9-5.6 15.6-14 19.3C11.6 33.8 6 27.2 6 18.2V8l14-5.5Z" fill="currentColor" opacity=".18"/>
+            <path d="M20 5.8 31 10v8.2c0 7.1-4.2 12.5-11 15.8-6.8-3.3-11-8.7-11-15.8V10l11-4.2Z" fill="none" stroke="currentColor" stroke-width="2.2"/>
+            <path d="m14.2 19.8 3.7 3.7 8-8" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span>
+          <strong>TrustRelay</strong>
+          <small>Scoped authority</small>
+        </span>
+      </button>
+      <div class="topbar-actions">
+        <span id="environmentBadge" class="env-badge">STAGING</span>
+        <button id="verifyTopButton" class="button ghost small" type="button">Verify credential</button>
+        <button id="accountTopButton" class="avatar-button hidden" type="button" aria-label="Account"></button>
+      </div>
+    </header>
+
+    <main id="main">
+      <section id="authView" class="auth-view">
+        <div class="hero">
+          <div class="eyebrow">DELEGATED AUTHORITY INFRASTRUCTURE</div>
+          <h1>Authority, exactly<br>as granted.</h1>
+          <p class="hero-copy">TrustRelay lets a principal grant another person precise, time-bound authority without handing over unlimited control.</p>
+          <div class="trust-points">
+            <div><span>01</span><p><strong>Define the scope.</strong><br>Actions, resources, limits, dates and evidence requirements.</p></div>
+            <div><span>02</span><p><strong>Verify both people.</strong><br>Every grant is tied to an authenticated principal and representative.</p></div>
+            <div><span>03</span><p><strong>Prove it cryptographically.</strong><br>Signed ES256 credentials can be independently verified and revoked.</p></div>
+          </div>
+          <div class="pilot-note">
+            <strong>Staging assurance</strong>
+            <span>Confirmed email is used as pilot-grade identity assurance. It is not government-ID, notary or KYC verification.</span>
+          </div>
+        </div>
+
+        <div class="auth-panel">
+          <div class="auth-card">
+            <div class="auth-tabs" role="tablist">
+              <button class="auth-tab active" data-auth-mode="signin" type="button">Sign in</button>
+              <button class="auth-tab" data-auth-mode="signup" type="button">Create account</button>
+            </div>
+
+            <form id="signInForm" class="auth-form">
+              <div class="field">
+                <label for="signInEmail">Email</label>
+                <input id="signInEmail" type="email" autocomplete="email" required placeholder="you@example.com">
+              </div>
+              <div class="field">
+                <label for="signInPassword">Password</label>
+                <input id="signInPassword" type="password" autocomplete="current-password" required placeholder="Your password">
+              </div>
+              <button class="button primary full" type="submit">Sign in to TrustRelay</button>
+              <button class="text-button" id="forgotPasswordButton" type="button">Forgot your password?</button>
+            </form>
+
+            <form id="signUpForm" class="auth-form hidden">
+              <div class="field">
+                <label for="signUpName">Full name</label>
+                <input id="signUpName" type="text" autocomplete="name" required maxlength="100" placeholder="Your name">
+              </div>
+              <div class="field">
+                <label for="signUpEmail">Email</label>
+                <input id="signUpEmail" type="email" autocomplete="email" required placeholder="you@example.com">
+              </div>
+              <div class="field">
+                <label for="signUpPassword">Password</label>
+                <input id="signUpPassword" type="password" autocomplete="new-password" minlength="10" required placeholder="10+ characters">
+                <small>Use at least 10 characters. A passphrase is recommended.</small>
+              </div>
+              <button class="button primary full" type="submit">Create secure account</button>
+              <p class="fine-print">By creating an account, you acknowledge that this staging build is for testing delegated-authority workflows and is not yet a substitute for legal advice or formal power-of-attorney documentation.</p>
+            </form>
+
+            <div id="authMessage" class="message hidden"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="appView" class="workspace hidden">
+        <aside class="sidebar">
+          <div class="sidebar-user">
+            <div id="sidebarAvatar" class="avatar"></div>
+            <div>
+              <strong id="sidebarName">Account</strong>
+              <small id="sidebarEmail"></small>
+            </div>
+          </div>
+          <nav class="side-nav" aria-label="Primary navigation">
+            <button class="nav-item active" data-view="dashboard" type="button">
+              <span>⌂</span><span>Dashboard</span>
+            </button>
+            <button class="nav-item" data-view="new-grant" type="button">
+              <span>＋</span><span>Grant authority</span>
+            </button>
+            <button class="nav-item" data-view="accept-invite" type="button">
+              <span>↗</span><span>Accept invitation</span>
+            </button>
+            <button class="nav-item" data-view="verify" type="button">
+              <span>✓</span><span>Verify credential</span>
+            </button>
+            <button class="nav-item" data-view="account" type="button">
+              <span>◎</span><span>Account</span>
+            </button>
+          </nav>
+          <div class="sidebar-footer">
+            <span class="status-dot"></span>
+            <span>TrustRelay staging</span>
+            <small>v0.6.1</small>
+          </div>
+        </aside>
+
+        <div class="workspace-main">
+          <section id="dashboardView" class="workspace-view">
+            <div class="page-heading">
+              <div>
+                <p class="eyebrow">AUTHORITY OVERVIEW</p>
+                <h2 id="dashboardGreeting">Your TrustRelay</h2>
+                <p>See what you have granted, what you represent, and what needs attention.</p>
+              </div>
+              <button class="button primary" data-go="new-grant" type="button">Grant authority</button>
+            </div>
+
+            <div id="assuranceBanner" class="assurance-banner"></div>
+
+            <div class="metric-grid">
+              <article class="metric-card">
+                <span class="metric-label">Active</span>
+                <strong id="metricActive">0</strong>
+                <small>usable authority grants</small>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Awaiting action</span>
+                <strong id="metricPending">0</strong>
+                <small>acceptance or verification</small>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Granted by you</span>
+                <strong id="metricPrincipal">0</strong>
+                <small>principal relationships</small>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">You represent</span>
+                <strong id="metricRepresentative">0</strong>
+                <small>representative relationships</small>
+              </article>
+            </div>
+
+            <div class="section-heading">
+              <div>
+                <h3>Authority relationships</h3>
+                <p>Every relationship is scoped and independently revocable.</p>
+              </div>
+              <div class="segmented" id="grantFilter">
+                <button class="active" data-filter="all" type="button">All</button>
+                <button data-filter="principal" type="button">Granted by me</button>
+                <button data-filter="representative" type="button">I represent</button>
+              </div>
+            </div>
+            <div id="grantList" class="grant-list"></div>
+          </section>
+
+          <section id="newGrantView" class="workspace-view hidden">
+            <div class="page-heading">
+              <div>
+                <p class="eyebrow">NEW AUTHORITY GRANT</p>
+                <h2>Grant authority without giving up control.</h2>
+                <p>Define exactly what the representative can do, where, for how long, and under what limits.</p>
+              </div>
+            </div>
+
+            <form id="grantForm" class="wizard-card">
+              <div class="wizard-section">
+                <span class="step-number">1</span>
+                <div class="wizard-content">
+                  <h3>Who will represent you?</h3>
+                  <p>They must accept using this exact email address.</p>
+                  <div class="field">
+                    <label for="representativeEmail">Representative email</label>
+                    <input id="representativeEmail" type="email" required placeholder="representative@example.com">
+                  </div>
+                </div>
+              </div>
+
+              <div class="wizard-section">
+                <span class="step-number">2</span>
+                <div class="wizard-content">
+                  <h3>What can they do?</h3>
+                  <p>Select only the actions you intend to delegate.</p>
+                  <div id="actionOptions" class="check-grid">
+                    <label><input type="checkbox" value="view_balance"><span><strong>View balances</strong><small>Read current balances</small></span></label>
+                    <label><input type="checkbox" value="view_transactions"><span><strong>View transactions</strong><small>Review transaction history</small></span></label>
+                    <label><input type="checkbox" value="pay_bill"><span><strong>Pay bills</strong><small>Submit bill payments</small></span></label>
+                    <label><input type="checkbox" value="transfer_funds"><span><strong>Transfer funds</strong><small>Initiate scoped transfers</small></span></label>
+                    <label><input type="checkbox" value="manage_payee"><span><strong>Manage payees</strong><small>Add or update payees</small></span></label>
+                    <label><input type="checkbox" value="download_statement"><span><strong>Download statements</strong><small>Access statements</small></span></label>
+                    <label><input type="checkbox" value="upload_document"><span><strong>Upload documents</strong><small>Submit supporting files</small></span></label>
+                    <label><input type="checkbox" value="contact_support"><span><strong>Contact support</strong><small>Act on support matters</small></span></label>
+                  </div>
+                  <div class="field inline-add">
+                    <label for="customAction">Custom action</label>
+                    <div>
+                      <input id="customAction" type="text" maxlength="80" placeholder="e.g. schedule_payment">
+                      <button id="addCustomAction" class="button secondary" type="button">Add</button>
+                    </div>
+                    <div id="customActionTags" class="tag-row"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="wizard-section">
+                <span class="step-number">3</span>
+                <div class="wizard-content">
+                  <h3>Where does the authority apply?</h3>
+                  <p>Use resource patterns to keep authority compartmentalized.</p>
+                  <div id="resourceOptions" class="check-grid compact">
+                    <label><input type="checkbox" value="checking:*"><span><strong>Checking</strong><small>checking:*</small></span></label>
+                    <label><input type="checkbox" value="savings:*"><span><strong>Savings</strong><small>savings:*</small></span></label>
+                    <label><input type="checkbox" value="billpay:*"><span><strong>Bill pay</strong><small>billpay:*</small></span></label>
+                    <label><input type="checkbox" value="documents:*"><span><strong>Documents</strong><small>documents:*</small></span></label>
+                    <label><input type="checkbox" value="support:*"><span><strong>Support</strong><small>support:*</small></span></label>
+                  </div>
+                  <div class="field inline-add">
+                    <label for="customResource">Custom resource</label>
+                    <div>
+                      <input id="customResource" type="text" maxlength="120" placeholder="e.g. property:home">
+                      <button id="addCustomResource" class="button secondary" type="button">Add</button>
+                    </div>
+                    <div id="customResourceTags" class="tag-row"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="wizard-section">
+                <span class="step-number">4</span>
+                <div class="wizard-content">
+                  <h3>Set limits and safeguards.</h3>
+                  <div class="form-grid">
+                    <div class="field">
+                      <label for="maxAmount">Maximum amount</label>
+                      <input id="maxAmount" type="number" min="0" step="0.01" placeholder="1000">
+                    </div>
+                    <div class="field">
+                      <label for="currency">Currency</label>
+                      <select id="currency">
+                        <option value="USD">USD — U.S. Dollar</option>
+                        <option value="EUR">EUR — Euro</option>
+                        <option value="GBP">GBP — Pound Sterling</option>
+                        <option value="CAD">CAD — Canadian Dollar</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label for="validFrom">Starts</label>
+                      <input id="validFrom" type="datetime-local" required>
+                    </div>
+                    <div class="field">
+                      <label for="validUntil">Expires</label>
+                      <input id="validUntil" type="datetime-local" required>
+                    </div>
+                  </div>
+                  <div class="toggle-row">
+                    <label class="switch-line">
+                      <input id="requireEvidence" type="checkbox">
+                      <span class="switch"></span>
+                      <span><strong>Require evidence</strong><small>Escalate until supporting evidence is supplied.</small></span>
+                    </label>
+                    <label class="switch-line">
+                      <input id="escalateAboveLimit" type="checkbox" checked>
+                      <span class="switch"></span>
+                      <span><strong>Escalate above the amount limit</strong><small>Do not automatically deny an over-limit request.</small></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="wizard-footer">
+                <div>
+                  <strong>Review before you send.</strong>
+                  <small>The representative cannot expand this scope.</small>
+                </div>
+                <button class="button primary" type="submit">Create authority grant</button>
+              </div>
+            </form>
+          </section>
+
+          <section id="acceptInviteView" class="workspace-view hidden">
+            <div class="page-heading">
+              <div>
+                <p class="eyebrow">REPRESENTATIVE INVITATION</p>
+                <h2>Accept delegated authority.</h2>
+                <p>Only accept authority you understand and intend to use within the stated scope.</p>
+              </div>
+            </div>
+            <form id="inviteForm" class="focus-card">
+              <div class="icon-orb">↗</div>
+              <h3>Enter your invitation token</h3>
+              <p>The invitation must have been issued to the email address on your signed-in account.</p>
+              <div class="field">
+                <label for="inviteToken">Invitation token</label>
+                <textarea id="inviteToken" rows="4" required placeholder="Paste the one-time invitation token"></textarea>
+              </div>
+              <button class="button primary full" type="submit">Review and accept authority</button>
+              <div id="inviteResult" class="message hidden"></div>
+            </form>
+          </section>
+
+          <section id="verifyView" class="workspace-view hidden">
+            <div class="page-heading">
+              <div>
+                <p class="eyebrow">PUBLIC VERIFICATION</p>
+                <h2>Verify a TrustRelay credential.</h2>
+                <p>Check the ES256 signature plus the credential's live grant and revocation state.</p>
+              </div>
+            </div>
+            <div class="verify-layout">
+              <form id="verifyForm" class="focus-card">
+                <div class="icon-orb">✓</div>
+                <h3>Paste credential</h3>
+                <p>A TrustRelay credential is a compact signed token. Verification does not expose private signing material.</p>
+                <div class="field">
+                  <label for="verifyToken">Credential token</label>
+                  <textarea id="verifyToken" rows="8" required spellcheck="false" placeholder="eyJ..."></textarea>
+                </div>
+                <button class="button primary full" type="submit">Verify credential</button>
+              </form>
+              <div id="verifyResult" class="verify-result empty">
+                <div class="result-mark">?</div>
+                <h3>No credential checked yet</h3>
+                <p>Paste a credential to verify its signature and live authority status.</p>
+              </div>
+            </div>
+          </section>
+
+          <section id="accountView" class="workspace-view hidden">
+            <div class="page-heading">
+              <div>
+                <p class="eyebrow">ACCOUNT & SECURITY</p>
+                <h2>Your TrustRelay identity.</h2>
+                <p>Authentication and authority status are intentionally separate.</p>
+              </div>
+            </div>
+            <div class="account-grid">
+              <article class="settings-card">
+                <h3>Account</h3>
+                <dl id="accountDetails"></dl>
+              </article>
+              <article class="settings-card">
+                <h3>Identity assurance</h3>
+                <div id="identityDetails"></div>
+              </article>
+              <article class="settings-card danger-card">
+                <h3>Session</h3>
+                <p>Signing out removes the local session from this browser. It does not revoke authority grants.</p>
+                <button id="signOutButton" class="button danger" type="button">Sign out</button>
+              </article>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="publicVerifyView" class="public-verify hidden">
+        <button id="backFromPublicVerify" class="text-button back-button" type="button">← Back</button>
+        <div class="public-verify-inner">
+          <p class="eyebrow">TRUSTRELAY VERIFY</p>
+          <h1>Validate delegated authority.</h1>
+          <p>Cryptographic proof is checked against the live credential, grant and revocation state.</p>
+          <form id="publicVerifyForm" class="focus-card">
+            <div class="field">
+              <label for="publicVerifyToken">Credential token</label>
+              <textarea id="publicVerifyToken" rows="9" required spellcheck="false" placeholder="Paste a TrustRelay credential"></textarea>
+            </div>
+            <button class="button primary full" type="submit">Verify now</button>
+          </form>
+          <div id="publicVerifyResult" class="verify-result empty">
+            <div class="result-mark">?</div>
+            <h3>Ready to verify</h3>
+            <p>No account is required to validate a TrustRelay credential.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="modalBackdrop" class="modal-backdrop hidden" role="presentation">
+    <section id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button id="modalClose" class="modal-close" type="button" aria-label="Close">×</button>
+      <div id="modalContent"></div>
+    </section>
+  </div>
+
+  <div id="toastRegion" class="toast-region" aria-live="polite"></div>
+
+  <template id="emptyGrantTemplate">
+    <div class="empty-state">
+      <div class="empty-icon">⌁</div>
+      <h3>No authority relationships yet</h3>
+      <p>Create a tightly scoped grant or accept an invitation to get started.</p>
+      <button class="button primary" data-go="new-grant" type="button">Grant authority</button>
+    </div>
+  </template>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
