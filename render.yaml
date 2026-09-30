@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: trustrelay-api-staging
+    runtime: node
+    plan: free
+    region: virginia
+    autoDeploy: false
+    buildCommand: cat deploy/*.b64 | tr -d '\n' | base64 -d > server.mjs && echo '6293b88e5eb0b15bb0e367772540cc2165bdfdcd9b0d705aaff35669e7ec425b  server.mjs' | sha256sum -c - && node --check server.mjs
+    startCommand: node server.mjs
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: TRUSTRELAY_RATE_LIMIT_PER_MINUTE
+        value: "120"
+      - key: TRUSTRELAY_BODY_LIMIT_BYTES
+        value: "262144"
+      - key: TRUSTRELAY_REQUEST_TIMEOUT_MS
+        value: "8000"
