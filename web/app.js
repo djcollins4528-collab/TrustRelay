@@ -776,7 +776,7 @@ function setupHandlers() {
     }
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}${window.location.pathname}?recovery=1`,
+        redirectTo: window.location.origin,
       });
       if (error) throw error;
       setMessage(els.authMessage, "Password recovery email sent.", "success");
