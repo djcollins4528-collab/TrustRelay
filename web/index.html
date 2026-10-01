@@ -44,8 +44,8 @@
             <div><span>03</span><p><strong>Prove it cryptographically.</strong><br>Signed ES256 credentials can be independently verified and revoked.</p></div>
           </div>
           <div class="pilot-note">
-            <strong>Staging assurance</strong>
-            <span>Confirmed email is used as pilot-grade identity assurance. It is not government-ID, notary or KYC verification.</span>
+            <strong>v0.8 identity assurance</strong>
+            <span>Email verification remains the baseline. Users can now submit private government-ID and address evidence for reviewer-backed document or high-assurance verification.</span>
           </div>
         </div>
 
@@ -116,6 +116,9 @@
             <button class="nav-item" data-view="verify" type="button">
               <span>✓</span><span>Verify credential</span>
             </button>
+            <button class="nav-item" data-view="identity" type="button">
+              <span>◆</span><span>Identity & evidence</span>
+            </button>
             <button class="nav-item" data-view="account" type="button">
               <span>◎</span><span>Account</span>
             </button>
@@ -123,7 +126,7 @@
           <div class="sidebar-footer">
             <span class="status-dot"></span>
             <span>TrustRelay staging</span>
-            <small>v0.6.1</small>
+            <small>v0.8</small>
           </div>
         </aside>
 
@@ -275,11 +278,27 @@
                       <input id="validUntil" type="datetime-local" required>
                     </div>
                   </div>
+                  <div class="form-grid">
+                    <div class="field">
+                      <label for="minimumAssurance">Minimum identity assurance</label>
+                      <select id="minimumAssurance">
+                        <option value="email_verified">Email verified</option>
+                        <option value="document_verified">Document verified</option>
+                        <option value="high_assurance">High assurance</option>
+                      </select>
+                      <small>Both principal and representative must continuously meet this level.</small>
+                    </div>
+                  </div>
                   <div class="toggle-row">
                     <label class="switch-line">
                       <input id="requireEvidence" type="checkbox">
                       <span class="switch"></span>
-                      <span><strong>Require evidence</strong><small>Escalate until supporting evidence is supplied.</small></span>
+                      <span><strong>Require supporting evidence</strong><small>Escalate until evidence metadata is supplied.</small></span>
+                    </label>
+                    <label class="switch-line">
+                      <input id="requireVerifiedEvidence" type="checkbox">
+                      <span class="switch"></span>
+                      <span><strong>Require verified TrustRelay evidence</strong><small>Require a reviewer-approved document linked to the grant.</small></span>
                     </label>
                     <label class="switch-line">
                       <input id="escalateAboveLimit" type="checkbox" checked>
@@ -348,6 +367,82 @@
             </div>
           </section>
 
+
+          <section id="identityView" class="workspace-view hidden">
+            <div class="page-heading">
+              <div>
+                <p class="eyebrow">IDENTITY & EVIDENCE</p>
+                <h2>Build higher-assurance identity.</h2>
+                <p>Upload private evidence, submit it for independent review, and attach approved documents to scoped authority grants.</p>
+              </div>
+            </div>
+
+            <div id="identityAssuranceCard" class="assurance-banner"></div>
+
+            <div class="identity-grid">
+              <article class="settings-card">
+                <h3>Start identity proofing</h3>
+                <p>Document verified requires a government ID. High assurance also requires address evidence. TrustRelay does not currently perform biometric face matching.</p>
+                <form id="proofingStartForm">
+                  <div class="field">
+                    <label for="requestedAssurance">Requested assurance</label>
+                    <select id="requestedAssurance">
+                      <option value="document_verified">Document verified</option>
+                      <option value="high_assurance">High assurance</option>
+                    </select>
+                  </div>
+                  <label class="check-consent"><input id="proofingConsent" type="checkbox" required> <span>I consent to TrustRelay storing and reviewing the submitted identity evidence for verification.</span></label>
+                  <button class="button primary full" type="submit">Start proofing</button>
+                </form>
+              </article>
+
+              <article class="settings-card">
+                <h3>Active proofing session</h3>
+                <div id="proofingSession"></div>
+              </article>
+            </div>
+
+            <article class="settings-card identity-upload-card">
+              <h3>Upload private evidence</h3>
+              <p>Accepted: PDF, JPEG, PNG, WEBP. Maximum 10 MB. Files remain in a private Supabase Storage bucket and downloads use short-lived signed URLs.</p>
+              <form id="identityUploadForm" class="form-grid">
+                <div class="field">
+                  <label for="documentClassification">Document type</label>
+                  <select id="documentClassification">
+                    <option value="government_id_front">Government ID — front</option>
+                    <option value="government_id_back">Government ID — back</option>
+                    <option value="passport">Passport</option>
+                    <option value="address_evidence">Address evidence</option>
+                    <option value="authority_document">Authority document</option>
+                    <option value="invoice">Invoice / bill evidence</option>
+                    <option value="supporting_document">Supporting document</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="documentPurpose">Purpose</label>
+                  <select id="documentPurpose">
+                    <option value="identity">Identity proofing</option>
+                    <option value="grant_evidence">Grant evidence</option>
+                    <option value="supporting">Supporting document</option>
+                  </select>
+                </div>
+                <div class="field full-span">
+                  <label for="documentFile">File</label>
+                  <input id="documentFile" type="file" accept=".pdf,image/jpeg,image/png,image/webp" required>
+                </div>
+                <div class="full-span"><button class="button primary" type="submit">Upload securely</button></div>
+              </form>
+              <p class="fine-print"><strong>Security note:</strong> v0.8 performs type, size and SHA-256 integrity validation. A dedicated malware-scanning provider is not yet integrated, so TrustRelay does not claim antivirus scanning.</p>
+            </article>
+
+            <div class="section-heading"><div><h3>Your documents</h3><p>Integrity hashes and review states are retained separately from the private file object.</p></div></div>
+            <div id="identityDocumentList" class="management-list"></div>
+
+            <div class="section-heading"><div><h3>Evidence requests</h3><p>Requests from institutions that have evaluated one of your authority grants.</p></div></div>
+            <div id="evidenceRequestList" class="management-list"></div>
+          </section>
+
           <section id="accountView" class="workspace-view hidden">
             <div class="page-heading">
               <div>
@@ -364,6 +459,7 @@
               <article class="settings-card">
                 <h3>Identity assurance</h3>
                 <div id="identityDetails"></div>
+                <button class="button secondary" data-go="identity" type="button">Open Identity & evidence</button>
               </article>
               <article class="settings-card danger-card">
                 <h3>Session</h3>
