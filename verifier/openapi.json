@@ -1,0 +1,132 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TrustRelay Partner API",
+    "version": "0.7.0",
+    "description": "Institutional verification API for evaluating scoped TrustRelay delegated authority."
+  },
+  "servers": [
+    {
+      "url": "https://awrradmcwgeepwwdrbzi.supabase.co/functions/v1/trustrelay-partner-v07"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "TrustRelayApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-TrustRelay-Key"
+      }
+    },
+    "schemas": {
+      "EvaluateRequest": {
+        "type": "object",
+        "required": ["requestId", "credential", "action", "resource"],
+        "properties": {
+          "requestId": {"type": "string", "maxLength": 160},
+          "correlationId": {"type": ["string","null"], "maxLength": 160},
+          "credential": {"type": "string", "description": "TrustRelay signed authority credential."},
+          "action": {"type": "string", "maxLength": 120},
+          "resource": {"type": "string", "maxLength": 240},
+          "amount": {"type": ["number","null"], "minimum": 0},
+          "currency": {"type": ["string","null"], "pattern": "^[A-Z]{3}$"},
+          "evidence": {"type": "object", "additionalProperties": true}
+        }
+      },
+      "Decision": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "requestId": {"type": "string"},
+          "correlationId": {"type": ["string","null"]},
+          "decision": {"type": "string", "enum": ["ALLOW","DENY","ESCALATE"]},
+          "reasonCode": {"type": "string"},
+          "reasonDetail": {"type": ["string","null"]},
+          "action": {"type": "string"},
+          "resource": {"type": "string"},
+          "grantId": {"type": ["string","null"]},
+          "credentialJti": {"type": ["string","null"]},
+          "decidedAt": {"type": "string"},
+          "evaluationHash": {"type": ["string","null"]},
+          "auditEventId": {"type": ["string","null"]},
+          "latencyMs": {"type": ["integer","null"]},
+          "source": {"type": "string", "enum": ["api","portal"]}
+        }
+      },
+      "EvaluateResponse": {
+        "type": "object",
+        "properties": {
+          "requestId": {"type": "string"},
+          "idempotent": {"type": "boolean"},
+          "decision": {"$ref": "#/components/schemas/Decision"},
+          "rate": {"type": "object"},
+          "organization": {"type": "object"}
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {"type": "string"},
+              "message": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "security": [],
+        "summary": "Partner API health",
+        "responses": {
+          "200": {"description": "Healthy"}
+        }
+      }
+    },
+    "/v1/decisions/evaluate": {
+      "post": {
+        "security": [{"TrustRelayApiKey": []}],
+        "summary": "Evaluate delegated authority",
+        "description": "Verifies the signed credential, evaluates the requested operation against the active authority policy, persists an auditable decision, and emits decision.created webhooks.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/EvaluateRequest"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorization decision",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/EvaluateResponse"}}}
+          },
+          "400": {"description": "Invalid request", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "401": {"description": "Invalid, expired, or revoked API key", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "403": {"description": "Insufficient scope or inactive organization", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "429": {"description": "Rate limited", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    },
+    "/v1/decisions/{requestId}": {
+      "get": {
+        "security": [{"TrustRelayApiKey": []}],
+        "summary": "Retrieve a decision by request ID",
+        "parameters": [
+          {"name": "requestId", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Stored authorization decision",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/EvaluateResponse"}}}
+          },
+          "404": {"description": "Decision not found"}
+        }
+      }
+    }
+  }
+}
