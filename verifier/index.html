@@ -90,6 +90,7 @@
         <nav class="side-nav verifier-nav">
           <button class="nav-item active" data-view="dashboard" type="button"><span>⌂</span><span>Overview</span></button>
           <button class="nav-item" data-view="verify" type="button"><span>✓</span><span>Verify authority</span></button>
+          <button class="nav-item" data-view="evidence" type="button"><span>▣</span><span>Evidence</span></button>
           <button class="nav-item" data-view="keys" type="button"><span>⌁</span><span>API keys</span></button>
           <button class="nav-item" data-view="team" type="button"><span>◎</span><span>Team</span></button>
           <button class="nav-item" data-view="webhooks" type="button"><span>↗</span><span>Webhooks</span></button>
@@ -97,7 +98,7 @@
           <button class="nav-item" data-view="developer" type="button"><span>{ }</span><span>Developer</span></button>
         </nav>
         <div class="sidebar-footer">
-          <span class="status-dot"></span><span>Partner API v0.7</span><small>Sandbox</small>
+          <span class="status-dot"></span><span>Partner API v0.8</span><small>Sandbox</small>
         </div>
       </aside>
 
@@ -161,6 +162,7 @@
                 <div class="field"><label for="decisionCurrency">Currency</label><select id="decisionCurrency"><option value="">Not applicable</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option><option value="CAD">CAD</option></select></div>
               </div>
               <div class="field"><label for="decisionEvidence">Evidence metadata <span class="optional-label">JSON</span></label><textarea id="decisionEvidence" rows="4" spellcheck="false" placeholder='{"invoiceId":"INV-1042"}'></textarea></div>
+              <div class="field"><label for="decisionEvidenceDocuments">Verified TrustRelay evidence <span class="optional-label">document IDs</span></label><textarea id="decisionEvidenceDocuments" rows="3" spellcheck="false" placeholder="doc_...&#10;doc_..."></textarea><small>Only reviewer-approved documents linked to this grant count toward requireVerifiedEvidence.</small></div>
               <div class="field"><label for="correlationId">Correlation ID <span class="optional-label">optional</span></label><input id="correlationId" maxlength="160" placeholder="your-workflow-id"></div>
               <button class="button primary full" type="submit">Evaluate authority</button>
             </form>
@@ -168,6 +170,14 @@
               <div class="result-mark">?</div><h3>No decision yet</h3><p>Submit a credential and the exact requested action.</p>
             </div>
           </div>
+        </section>
+
+
+        <section id="evidenceView" class="portal-section hidden">
+          <div class="page-heading">
+            <div><p class="eyebrow">DOCUMENT WORKFLOW</p><h2>Evidence requests.</h2><p>Review only the private documents a principal or representative explicitly submitted to your organization.</p></div>
+          </div>
+          <div id="evidenceRequestOrgList" class="management-list"></div>
         </section>
 
         <section id="keysView" class="portal-section hidden">
@@ -206,7 +216,7 @@
 
         <section id="developerView" class="portal-section hidden">
           <div class="page-heading">
-            <div><p class="eyebrow">DEVELOPER INTEGRATION</p><h2>Partner API v0.7.</h2><p>Use TrustRelay from your server. Never put a partner API key in browser or mobile client code.</p></div>
+            <div><p class="eyebrow">DEVELOPER INTEGRATION</p><h2>Partner API v0.8.</h2><p>Use TrustRelay from your server. Never put a partner API key in browser or mobile client code.</p></div>
           </div>
           <div class="developer-grid">
             <article class="portal-card">
