@@ -159,14 +159,13 @@ See:
 - `docs/V0.8-IDENTITY-EVIDENCE.md`
 - `verifier/openapi.json`
 
-
 ## v0.9 Webhooks, Notifications, Organization Roles + Compliance/Audit Exports
 
-TrustRelay v0.9 adds the operational controls needed for institutional use while preserving the v0.8 identity/evidence and signed-authority model.
+TrustRelay v0.9 adds the operational controls needed for institutional deployment while preserving the v0.8 passwordless identity, signed-authority, and private-evidence model.
 
 ### Organization RBAC
 
-Supported roles:
+Roles:
 
 - `owner`
 - `admin`
@@ -175,13 +174,24 @@ Supported roles:
 - `developer`
 - `auditor`
 
-Permissions are resolved from a canonical server-side permission map instead of scattered UI-only role checks. Owner protections prevent removing or demoting the last active owner.
+Authorization is enforced by the server-side permission matrix rather than UI-only role checks.
 
-Role changes, member disable/enable/remove actions, invitations, API-key changes, webhook changes, evidence actions and compliance exports are recorded in the organization audit ledger.
+Notable separation:
+
+- verifier: evaluate authority and work evidence, but cannot export audit data
+- compliance: read decisions/evidence and export audit data, but cannot evaluate authority
+- developer: manage API keys/webhooks and read decisions/audit data, but cannot evaluate authority
+- auditor: read-only decision/evidence/audit access with export permission
+- owner/admin: organization management
+
+Ownership transfer is a dedicated operation. Ordinary role editing cannot assign the owner role.
 
 ### Notifications
 
-Both the consumer app and Verifier Portal include an in-app notification center with unread state and category preferences.
+Consumer and institutional apps include one server-backed in-app notification system using:
+
+- `notifications`
+- `notification_preferences`
 
 Categories:
 
@@ -193,91 +203,115 @@ Categories:
 - compliance
 - security
 
-Notifications are stored server-side and deduplicated where appropriate.
+Users can mark notifications read/unread, dismiss them, and suppress in-app delivery by category.
 
-### Durable webhooks
+### Durable signed webhooks
 
-Webhook subscriptions use Vault-protected HMAC-SHA256 signing secrets.
+Webhook signing secrets remain encrypted in Supabase Vault.
 
-v0.9 supports:
+Delivery lifecycle:
 
-- queued asynchronous delivery
-- bounded exponential retries
-- per-attempt delivery history
-- dead-letter state
-- failure-threshold pause/disable handling
-- manual retry
-- signing-secret rotation
-- test deliveries
-- delivery-failure notifications
-- one-minute scheduled maintenance
+- `pending`
+- `dispatched`
+- `retrying`
+- `delivered`
+- `dead_letter`
 
-Current organization webhook events:
+Each HTTP attempt is recorded independently. Automatic maintenance runs once per minute through one `pg_cron` job:
+
+`trustrelay-webhook-maintenance-v09`
+
+Supported event catalog includes:
 
 - `decision.created`
+- `grant.created`
+- `grant.accepted`
 - `grant.revoked`
+- `credential.issued`
 - `credential.revoked`
 - `evidence.requested`
 - `evidence.submitted`
 - `evidence.resolved`
-- `organization.member.invited`
+- `identity.assurance.changed`
 - `organization.member.joined`
-- `organization.member.role_changed`
-- `organization.member.disabled`
-- `organization.member.enabled`
-- `organization.member.removed`
-- `organization.ownership.transferred`
+- `organization.member.invited`
+- `organization.member.changed`
+- `organization.ownership_transferred`
 - `compliance.export.ready`
 - `webhook.test`
 
-Webhook endpoint creation rejects obvious localhost/private-network destinations.
+Operational controls include test delivery, pause/resume, signing-secret rotation, manual redelivery, attempt history, failure thresholds, and dead-letter visibility.
 
-### Compliance / audit exports
+### Compliance and audit exports
 
-Authorized owner/admin/compliance/auditor users can create bounded JSON or CSV exports containing selected operational records such as:
+Authorized owner/admin/compliance/auditor members can generate JSON or CSV exports.
 
-- authorization decisions
-- webhook deliveries and attempts
-- evidence-request history
-- organization members and invitations
-- organization audit events
-- notifications
-- partner API-key metadata when requested
+Default range: 30 days  
+Maximum range: 366 days  
+Private signed-download URL: 5 minutes  
+Export metadata lifetime: 24 hours
 
-Private identity-document bodies are excluded.
+Selectable sections:
 
-Exports are stored in a private bucket, SHA-256 hashed, linked into the export audit chain, and downloaded only through short-lived signed URLs.
+- decisions
+- organization audit
+- webhooks and delivery attempts
+- members/invitations
+- evidence-request workflow
+- partner API-key metadata
+- organization notifications
 
-### Audit integrity
+Raw API keys, Vault secrets, service-role credentials, and private identity-document bytes are excluded.
 
-Organization operational events are hash chained. v0.9 exposes audit-chain verification and includes chain status in compliance export metadata.
+Every completed artifact records:
 
-### Verified v0.9 behavior
+- exact content SHA-256
+- row count
+- byte size
+- organization audit-chain status
+- previous export hash
+- current export hash
 
-Rollback integration tests passed for:
+Exports are stored in the private `trustrelay-compliance-exports` bucket.
 
-- last-owner protection
-- organization invitation and auditor acceptance
-- role promotion to `compliance`
-- compliance export permission resolution
-- exactly one role-change notification
-- webhook queue creation
-- webhook event idempotency/deduplication
-- compliance export completion + SHA-256
-- organization audit-chain verification
+### Partner API
 
-All three browser bundles pass JavaScript syntax validation.
+The compatibility route remains:
+
+`/functions/v1/trustrelay-partner-v07`
+
+Health version:
+
+`0.9.0`
+
+New decisions persist:
+
+- `policy_version = v0.9`
+- `engine_version = 0.9.0`
+
+The signed authority credential format remains v0.8 because v0.9 changes operational/institutional behavior rather than the credential claim schema.
+
+### Verification completed
+
+- organization RBAC/ownership rollback matrix passed
+- organization audit chain remained valid
+- notification read/preferences/dismiss matrix passed
+- live webhook HTTP 204 delivery passed
+- forced HTTP 500 dead-letter path passed
+- webhook smoke artifacts and Vault secret were removed afterward
+- verifier was denied compliance export
+- compliance role successfully built/finalized an export
+- export content hash and per-org export hash were generated
+- audit-only export contained organization audit records and a valid chain
+- Partner API live health returned HTTP 200 / 0.9.0
+- unauthenticated compliance export returned HTTP 401
+- all consumer/verifier/reviewer browser bundles pass JavaScript syntax validation
+- Supabase Security Advisor reports no v0.9 database/RLS/SECURITY DEFINER finding
+
+The one remaining Auth warning is Supabase Free-plan leaked-password protection; TrustRelay user authentication is passwordless.
 
 See:
 
 - `docs/V0.9-OPERATIONS-COMPLIANCE.md`
+- `docs/V0.9-IMPLEMENTATION-RESULT.md`
 - `verifier/openapi.json`
-
-
-### Final v0.9 live webhook validation
-
-- A signed `webhook.test` delivery to a synthetic HTTPS echo endpoint returned HTTP 200.
-- Echoed headers confirmed `X-TrustRelay-Event`, delivery ID, timestamp, and `v1=<HMAC-SHA256>` signature were transmitted.
-- A separate HTTP 500 test retained attempt 1, stored `HTTP_500`, moved the delivery to `retrying`, and scheduled the next attempt one minute later.
-- Both synthetic organizations, webhook rows, delivery/attempt rows, and Vault secrets were removed after testing.
-- Canonical webhook event names are defined by `trustrelay_webhook_event_catalog_v09()` and mirrored in `verifier/openapi.json`.
