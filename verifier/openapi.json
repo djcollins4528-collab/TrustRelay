@@ -444,6 +444,7 @@
       "organization.member.enabled",
       "organization.member.removed",
       "organization.ownership.transferred",
+      "identity.assurance.changed",
       "compliance.export.ready",
       "webhook.test"
     ],
