@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "TrustRelay Partner API",
-    "version": "0.8.0",
-    "description": "Institutional verification API for evaluating scoped TrustRelay delegated authority with live identity assurance and verified evidence support."
+    "version": "0.9.0",
+    "description": "TrustRelay institutional authorization API v0.9. Evaluates scoped delegated authority with live assurance/evidence and emits durable HMAC-signed institutional webhooks."
   },
   "servers": [
     {
@@ -196,6 +196,49 @@
             }
           }
         }
+      },
+      "WebhookEvent": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "createdAt",
+          "organizationId",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique TrustRelay event ID."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "decision.created",
+              "grant.revoked",
+              "credential.revoked",
+              "evidence.requested",
+              "evidence.submitted",
+              "evidence.resolved",
+              "organization.member.joined",
+              "organization.member.role_changed",
+              "organization.member.disabled",
+              "compliance.export.ready",
+              "webhook.test"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "organizationId": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
       }
     }
   },
@@ -208,7 +251,8 @@
           "200": {
             "description": "Healthy"
           }
-        }
+        },
+        "description": "Returns Partner API health and engine version 0.9.0."
       }
     },
     "/v1/decisions/evaluate": {
@@ -219,7 +263,7 @@
           }
         ],
         "summary": "Evaluate delegated authority",
-        "description": "Verifies the signed credential, refreshes live grant/assurance state, resolves any submitted TrustRelay evidence documents against the grant, evaluates policy, persists an auditable decision, and emits decision.created webhooks.",
+        "description": "Verifies the signed credential, refreshes live grant/assurance state, resolves approved grant-linked evidence, evaluates policy, persists tamper-evident decision evidence, appends organization audit activity, and asynchronously queues decision.created webhooks.",
         "requestBody": {
           "required": true,
           "content": {
@@ -318,6 +362,100 @@
           }
         }
       }
+    }
+  },
+  "webhooks": {
+    "trustrelayEvent": {
+      "post": {
+        "summary": "TrustRelay organization event",
+        "description": "TrustRelay posts canonical JSON. Verify HMAC-SHA256 over <X-TrustRelay-Timestamp>.<raw request body> using the webhook signing secret. Deliveries are retried with bounded backoff and may enter dead-letter state after exhaustion.",
+        "parameters": [
+          {
+            "name": "X-TrustRelay-Event",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-TrustRelay-Delivery",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-TrustRelay-Timestamp",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-TrustRelay-Signature",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^v1=[0-9a-f]{64}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookEvent"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Any 2xx response acknowledges delivery."
+          },
+          "204": {
+            "description": "Any 2xx response acknowledges delivery."
+          }
+        }
+      }
+    }
+  },
+  "x-trustrelay-v09": {
+    "webhookDelivery": {
+      "scheduler": "one-minute pg_cron dispatch and reconciliation",
+      "maxAttempts": 5,
+      "retrySchedule": [
+        "1 minute",
+        "5 minutes",
+        "30 minutes",
+        "2 hours"
+      ],
+      "deadLetter": true,
+      "secretStorage": "Supabase Vault",
+      "signing": "HMAC-SHA256"
+    },
+    "organizationRoles": [
+      "owner",
+      "admin",
+      "compliance",
+      "verifier",
+      "developer",
+      "auditor"
+    ],
+    "complianceExports": {
+      "formats": [
+        "json",
+        "csv"
+      ],
+      "maxRangeDays": 366,
+      "signedDownloadSeconds": 600,
+      "privateDocumentBodiesIncluded": false,
+      "integrity": "SHA-256 output hash plus organization audit-chain status"
     }
   }
 }
