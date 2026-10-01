@@ -3,7 +3,7 @@
   "info": {
     "title": "TrustRelay Partner API",
     "version": "0.9.0",
-    "description": "TrustRelay institutional authorization API v0.9. Evaluates scoped delegated authority with live assurance/evidence and emits durable HMAC-signed institutional webhooks."
+    "description": "Institutional verification API for TrustRelay delegated authority. v0.9 adds operational webhooks, notifications, organization RBAC and compliance/audit exports while preserving the v0.8 authority credential format."
   },
   "servers": [
     {
@@ -263,7 +263,7 @@
           }
         ],
         "summary": "Evaluate delegated authority",
-        "description": "Verifies the signed credential, refreshes live grant/assurance state, resolves approved grant-linked evidence, evaluates policy, persists tamper-evident decision evidence, appends organization audit activity, and asynchronously queues decision.created webhooks.",
+        "description": "Verifies the signed credential, refreshes live assurance/evidence state, evaluates policy, records an auditable v0.9 decision and emits decision.created webhooks.",
         "requestBody": {
           "required": true,
           "content": {
@@ -426,19 +426,24 @@
     }
   },
   "x-trustrelay-v09": {
-    "webhookDelivery": {
-      "scheduler": "one-minute pg_cron dispatch and reconciliation",
-      "maxAttempts": 5,
-      "retrySchedule": [
-        "1 minute",
-        "5 minutes",
-        "30 minutes",
-        "2 hours"
-      ],
-      "deadLetter": true,
-      "secretStorage": "Supabase Vault",
-      "signing": "HMAC-SHA256"
-    },
+    "webhookEvents": [
+      "decision.created",
+      "grant.created",
+      "grant.accepted",
+      "grant.revoked",
+      "credential.issued",
+      "credential.revoked",
+      "evidence.requested",
+      "evidence.submitted",
+      "evidence.resolved",
+      "identity.assurance.changed",
+      "organization.member.joined",
+      "organization.member.invited",
+      "organization.member.changed",
+      "organization.ownership_transferred",
+      "compliance.export.ready",
+      "webhook.test"
+    ],
     "organizationRoles": [
       "owner",
       "admin",
@@ -447,15 +452,9 @@
       "developer",
       "auditor"
     ],
-    "complianceExports": {
-      "formats": [
-        "json",
-        "csv"
-      ],
-      "maxRangeDays": 366,
-      "signedDownloadSeconds": 600,
-      "privateDocumentBodiesIncluded": false,
-      "integrity": "SHA-256 output hash plus organization audit-chain status"
-    }
+    "complianceExports": [
+      "json",
+      "csv"
+    ]
   }
 }
