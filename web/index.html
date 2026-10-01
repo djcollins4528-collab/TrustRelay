@@ -50,40 +50,42 @@
 
         <div class="auth-panel">
           <div class="auth-card">
-            <div class="auth-tabs" role="tablist">
-              <button class="auth-tab active" data-auth-mode="signin" type="button">Sign in</button>
-              <button class="auth-tab" data-auth-mode="signup" type="button">Create account</button>
+            <div class="auth-intro">
+              <p class="eyebrow">PASSWORDLESS ACCESS</p>
+              <h2>Continue with your email.</h2>
+              <p>TrustRelay does not require an application password. We send a one-time magic link or email code to prove control of your address.</p>
             </div>
 
-            <form id="signInForm" class="auth-form">
+            <form id="magicLinkForm" class="auth-form">
               <div class="field">
-                <label for="signInEmail">Email</label>
-                <input id="signInEmail" type="email" autocomplete="email" required placeholder="you@example.com">
+                <label for="passwordlessName">Full name <span class="optional-label">new accounts</span></label>
+                <input id="passwordlessName" type="text" autocomplete="name" maxlength="100" placeholder="Your name">
+                <small>Optional for returning users. New accounts use this name for the TrustRelay profile.</small>
               </div>
               <div class="field">
-                <label for="signInPassword">Password</label>
-                <input id="signInPassword" type="password" autocomplete="current-password" required placeholder="Your password">
+                <label for="passwordlessEmail">Email</label>
+                <input id="passwordlessEmail" type="email" autocomplete="email" required placeholder="you@example.com">
               </div>
-              <button class="button primary full" type="submit">Sign in to TrustRelay</button>
-              <button class="text-button" id="forgotPasswordButton" type="button">Forgot your password?</button>
+              <button class="button primary full" type="submit">Email me a secure sign-in link</button>
+              <button class="text-button" id="showOtpButton" type="button">I have a one-time email code</button>
+              <p class="fine-print">The same flow signs in existing users and creates a new account on first use. No TrustRelay password is created or stored by this application.</p>
             </form>
 
-            <form id="signUpForm" class="auth-form hidden">
-              <div class="field">
-                <label for="signUpName">Full name</label>
-                <input id="signUpName" type="text" autocomplete="name" required maxlength="100" placeholder="Your name">
+            <form id="otpForm" class="auth-form hidden">
+              <div class="auth-method-heading">
+                <strong>Enter your email code</strong>
+                <small>Use this only when your TrustRelay email contains a six-digit one-time code.</small>
               </div>
               <div class="field">
-                <label for="signUpEmail">Email</label>
-                <input id="signUpEmail" type="email" autocomplete="email" required placeholder="you@example.com">
+                <label for="otpEmail">Email</label>
+                <input id="otpEmail" type="email" autocomplete="email" required placeholder="you@example.com">
               </div>
               <div class="field">
-                <label for="signUpPassword">Password</label>
-                <input id="signUpPassword" type="password" autocomplete="new-password" minlength="10" required placeholder="10+ characters">
-                <small>Use at least 10 characters. A passphrase is recommended.</small>
+                <label for="otpCode">One-time code</label>
+                <input id="otpCode" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="123456">
               </div>
-              <button class="button primary full" type="submit">Create secure account</button>
-              <p class="fine-print">By creating an account, you acknowledge that this staging build is for testing delegated-authority workflows and is not yet a substitute for legal advice or formal power-of-attorney documentation.</p>
+              <button class="button primary full" type="submit">Verify code and sign in</button>
+              <button class="text-button" id="backToMagicLinkButton" type="button">← Send a new sign-in link instead</button>
             </form>
 
             <div id="authMessage" class="message hidden"></div>
