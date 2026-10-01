@@ -224,19 +224,19 @@ Each HTTP attempt is recorded independently. Automatic maintenance runs once per
 Supported event catalog includes:
 
 - `decision.created`
-- `grant.created`
-- `grant.accepted`
 - `grant.revoked`
-- `credential.issued`
 - `credential.revoked`
 - `evidence.requested`
 - `evidence.submitted`
 - `evidence.resolved`
 - `identity.assurance.changed`
-- `organization.member.joined`
 - `organization.member.invited`
-- `organization.member.changed`
-- `organization.ownership_transferred`
+- `organization.member.joined`
+- `organization.member.role_changed`
+- `organization.member.disabled`
+- `organization.member.enabled`
+- `organization.member.removed`
+- `organization.ownership.transferred`
 - `compliance.export.ready`
 - `webhook.test`
 
