@@ -354,7 +354,7 @@ function setup(){
       const select=document.querySelector(`[data-role-account="${CSS.escape(save.dataset.saveRole)}"]`);
       if(!select)return;
       busy(save,true,"Saving…");
-      try{await rpc("trustrelay_update_member_role_v09",{p_org_id:state.orgId,p_account_id:save.dataset.saveRole,p_new_role:select.value});toast("Organization role updated.","success");await loadDashboard()}
+      try{await rpc("trustrelay_manage_org_member_v09",{p_org_id:state.orgId,p_member_account_id:save.dataset.saveRole,p_action:"role",p_role:select.value,p_title:null});toast("Organization role updated.","success");await loadDashboard()}
       catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(save,false)}
       return;
     }
@@ -385,7 +385,7 @@ function setup(){
     if(disable){
       if(!confirm("Disable this organization member? Their access will stop immediately."))return;
       busy(disable,true,"Disabling…");
-      try{await rpc("trustrelay_disable_member_v09",{p_org_id:state.orgId,p_account_id:disable.dataset.disableMember,p_reason:"Disabled from Verifier Portal"});toast("Member access disabled.","success");await loadDashboard()}
+      try{await rpc("trustrelay_manage_org_member_v09",{p_org_id:state.orgId,p_member_account_id:disable.dataset.disableMember,p_action:"disable",p_role:null,p_title:null});toast("Member access disabled.","success");await loadDashboard()}
       catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(disable,false)}
     }
   });
