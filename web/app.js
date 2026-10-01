@@ -31,8 +31,8 @@ const els = {
   publicVerifyView: $("publicVerifyView"),
   accountTopButton: $("accountTopButton"),
   authMessage: $("authMessage"),
-  signInForm: $("signInForm"),
-  signUpForm: $("signUpForm"),
+  magicLinkForm: $("magicLinkForm"),
+  otpForm: $("otpForm"),
   grantList: $("grantList"),
   assuranceBanner: $("assuranceBanner"),
   inviteResult: $("inviteResult"),
@@ -183,10 +183,21 @@ async function invokeEdge(name, { method = "POST", body = null, authenticated = 
   return data;
 }
 
-function switchAuthMode(mode) {
-  qsa(".auth-tab").forEach((button) => button.classList.toggle("active", button.dataset.authMode === mode));
-  els.signInForm.classList.toggle("hidden", mode !== "signin");
-  els.signUpForm.classList.toggle("hidden", mode !== "signup");
+function authRedirectUrl() {
+  const url = new URL("/", window.location.origin);
+  const pendingInvite = localStorage.getItem("trustrelay_pending_invite");
+  if (pendingInvite) url.searchParams.set("invite", pendingInvite);
+  return url.toString();
+}
+
+function showOtpEntry(show = true) {
+  els.magicLinkForm.classList.toggle("hidden", show);
+  els.otpForm.classList.toggle("hidden", !show);
+  if (show) {
+    const rememberedEmail = localStorage.getItem("trustrelay_last_auth_email") || $("passwordlessEmail").value.trim();
+    if (rememberedEmail) $("otpEmail").value = rememberedEmail;
+    setTimeout(() => $("otpCode").focus(), 0);
+  }
   clearMessage(els.authMessage);
 }
 
@@ -458,6 +469,7 @@ function renderAccount() {
     <dt>Auth user</dt><dd>${escapeHtml(state.user.id)}</dd>
     <dt>TrustRelay person</dt><dd>${escapeHtml(person?.id || "—")}</dd>
     <dt>Account status</dt><dd>${escapeHtml(account?.status || "active")}</dd>
+    <dt>Sign-in method</dt><dd>Passwordless email magic link / OTP</dd>
     <dt>Joined</dt><dd>${escapeHtml(formatDate(state.user.created_at, true))}</dd>
   `;
 
@@ -707,81 +719,73 @@ function setupInviteFromUrl() {
 }
 
 function setupHandlers() {
-  qsa(".auth-tab").forEach((button) => button.addEventListener("click", () => switchAuthMode(button.dataset.authMode)));
-
-  els.signInForm.addEventListener("submit", async (event) => {
+  els.magicLinkForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     clearMessage(els.authMessage);
     const button = event.submitter;
-    setBusy(button, true, "Signing in…");
-    const email = $("signInEmail").value.trim();
-    const password = $("signInPassword").value;
+    setBusy(button, true, "Sending secure link…");
+
+    const email = $("passwordlessEmail").value.trim().toLowerCase();
+    const fullName = $("passwordlessName").value.trim();
+
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const options = {
+        shouldCreateUser: true,
+        emailRedirectTo: authRedirectUrl(),
+      };
+      if (fullName) options.data = { full_name: fullName };
+
+      const { error } = await supabase.auth.signInWithOtp({ email, options });
       if (error) throw error;
+
+      localStorage.setItem("trustrelay_last_auth_email", email);
+      $("otpEmail").value = email;
+      setMessage(
+        els.authMessage,
+        "Check your email for a one-time TrustRelay sign-in link. If your email contains a six-digit code instead, choose “I have a one-time email code.”",
+        "success"
+      );
+    } catch (error) {
+      const message = error?.message || "Could not send the passwordless sign-in email.";
+      setMessage(els.authMessage, message, "error");
+    } finally {
+      setBusy(button, false);
+    }
+  });
+
+  $("showOtpButton").addEventListener("click", () => showOtpEntry(true));
+  $("backToMagicLinkButton").addEventListener("click", () => showOtpEntry(false));
+
+  els.otpForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    clearMessage(els.authMessage);
+    const button = event.submitter;
+    setBusy(button, true, "Verifying code…");
+
+    const email = $("otpEmail").value.trim().toLowerCase();
+    const token = $("otpCode").value.replace(/\s+/g, "");
+
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: "email",
+      });
+      if (error) throw error;
+      if (!data.session) throw new Error("TrustRelay could not establish a session from that code.");
+
+      localStorage.setItem("trustrelay_last_auth_email", email);
       state.session = data.session;
       state.user = data.user;
       await refreshApp({ preserveView: false });
     } catch (error) {
-      setMessage(els.authMessage, "Sign-in failed. Check your email and password, and confirm your email if this is a new account.", "error");
+      setMessage(
+        els.authMessage,
+        error?.message || "That one-time code is invalid or has expired. Request a new sign-in email.",
+        "error"
+      );
     } finally {
       setBusy(button, false);
-    }
-  });
-
-  els.signUpForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    clearMessage(els.authMessage);
-    const button = event.submitter;
-    setBusy(button, true, "Creating account…");
-    const fullName = $("signUpName").value.trim();
-    const email = $("signUpEmail").value.trim();
-    const password = $("signUpPassword").value;
-    if (password.length < 10) {
-      setMessage(els.authMessage, "Use a password or passphrase with at least 10 characters.", "error");
-      setBusy(button, false);
-      return;
-    }
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { full_name: fullName },
-          emailRedirectTo: window.location.origin,
-        },
-      });
-      if (error) throw error;
-      if (data.session) {
-        state.session = data.session;
-        state.user = data.user;
-        await refreshApp({ preserveView: false });
-      } else {
-        switchAuthMode("signin");
-        $("signInEmail").value = email;
-        setMessage(els.authMessage, "Account created. Check your email and confirm the address, then return here and sign in.", "success");
-      }
-    } catch (error) {
-      setMessage(els.authMessage, error?.message || "Account creation failed.", "error");
-    } finally {
-      setBusy(button, false);
-    }
-  });
-
-  $("forgotPasswordButton").addEventListener("click", async () => {
-    const email = $("signInEmail").value.trim();
-    if (!email) {
-      setMessage(els.authMessage, "Enter your email first, then choose “Forgot your password?”", "warning");
-      return;
-    }
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
-      });
-      if (error) throw error;
-      setMessage(els.authMessage, "Password recovery email sent.", "success");
-    } catch (error) {
-      setMessage(els.authMessage, error?.message || "Could not send the recovery email.", "error");
     }
   });
 
@@ -961,43 +965,16 @@ function setupHandlers() {
   });
 }
 
-function showRecoveryModal() {
-  openModal(`
-    <p class="eyebrow">PASSWORD RECOVERY</p>
-    <h2>Choose a new password.</h2>
-    <p>Use at least 10 characters. A unique passphrase is recommended.</p>
-    <form id="recoveryForm">
-      <div class="field">
-        <label for="recoveryPassword">New password</label>
-        <input id="recoveryPassword" type="password" minlength="10" required autocomplete="new-password">
-      </div>
-      <div class="modal-actions">
-        <button class="button primary" type="submit">Update password</button>
-      </div>
-    </form>
-  `);
-  $("recoveryForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const button = event.submitter;
-    const password = $("recoveryPassword").value;
-    if (password.length < 10) return toast("Use at least 10 characters.", "error");
-    setBusy(button, true, "Updating…");
-    const { error } = await supabase.auth.updateUser({ password });
-    if (error) {
-      toast(error.message, "error");
-      setBusy(button, false);
-      return;
-    }
-    closeModal();
-    toast("Password updated.", "success");
-    history.replaceState({}, "", window.location.pathname);
-  });
-}
-
 async function initialize() {
   setupHandlers();
   setDefaultGrantDates();
   renderCustomTags();
+
+  const rememberedEmail = localStorage.getItem("trustrelay_last_auth_email");
+  if (rememberedEmail) {
+    $("passwordlessEmail").value = rememberedEmail;
+    $("otpEmail").value = rememberedEmail;
+  }
 
   const specialRouteHandled = setupInviteFromUrl();
 
@@ -1008,14 +985,15 @@ async function initialize() {
   supabase.auth.onAuthStateChange((event, session) => {
     state.session = session;
     state.user = session?.user || null;
-    if (event === "PASSWORD_RECOVERY") {
-      setTimeout(showRecoveryModal, 0);
-      return;
-    }
+
     if (event === "SIGNED_OUT") {
-      setTimeout(() => showAuth(), 0);
+      setTimeout(() => {
+        showOtpEntry(false);
+        showAuth();
+      }, 0);
       return;
     }
+
     if (session && ["SIGNED_IN", "TOKEN_REFRESHED", "USER_UPDATED"].includes(event)) {
       setTimeout(() => refreshApp(), 0);
     }
@@ -1027,7 +1005,11 @@ async function initialize() {
     await refreshApp({ preserveView: false });
   } else {
     const pendingInvite = localStorage.getItem("trustrelay_pending_invite");
-    showAuth(pendingInvite ? "Sign in or create the invited account to review this authority invitation." : "");
+    showAuth(
+      pendingInvite
+        ? "Use the invited email address below. TrustRelay will send a one-time sign-in link so you can review the authority invitation."
+        : ""
+    );
   }
 }
 
