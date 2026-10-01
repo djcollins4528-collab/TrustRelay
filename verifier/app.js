@@ -134,13 +134,15 @@ function renderKeys(){
 
 function renderTeam(){
   const root=$("teamList"),items=state.dashboard?.members||[];
-  const roles=["owner","admin","compliance","verifier","developer","auditor"];
+  const roles=state.dashboard?.membership?.role==="owner"?["admin","compliance","verifier","developer","auditor"]:["compliance","verifier","developer","auditor"];
   root.innerHTML=items.length?items.map(x=>`
     <div class="management-row">
       <div><strong>${esc(x.email)}</strong><p>${esc(x.title||"Institution member")}</p><div class="row-meta"><span class="role-chip">${esc(x.role)}</span><span class="small-chip">${esc(x.status)}</span>${x.roleChangedAt?`<span class="small-chip">role changed ${esc(formatDate(x.roleChangedAt,true))}</span>`:""}</div></div>
       <div class="management-actions">
-        ${x.status==="active"&&canManageRoles()?`<select class="compact-select" data-role-account="${esc(x.accountId)}">${roles.map(r=>`<option value="${r}" ${r===x.role?"selected":""}>${r}</option>`).join("")}</select><button class="button secondary small" data-save-role="${esc(x.accountId)}" type="button">Save role</button>`:""}
-        ${x.status==="active"&&canInvite()?`<button class="button danger small" data-disable-member="${esc(x.accountId)}" type="button">Disable</button>`:""}
+        ${x.status==="active"&&x.role!=="owner"&&canManageRoles()?`<select class="compact-select" data-role-account="${esc(x.accountId)}">${roles.map(r=>`<option value="${r}" ${r===x.role?"selected":""}>${r}</option>`).join("")}</select><button class="button secondary small" data-save-role="${esc(x.accountId)}" type="button">Save role</button>`:""}
+        ${state.dashboard?.membership?.role==="owner"&&x.status==="active"&&x.role!=="owner"?`<button class="button ghost small" data-transfer-owner="${esc(x.accountId)}" type="button">Transfer ownership</button>`:""}
+        ${x.role!=="owner"&&x.status==="active"&&canInvite()?`<button class="button danger small" data-disable-member="${esc(x.accountId)}" type="button">Disable</button><button class="button ghost small" data-remove-member="${esc(x.accountId)}" type="button">Remove</button>`:""}
+        ${x.role!=="owner"&&x.status==="disabled"&&canInvite()?`<button class="button secondary small" data-enable-member="${esc(x.accountId)}" type="button">Restore</button><button class="button danger small" data-remove-member="${esc(x.accountId)}" type="button">Remove</button>`:""}
       </div>
     </div>`).join(""):'<div class="empty-management">No team members.</div>';
   const pending=state.dashboard?.pendingInvitations||[];
