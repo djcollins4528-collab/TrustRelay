@@ -27,6 +27,7 @@
     <div class="topbar-actions">
       <span class="env-badge">SANDBOX</span>
       <a class="button ghost small" href="../web/">Consumer app</a>
+      <button id="notificationButton" class="notification-button hidden" type="button" aria-label="Notifications">🔔<span id="notificationBadge" class="notification-badge hidden">0</span></button>
       <button id="accountButton" class="avatar-button hidden" type="button" aria-label="Account"></button>
     </div>
   </header>
@@ -94,11 +95,12 @@
           <button class="nav-item" data-view="keys" type="button"><span>⌁</span><span>API keys</span></button>
           <button class="nav-item" data-view="team" type="button"><span>◎</span><span>Team</span></button>
           <button class="nav-item" data-view="webhooks" type="button"><span>↗</span><span>Webhooks</span></button>
+          <button class="nav-item" data-view="compliance" type="button"><span>▤</span><span>Compliance</span></button>
           <button class="nav-item" data-view="audit" type="button"><span>≡</span><span>Audit</span></button>
           <button class="nav-item" data-view="developer" type="button"><span>{ }</span><span>Developer</span></button>
         </nav>
         <div class="sidebar-footer">
-          <span class="status-dot"></span><span>Partner API v0.8</span><small>Sandbox</small>
+          <span class="status-dot"></span><span>Partner API v0.9</span><small>Sandbox</small>
         </div>
       </aside>
 
@@ -190,7 +192,7 @@
 
         <section id="teamView" class="portal-section hidden">
           <div class="page-heading">
-            <div><p class="eyebrow">ORGANIZATION ACCESS</p><h2>Team.</h2><p>Keep verifier, developer and audit access separate.</p></div>
+            <div><p class="eyebrow">ORGANIZATION ACCESS</p><h2>Team & roles.</h2><p>Owner, admin, compliance, verifier, developer and auditor roles map to explicit v0.9 permissions.</p></div>
             <button id="inviteMemberButton" class="button primary" type="button">Invite member</button>
           </div>
           <div id="teamList" class="management-list"></div>
@@ -203,8 +205,37 @@
             <button id="createWebhookButton" class="button primary" type="button">Add endpoint</button>
           </div>
           <div id="webhookList" class="management-list"></div>
-          <div class="section-heading"><div><h3>Recent deliveries</h3><p>Status of signed delivery attempts.</p></div></div>
+          <div class="section-heading"><div><h3>Recent deliveries</h3><p>Retries use bounded exponential backoff and dead-letter after repeated failure.</p></div></div>
           <div id="deliveryList" class="management-list"></div>
+          <div class="section-heading"><div><h3>Attempt history</h3><p>Individual delivery attempts and HTTP outcomes.</p></div></div>
+          <div id="webhookAttemptList" class="management-list"></div>
+        </section>
+
+        <section id="complianceView" class="portal-section hidden">
+          <div class="page-heading">
+            <div><p class="eyebrow">COMPLIANCE & EXPORTS</p><h2>Audit-ready exports.</h2><p>Create tamper-evident JSON or CSV bundles with bounded date ranges, record counts, source hashes and organization audit-chain verification.</p></div>
+            <button id="verifyAuditChainButton" class="button secondary" type="button">Verify audit chain</button>
+          </div>
+          <div id="auditChainStatus" class="message hidden"></div>
+          <form id="complianceExportForm" class="focus-card">
+            <div class="form-grid">
+              <div class="field"><label for="exportFormat">Format</label><select id="exportFormat"><option value="json">JSON</option><option value="csv">CSV</option></select></div>
+              <div class="field"><label for="exportFrom">From <span class="optional-label">default 30 days</span></label><input id="exportFrom" type="datetime-local"></div>
+              <div class="field"><label for="exportTo">To <span class="optional-label">default now</span></label><input id="exportTo" type="datetime-local"></div>
+            </div>
+            <div class="field"><label>Include</label><div class="scope-checks export-scopes">
+              <label><input type="checkbox" name="exportScope" value="decisions" checked> Decisions</label>
+              <label><input type="checkbox" name="exportScope" value="webhooks" checked> Webhooks</label>
+              <label><input type="checkbox" name="exportScope" value="evidence" checked> Evidence requests</label>
+              <label><input type="checkbox" name="exportScope" value="members" checked> Members & invitations</label>
+              <label><input type="checkbox" name="exportScope" value="audit" checked> Organization audit chain</label>
+              <label><input type="checkbox" name="exportScope" value="notifications"> Notifications</label>
+            </div></div>
+            <p class="fine-print">Private identity-document bodies are never included in compliance exports. Export links expire and the exact output bytes are SHA-256 hashed.</p>
+            <button class="button primary" type="submit">Generate compliance export</button>
+          </form>
+          <div class="section-heading"><div><h3>Export history</h3><p>Generated artifacts remain private and require a fresh signed download URL.</p></div></div>
+          <div id="complianceExportList" class="management-list"></div>
         </section>
 
         <section id="auditView" class="portal-section hidden">
@@ -212,11 +243,13 @@
             <div><p class="eyebrow">DECISION EVIDENCE</p><h2>Audit history.</h2><p>Immutable authorization evidence with decision and audit hashes.</p></div>
           </div>
           <div id="auditList" class="audit-list"></div>
+          <div class="section-heading"><div><h3>Organization activity ledger</h3><p>Hash-chained role, evidence, webhook and compliance events.</p></div></div>
+          <div id="organizationAuditList" class="audit-list"></div>
         </section>
 
         <section id="developerView" class="portal-section hidden">
           <div class="page-heading">
-            <div><p class="eyebrow">DEVELOPER INTEGRATION</p><h2>Partner API v0.8.</h2><p>Use TrustRelay from your server. Never put a partner API key in browser or mobile client code.</p></div>
+            <div><p class="eyebrow">DEVELOPER INTEGRATION</p><h2>Partner API v0.9.</h2><p>Use TrustRelay from your server. Never put a partner API key in browser or mobile client code.</p></div>
           </div>
           <div class="developer-grid">
             <article class="portal-card">
