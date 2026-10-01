@@ -203,7 +203,7 @@ async function invokeRpc(name, args = {}) {
 }
 
 function authRedirectUrl() {
-  const url = new URL("/", window.location.origin);
+  const url = new URL("/web/", window.location.origin);
   const pendingInvite = localStorage.getItem("trustrelay_pending_invite");
   if (pendingInvite) url.searchParams.set("invite", pendingInvite);
   return url.toString();
