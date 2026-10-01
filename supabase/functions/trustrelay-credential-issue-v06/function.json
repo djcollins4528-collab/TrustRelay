@@ -1,0 +1,6 @@
+{
+  "slug": "trustrelay-credential-issue-v06",
+  "verify_jwt": true,
+  "staging_version": 2,
+  "sha256": "5877e34165ec9dd35626f8fa46e9350f87b3719b3ae2ab309895e83bdb67a24e"
+}
