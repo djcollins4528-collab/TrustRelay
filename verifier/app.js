@@ -8,7 +8,7 @@ const supabase=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
 });
 
 const state={
-  session:null,user:null,organizations:[],orgId:null,dashboard:null,currentView:"dashboard"
+  session:null,user:null,organizations:[],orgId:null,dashboard:null,currentView:"dashboard",notifications:null
 };
 
 const $=id=>document.getElementById(id);
@@ -16,7 +16,7 @@ const qsa=(s,r=document)=>[...r.querySelectorAll(s)];
 const els={
   authView:$("authView"),portalView:$("portalView"),authMessage:$("authMessage"),
   modalBackdrop:$("modalBackdrop"),modalContent:$("modalContent"),toastRegion:$("toastRegion"),
-  orgSelect:$("orgSelect"),accountButton:$("accountButton")
+  orgSelect:$("orgSelect"),accountButton:$("accountButton"),notificationButton:$("notificationButton"),notificationBadge:$("notificationBadge")
 };
 
 function esc(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
@@ -31,20 +31,27 @@ function closeModal(){els.modalBackdrop.classList.add("hidden");els.modalContent
 async function copyText(text,label="Copied"){try{await navigator.clipboard.writeText(text);toast(label,"success")}catch{const a=document.createElement("textarea");a.value=text;a.style.position="fixed";a.style.opacity="0";document.body.appendChild(a);a.select();document.execCommand("copy");a.remove();toast(label,"success")}}
 function authRedirectUrl(){const u=new URL("/verifier/",window.location.origin);const token=localStorage.getItem("trustrelay_pending_org_invite");if(token)u.searchParams.set("org_invite",token);return u.toString()}
 function showOtp(show){$("magicForm").classList.toggle("hidden",show);$("otpForm").classList.toggle("hidden",!show);if(show){const e=localStorage.getItem("trustrelay_verifier_email")||$("authEmail").value.trim();if(e)$("otpEmail").value=e;setTimeout(()=>$("otpCode").focus(),0)}clearMsg(els.authMessage)}
-function setAuthenticated(on){els.authView.classList.toggle("hidden",on);els.portalView.classList.toggle("hidden",!on);els.accountButton.classList.toggle("hidden",!on)}
+function setAuthenticated(on){els.authView.classList.toggle("hidden",on);els.portalView.classList.toggle("hidden",!on);els.accountButton.classList.toggle("hidden",!on);els.notificationButton?.classList.toggle("hidden",!on)}
 async function rpc(name,args={}){const {data,error}=await supabase.rpc(name,args);if(error)throw error;if(data?.ok===false){const e=new Error(data.code||"REQUEST_REJECTED");e.code=data.code;e.status=data.status;throw e}return data}
 async function token(){const {data,error}=await supabase.auth.getSession();if(error)throw error;return data.session?.access_token||null}
 async function evaluate(body){const t=await token();if(!t)throw new Error("AUTH_REQUIRED");const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-verifier-evaluate-v07",{method:"POST",headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:"Bearer "+t,"content-type":"application/json",accept:"application/json"},body:JSON.stringify(body)});const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}if(!r.ok){const e=new Error(data?.error?.code||"EVALUATION_FAILED");e.code=data?.error?.code||"EVALUATION_FAILED";throw e}return data}
 async function evidenceFile(body){const t=await token();if(!t)throw new Error("AUTH_REQUIRED");const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-evidence-v08",{method:"POST",headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:"Bearer "+t,"content-type":"application/json",accept:"application/json"},body:JSON.stringify(body)});const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}if(!r.ok){const e=new Error(data?.error?.code||"EVIDENCE_REQUEST_FAILED");e.code=data?.error?.code||"EVIDENCE_REQUEST_FAILED";throw e}return data}
-function canManage(){return["owner","admin","developer"].includes(state.dashboard?.membership?.role)}
-function canInvite(){return["owner","admin"].includes(state.dashboard?.membership?.role)}
-function canResolveEvidence(){return["owner","admin","verifier"].includes(state.dashboard?.membership?.role)}
+async function complianceEdge(body){const t=await token();if(!t)throw new Error("AUTH_REQUIRED");const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-compliance-v09",{method:"POST",headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:"Bearer "+t,"content-type":"application/json",accept:"application/json"},body:JSON.stringify(body)});const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}if(!r.ok){const e=new Error(data?.error?.code||"COMPLIANCE_REQUEST_FAILED");e.code=data?.error?.code||"COMPLIANCE_REQUEST_FAILED";throw e}return data}
+function perms(){return state.dashboard?.membership?.permissions||{}}
+function hasPerm(name){return perms()[name]===true}
+function canManageKeys(){return hasPerm("api_keys.manage")}
+function canManageWebhooks(){return hasPerm("webhooks.manage")}
+function canInvite(){return hasPerm("members.manage")}
+function canManageRoles(){return hasPerm("roles.manage")}
+function canResolveEvidence(){return hasPerm("evidence.review")}
+function canRequestEvidence(){return hasPerm("evidence.request")}
+function canExportAudit(){return hasPerm("audit.export")}
 function currentOrg(){return state.organizations.find(x=>x.organization?.id===state.orgId)?.organization||state.dashboard?.organization||null}
 
 function showView(name){
   state.currentView=name;
   qsa(".portal-section").forEach(x=>x.classList.add("hidden"));
-  const map={dashboard:"dashboardView",verify:"verifyView",evidence:"evidenceView",keys:"keysView",team:"teamView",webhooks:"webhooksView",audit:"auditView",developer:"developerView"};
+  const map={dashboard:"dashboardView",verify:"verifyView",evidence:"evidenceView",keys:"keysView",team:"teamView",webhooks:"webhooksView",compliance:"complianceView",audit:"auditView",developer:"developerView"};
   $(map[name]||"dashboardView").classList.remove("hidden");
   qsa(".verifier-nav .nav-item").forEach(b=>b.classList.toggle("active",b.dataset.view===name));
   window.scrollTo({top:0,behavior:"smooth"});
@@ -83,13 +90,19 @@ function render(){
     <dt>Active partner keys</dt><dd>${m.activeKeys??0}</dd>
     <dt>Active members</dt><dd>${m.members??0}</dd>
     <dt>Active webhooks</dt><dd>${m.activeWebhooks??0}</dd>
+    <dt>Dead-letter webhooks</dt><dd>${m.deadLetterWebhooks??0}</dd>
     <dt>Open evidence requests</dt><dd>${m.openEvidenceRequests??0}</dd>
+    <dt>Ready exports</dt><dd>${m.readyExports??0}</dd>
     <dt>Your role</dt><dd>${esc(d.membership?.role||"—")}</dd>`;
   renderDecisions($("recentDecisions"),(d.recentDecisions||[]).slice(0,8),true);
-  renderKeys();renderTeam();renderWebhooks();renderEvidenceRequests();renderAudit();renderDeveloper();
-  $("createKeyButton").classList.toggle("hidden",!canManage());
-  $("createWebhookButton").classList.toggle("hidden",!canManage());
+  renderKeys();renderTeam();renderWebhooks();renderEvidenceRequests();renderCompliance();renderAudit();renderDeveloper();renderNotificationBadge();
+  $("createKeyButton").classList.toggle("hidden",!canManageKeys());
+  $("createWebhookButton").classList.toggle("hidden",!canManageWebhooks());
   $("inviteMemberButton").classList.toggle("hidden",!canInvite());
+  $("complianceExportForm")?.classList.toggle("hidden",!canExportAudit());
+  $("verifyAuditChainButton")?.classList.toggle("hidden",!hasPerm("audit.read"));
+  qsa('.verifier-nav [data-view="verify"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("decisions.evaluate")));
+  qsa('.verifier-nav [data-view="compliance"]').forEach(x=>x.classList.toggle("hidden",!canExportAudit()));
 }
 
 function renderDecisions(root,items,compact=false){
@@ -110,14 +123,21 @@ function renderKeys(){
       <div><strong>${esc(k.name)}</strong><p>${esc(k.prefix)}••••${esc(k.lastFour||"")} · ${esc((k.scopes||[]).join(", "))}</p>
         <div class="row-meta"><span class="small-chip">${k.revokedAt?"revoked":"active"}</span><span class="small-chip">last used ${esc(formatDate(k.lastUsedAt,true))}</span></div>
       </div>
-      <div class="management-actions">${!k.revokedAt&&canManage()?`<button class="button danger small" data-revoke-key="${esc(k.id)}" type="button">Revoke</button>`:""}</div>
+      <div class="management-actions">${!k.revokedAt&&canManageKeys()?`<button class="button danger small" data-revoke-key="${esc(k.id)}" type="button">Revoke</button>`:""}</div>
     </div>`).join("");
 }
 
 function renderTeam(){
   const root=$("teamList"),items=state.dashboard?.members||[];
+  const roles=["owner","admin","compliance","verifier","developer","auditor"];
   root.innerHTML=items.length?items.map(x=>`
-    <div class="management-row"><div><strong>${esc(x.email)}</strong><p>${esc(x.title||"Institution member")}</p><div class="row-meta"><span class="role-chip">${esc(x.role)}</span><span class="small-chip">${esc(x.status)}</span></div></div></div>`).join(""):'<div class="empty-management">No team members.</div>';
+    <div class="management-row">
+      <div><strong>${esc(x.email)}</strong><p>${esc(x.title||"Institution member")}</p><div class="row-meta"><span class="role-chip">${esc(x.role)}</span><span class="small-chip">${esc(x.status)}</span>${x.roleChangedAt?`<span class="small-chip">role changed ${esc(formatDate(x.roleChangedAt,true))}</span>`:""}</div></div>
+      <div class="management-actions">
+        ${x.status==="active"&&canManageRoles()?`<select class="compact-select" data-role-account="${esc(x.accountId)}">${roles.map(r=>`<option value="${r}" ${r===x.role?"selected":""}>${r}</option>`).join("")}</select><button class="button secondary small" data-save-role="${esc(x.accountId)}" type="button">Save role</button>`:""}
+        ${x.status==="active"&&canInvite()?`<button class="button danger small" data-disable-member="${esc(x.accountId)}" type="button">Disable</button>`:""}
+      </div>
+    </div>`).join(""):'<div class="empty-management">No team members.</div>';
   const pending=state.dashboard?.pendingInvitations||[];
   $("pendingInvites").innerHTML=`<div class="card-heading"><div><h3>Pending invitations</h3><p>One-time team invitations awaiting acceptance.</p></div></div>`+(pending.length?pending.map(x=>`<div class="management-row"><div><strong>${esc(x.email)}</strong><p>${esc(x.role)} · expires ${esc(formatDate(x.expiresAt,true))}</p></div></div>`).join(""):'<div class="empty-management">No pending invitations.</div>');
 }
@@ -125,10 +145,12 @@ function renderTeam(){
 function renderWebhooks(){
   const root=$("webhookList"),items=state.dashboard?.webhooks||[];
   root.innerHTML=items.length?items.map(w=>`
-    <div class="management-row"><div><strong>${esc(w.name)}</strong><p>${esc(w.endpointUrl)}</p><div class="row-meta"><span class="small-chip">${esc(w.status)}</span><span class="small-chip">${esc((w.events||[]).join(", "))}</span><span class="small-chip">${w.consecutiveFailures||0} failures</span></div></div>
-    <div class="management-actions">${w.status==="active"&&canManage()?`<button class="button danger small" data-revoke-webhook="${esc(w.id)}" type="button">Revoke</button>`:""}</div></div>`).join(""):'<div class="empty-management">No webhook endpoints configured.</div>';
+    <div class="management-row"><div><strong>${esc(w.name)}</strong><p>${esc(w.endpointUrl)}</p><div class="row-meta"><span class="small-chip">${esc(w.status)}</span><span class="small-chip">${esc(w.apiVersion||"v0.9")}</span><span class="small-chip">${esc((w.events||[]).join(", "))}</span><span class="small-chip">${w.consecutiveFailures||0}/${w.failureThreshold||10} failures</span>${w.pauseReason?`<span class="small-chip">${esc(w.pauseReason)}</span>`:""}</div></div>
+    <div class="management-actions">${canManageWebhooks()&&w.status!=="revoked"?`<button class="button ghost small" data-test-webhook="${esc(w.id)}" type="button">Test</button><button class="button secondary small" data-rotate-webhook="${esc(w.id)}" type="button">Rotate secret</button><button class="button danger small" data-revoke-webhook="${esc(w.id)}" type="button">Revoke</button>`:""}</div></div>`).join(""):'<div class="empty-management">No webhook endpoints configured.</div>';
   const del=state.dashboard?.recentWebhookDeliveries||[];
-  $("deliveryList").innerHTML=del.length?del.map(x=>`<div class="management-row"><div><strong>${esc(x.eventType)}</strong><p>${esc(x.eventId)} · HTTP ${esc(x.responseStatus??"—")} · ${esc(formatDate(x.createdAt,true))}</p><div class="row-meta"><span class="small-chip">${esc(x.status)}</span></div></div></div>`).join(""):'<div class="empty-management">No webhook deliveries yet.</div>';
+  $("deliveryList").innerHTML=del.length?del.map(x=>`<div class="management-row"><div><strong>${esc(x.eventType)}</strong><p>${esc(x.eventId)} · HTTP ${esc(x.responseStatus??"—")} · ${esc(formatDate(x.createdAt,true))}</p><div class="row-meta"><span class="small-chip">${esc(x.status)}</span><span class="small-chip">${x.attemptCount||0}/${x.maxAttempts||5} attempts</span>${x.nextAttemptAt?`<span class="small-chip">next ${esc(formatDate(x.nextAttemptAt,true))}</span>`:""}</div></div><div class="management-actions">${canManageWebhooks()&&["dead_letter","retrying"].includes(x.status)?`<button class="button secondary small" data-retry-webhook="${esc(x.id)}" type="button">Retry</button>`:""}</div></div>`).join(""):'<div class="empty-management">No webhook deliveries yet.</div>';
+  const attempts=state.dashboard?.recentWebhookAttempts||[];
+  $("webhookAttemptList").innerHTML=attempts.length?attempts.map(a=>`<div class="management-row"><div><strong>Attempt ${esc(a.attemptNumber)} · ${esc(a.deliveryId)}</strong><p>HTTP ${esc(a.responseStatus??"—")} · ${esc(formatDate(a.createdAt,true))}</p><div class="row-meta"><span class="small-chip">${a.success===true?"success":a.success===false?"failed":"pending"}</span>${a.error?`<span class="small-chip">${esc(a.error)}</span>`:""}</div></div></div>`).join(""):'<div class="empty-management">No webhook attempts yet.</div>';
 }
 
 function renderEvidenceRequests(){
@@ -151,15 +173,49 @@ function renderEvidenceRequests(){
   }).join("");
 }
 
+function renderNotificationBadge(){
+  const count=Number(state.dashboard?.metrics?.unreadNotifications||0);
+  if(!els.notificationBadge)return;
+  els.notificationBadge.textContent=String(Math.min(count,99));
+  els.notificationBadge.classList.toggle("hidden",count<1);
+}
+
+function renderCompliance(){
+  const root=$("complianceExportList");if(!root)return;
+  if(!canExportAudit()){root.innerHTML='<div class="empty-management">Your role does not include compliance export permission.</div>';return}
+  const items=state.dashboard?.complianceExports||[];
+  root.innerHTML=items.length?items.map(e=>`
+    <div class="management-row">
+      <div><strong>${esc(e.format?.toUpperCase()||"EXPORT")} · ${esc(formatDate(e.createdAt,true))}</strong><p>${esc((e.scopes||[]).join(", "))} · ${esc(formatDate(e.fromAt,true))} → ${esc(formatDate(e.toAt,true))}</p><div class="row-meta"><span class="small-chip">${esc(e.status)}</span>${e.rowCount!=null?`<span class="small-chip">${esc(e.rowCount)} records</span>`:""}${e.sha256?`<span class="small-chip">sha256 ${esc(e.sha256.slice(0,12))}…</span>`:""}</div></div>
+      <div class="management-actions">${e.status==="ready"?`<button class="button secondary small" data-download-export="${esc(e.id)}" type="button">Download</button>`:""}</div>
+    </div>`).join(""):'<div class="empty-management">No compliance exports yet.</div>';
+}
+
+async function openNotifications(){
+  try{
+    const data=await rpc("trustrelay_notifications_v09",{p_limit:50,p_unread_only:false});
+    state.notifications=data;
+    const notes=Array.isArray(data.notifications)?data.notifications:[];
+    const cats=["authority","evidence","identity","organization","webhook","compliance","security"];
+    openModal(`<p class="eyebrow">NOTIFICATIONS</p><h2>TrustRelay activity.</h2><p>${Number(data.unreadCount||0)} unread notification${Number(data.unreadCount||0)===1?"":"s"}.</p>
+      <div class="notification-preferences">${cats.map(cat=>`<label><input type="checkbox" data-notification-pref="${cat}" ${data.preferences?.[cat]===false?"":"checked"}> ${cat}</label>`).join("")}</div>
+      <div class="notification-list">${notes.length?notes.map(n=>`<article class="notification-item ${n.readAt?"":"unread"}"><div><span class="small-chip">${esc(n.severity)}</span><strong>${esc(n.title)}</strong><p>${esc(n.body)}</p><small>${esc(formatDate(n.createdAt,true))}</small></div><div class="management-actions">${!n.readAt?`<button class="button ghost small" data-note-read="${esc(n.id)}" type="button">Mark read</button>`:""}<button class="button ghost small" data-note-dismiss="${esc(n.id)}" type="button">Dismiss</button></div></article>`).join(""):'<div class="empty-management">No notifications.</div>'}</div>`);
+    qsa("[data-note-read]",els.modalContent).forEach(b=>b.onclick=async()=>{await rpc("trustrelay_mark_notification_v09",{p_notification_id:b.dataset.noteRead,p_action:"read"});await loadDashboard();await openNotifications()});
+    qsa("[data-note-dismiss]",els.modalContent).forEach(b=>b.onclick=async()=>{await rpc("trustrelay_mark_notification_v09",{p_notification_id:b.dataset.noteDismiss,p_action:"dismiss"});await loadDashboard();await openNotifications()});
+    qsa("[data-notification-pref]",els.modalContent).forEach(x=>x.onchange=async()=>{await rpc("trustrelay_set_notification_preference_v09",{p_category:x.dataset.notificationPref,p_in_app:x.checked});toast("Notification preference updated.","success")});
+  }catch(e){toast(String(e.code||e.message).replaceAll("_"," "),"error")}
+}
+
 function renderAudit(){
   const root=$("auditList"),items=state.dashboard?.recentDecisions||[];
-  if(!items.length){root.innerHTML='<div class="empty-management">No audit evidence yet.</div>';return}
-  root.innerHTML=items.map(x=>`
+  root.innerHTML=items.length?items.map(x=>`
     <article class="audit-row">
       <span class="decision-badge ${esc(x.decision)}">${esc(x.decision)}</span>
-      <div><strong>${esc(x.action)} → ${esc(x.resource)}</strong><p>${esc(x.reasonCode)} — ${esc(x.reasonDetail||"")}</p><p>Request ${esc(x.requestId)} · ${esc(formatDate(x.decidedAt,true))} · source ${esc(x.source||"api")}</p></div>
+      <div><strong>${esc(x.action)} → ${esc(x.resource)}</strong><p>${esc(x.reasonCode)} — ${esc(x.reasonDetail||"")}</p><p>Request ${esc(x.requestId)} · ${esc(formatDate(x.decidedAt,true))} · source ${esc(x.source||"api")} · policy ${esc(x.policyVersion||"—")} / engine ${esc(x.engineVersion||"—")}</p></div>
       <div class="audit-hashes">decision ${esc(x.id)}<br>eval ${esc(x.evaluationHash||"—")}<br>audit ${esc(x.auditEventId||"—")}</div>
-    </article>`).join("");
+    </article>`).join(""):'<div class="empty-management">No authorization decisions yet.</div>';
+  const orgRoot=$("organizationAuditList"),events=state.dashboard?.recentAuditEvents||[];
+  orgRoot.innerHTML=events.length?events.map(x=>`<article class="audit-row"><span class="small-chip">ORG</span><div><strong>${esc(x.eventType)}</strong><p>${esc(x.targetType)} · ${esc(x.targetId||"—")} · ${esc(formatDate(x.createdAt,true))}</p></div><div class="audit-hashes">hash ${esc(x.eventHash||"—")}<br>prev ${esc(x.prevHash||"genesis")}</div></article>`).join(""):'<div class="empty-management">No v0.9 organization audit events yet.</div>';
 }
 
 function renderDeveloper(){
@@ -196,7 +252,7 @@ function showDecision(result){
       <div><span>Audit event</span><span>${esc(d.auditEventId||"—")}</span></div>
       <div><span>Latency</span><span>${esc(d.latencyMs??"—")} ms</span></div>
     </div>
-    ${d.grantId ? `<div class="modal-actions"><button class="button secondary" data-request-evidence-grant="${esc(d.grantId)}" type="button">Request supporting evidence</button></div>` : ""}`;
+    ${d.grantId && canRequestEvidence() ? `<div class="modal-actions"><button class="button secondary" data-request-evidence-grant="${esc(d.grantId)}" type="button">Request supporting evidence</button></div>` : ""}`;
 }
 
 async function acceptPendingOrgInvite(){
@@ -245,10 +301,10 @@ function setup(){
 
   $("keyList").addEventListener("click",async e=>{const b=e.target.closest("[data-revoke-key]");if(!b)return;if(!confirm("Revoke this API key? Existing integrations using it will immediately fail."))return;busy(b,true,"Revoking…");try{await rpc("trustrelay_revoke_api_key_v07",{p_org_id:state.orgId,p_key_id:b.dataset.revokeKey});toast("API key revoked.","success");await loadDashboard()}catch(err){toast(String(err.code||err.message),"error")}finally{busy(b,false)}});
 
-  $("inviteMemberButton").onclick=()=>openModal(`<p class="eyebrow">TEAM INVITATION</p><h2>Invite organization member.</h2><form id="inviteForm"><div class="field"><label for="inviteEmail">Email</label><input id="inviteEmail" type="email" required></div><div class="field"><label for="inviteRole">Role</label><select id="inviteRole"><option value="verifier">Verifier</option><option value="developer">Developer</option><option value="auditor">Auditor</option><option value="admin">Admin</option></select></div><div class="modal-actions"><button class="button primary" type="submit">Create invitation</button></div></form>`);
+  $("inviteMemberButton").onclick=()=>openModal(`<p class="eyebrow">TEAM INVITATION</p><h2>Invite organization member.</h2><form id="inviteForm"><div class="field"><label for="inviteEmail">Email</label><input id="inviteEmail" type="email" required></div><div class="field"><label for="inviteRole">Role</label><select id="inviteRole"><option value="verifier">Verifier</option><option value="compliance">Compliance</option><option value="developer">Developer</option><option value="auditor">Auditor</option><option value="admin">Admin</option></select></div><div class="modal-actions"><button class="button primary" type="submit">Create invitation</button></div></form>`);
   els.modalContent.addEventListener("submit",async e=>{if(e.target.id==="inviteForm"){e.preventDefault();const b=e.submitter;busy(b,true,"Creating…");try{const x=await rpc("trustrelay_invite_org_member_v07",{p_org_id:state.orgId,p_email:$("inviteEmail").value.trim(),p_role:$("inviteRole").value});const link=location.origin+"/verifier/?org_invite="+encodeURIComponent(x.invitation.token);els.modalContent.innerHTML=`<p class="eyebrow">INVITATION READY</p><h2>Share this one-time invitation.</h2><p>Send it only to <strong>${esc(x.invitation.email)}</strong>.</p><div class="secret-once">${esc(link)}</div><div class="modal-actions"><button id="copyOrgInvite" class="button primary" type="button">Copy invitation link</button></div>`;$("copyOrgInvite").onclick=()=>copyText(link,"Organization invitation copied");await loadDashboard()}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error");busy(b,false)}}});
 
-  $("createWebhookButton").onclick=()=>openModal(`<p class="eyebrow">SIGNED WEBHOOK</p><h2>Add HTTPS endpoint.</h2><form id="webhookForm"><div class="field"><label for="webhookName">Name</label><input id="webhookName" required maxlength="100" placeholder="Authorization events"></div><div class="field"><label for="webhookUrl">HTTPS endpoint</label><input id="webhookUrl" type="url" required placeholder="https://example.com/trustrelay"></div><div class="field"><label>Events</label><div class="scope-checks"><label><input type="checkbox" name="event" value="decision.created" checked> decision.created</label><label><input type="checkbox" name="event" value="grant.revoked"> grant.revoked</label><label><input type="checkbox" name="event" value="credential.revoked"> credential.revoked</label></div></div><div class="modal-actions"><button class="button primary" type="submit">Create webhook</button></div></form>`);
+  $("createWebhookButton").onclick=()=>openModal(`<p class="eyebrow">SIGNED WEBHOOK</p><h2>Add HTTPS endpoint.</h2><form id="webhookForm"><div class="field"><label for="webhookName">Name</label><input id="webhookName" required maxlength="100" placeholder="Authorization events"></div><div class="field"><label for="webhookUrl">HTTPS endpoint</label><input id="webhookUrl" type="url" required placeholder="https://example.com/trustrelay"></div><div class="field"><label>Events</label><div class="scope-checks"><label><input type="checkbox" name="event" value="decision.created" checked> decision.created</label><label><input type="checkbox" name="event" value="grant.revoked"> grant.revoked</label><label><input type="checkbox" name="event" value="credential.revoked"> credential.revoked</label><label><input type="checkbox" name="event" value="evidence.requested"> evidence.requested</label><label><input type="checkbox" name="event" value="evidence.submitted"> evidence.submitted</label><label><input type="checkbox" name="event" value="evidence.resolved"> evidence.resolved</label><label><input type="checkbox" name="event" value="organization.member.role_changed"> organization.member.role_changed</label><label><input type="checkbox" name="event" value="compliance.export.ready"> compliance.export.ready</label></div></div><div class="modal-actions"><button class="button primary" type="submit">Create webhook</button></div></form>`);
   els.modalContent.addEventListener("submit",async e=>{if(e.target.id==="webhookForm"){e.preventDefault();const b=e.submitter;busy(b,true,"Creating…");try{const events=qsa('input[name="event"]:checked',e.target).map(x=>x.value);const x=await rpc("trustrelay_create_webhook_v07",{p_org_id:state.orgId,p_name:$("webhookName").value.trim(),p_endpoint_url:$("webhookUrl").value.trim(),p_events:events});els.modalContent.innerHTML=`<p class="eyebrow">WEBHOOK CREATED</p><h2>Save the signing secret.</h2><p class="warning-copy">It is encrypted in Vault and shown only once.</p><div class="secret-once">${esc(x.signingSecret)}</div><div class="modal-actions"><button id="copyWebhookSecret" class="button primary" type="button">Copy signing secret</button></div>`;$("copyWebhookSecret").onclick=()=>copyText(x.signingSecret,"Webhook secret copied");await loadDashboard()}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error");busy(b,false)}}});
   $("evidenceRequestOrgList").addEventListener("click",async e=>{
     const view=e.target.closest("[data-org-evidence-doc]");
@@ -284,6 +340,67 @@ function setup(){
       closeModal();toast("Evidence request resolved.","success");await loadDashboard();showView("evidence");
     }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error");busy(b,false)}
   });
+
+  $("teamList").addEventListener("click",async e=>{
+    const save=e.target.closest("[data-save-role]");
+    if(save){
+      const select=document.querySelector(`[data-role-account="${CSS.escape(save.dataset.saveRole)}"]`);
+      if(!select)return;
+      busy(save,true,"Saving…");
+      try{await rpc("trustrelay_update_member_role_v09",{p_org_id:state.orgId,p_account_id:save.dataset.saveRole,p_new_role:select.value});toast("Organization role updated.","success");await loadDashboard()}
+      catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(save,false)}
+      return;
+    }
+    const disable=e.target.closest("[data-disable-member]");
+    if(disable){
+      if(!confirm("Disable this organization member? Their access will stop immediately."))return;
+      busy(disable,true,"Disabling…");
+      try{await rpc("trustrelay_disable_member_v09",{p_org_id:state.orgId,p_account_id:disable.dataset.disableMember,p_reason:"Disabled from Verifier Portal"});toast("Member access disabled.","success");await loadDashboard()}
+      catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(disable,false)}
+    }
+  });
+
+  $("webhookList").addEventListener("click",async e=>{
+    const test=e.target.closest("[data-test-webhook]");
+    if(test){busy(test,true,"Queueing…");try{const x=await rpc("trustrelay_test_webhook_v09",{p_org_id:state.orgId,p_webhook_id:test.dataset.testWebhook});toast("Webhook test queued: "+x.deliveryId,"success");await loadDashboard()}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(test,false)}return}
+    const rotate=e.target.closest("[data-rotate-webhook]");
+    if(rotate){busy(rotate,true,"Rotating…");try{const x=await rpc("trustrelay_rotate_webhook_secret_v09",{p_org_id:state.orgId,p_webhook_id:rotate.dataset.rotateWebhook});openModal(`<p class="eyebrow">WEBHOOK SECRET ROTATED</p><h2>Copy the new secret now.</h2><p class="warning-copy">The previous signing secret is no longer used for new deliveries. This value is shown once.</p><div class="secret-once">${esc(x.signingSecret)}</div><div class="modal-actions"><button id="copyRotatedSecret" class="button primary" type="button">Copy secret</button></div>`);$("copyRotatedSecret").onclick=()=>copyText(x.signingSecret,"Webhook secret copied");await loadDashboard()}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(rotate,false)}}
+  });
+
+  $("deliveryList").addEventListener("click",async e=>{
+    const retry=e.target.closest("[data-retry-webhook]");if(!retry)return;
+    busy(retry,true,"Queueing…");
+    try{await rpc("trustrelay_retry_webhook_delivery_v09",{p_org_id:state.orgId,p_delivery_id:retry.dataset.retryWebhook});toast("Webhook retry queued.","success");await loadDashboard()}
+    catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(retry,false)}
+  });
+
+  $("complianceExportForm").addEventListener("submit",async e=>{
+    e.preventDefault();const b=e.submitter;busy(b,true,"Generating…");
+    try{
+      const scopes=qsa('input[name="exportScope"]:checked',e.target).map(x=>x.value);
+      if(!scopes.length)throw new Error("Choose at least one export section.");
+      const fromRaw=$("exportFrom").value,toRaw=$("exportTo").value;
+      const x=await complianceEdge({action:"generate",orgId:state.orgId,format:$("exportFormat").value,scopes,fromAt:fromRaw?new Date(fromRaw).toISOString():null,toAt:toRaw?new Date(toRaw).toISOString():null});
+      toast("Compliance export generated and hashed.","success");
+      await loadDashboard();showView("compliance");
+      if(x.url)window.open(x.url,"_blank","noopener,noreferrer");
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}
+  });
+
+  $("complianceExportList").addEventListener("click",async e=>{
+    const b=e.target.closest("[data-download-export]");if(!b)return;
+    busy(b,true,"Preparing…");
+    try{const x=await complianceEdge({action:"download",orgId:state.orgId,exportId:b.dataset.downloadExport});window.open(x.url,"_blank","noopener,noreferrer")}
+    catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}
+  });
+
+  $("verifyAuditChainButton").onclick=async()=>{
+    const b=$("verifyAuditChainButton");busy(b,true,"Verifying…");
+    try{const x=await rpc("trustrelay_verify_org_audit_chain_v09",{p_org_id:state.orgId});msg($("auditChainStatus"),x.valid?`Audit chain valid · ${x.eventCount} events · head ${x.headHash||"genesis"}`:`Audit chain verification failed at ${x.failedEventId}`,x.valid?"success":"error")}
+    catch(err){msg($("auditChainStatus"),String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}
+  };
+
+  els.notificationButton.onclick=openNotifications;
 
   $("modalClose").onclick=closeModal;els.modalBackdrop.onclick=e=>{if(e.target===els.modalBackdrop)closeModal()};
   els.accountButton.onclick=async()=>{if(confirm("Sign out of the Verifier Portal?"))await supabase.auth.signOut()};
