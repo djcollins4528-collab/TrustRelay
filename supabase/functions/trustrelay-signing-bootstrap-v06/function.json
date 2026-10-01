@@ -1,0 +1,7 @@
+{
+  "slug": "trustrelay-signing-bootstrap-v06",
+  "verify_jwt": true,
+  "staging_version": 5,
+  "sha256": "ebfaa9f77cbdc33257c3654f323d3ec84a9e4ae477477ef9e479527d2894ddfa",
+  "productionUse": "one-time signing-key bootstrap; disable/restrict after use"
+}
