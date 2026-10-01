@@ -315,3 +315,31 @@ See:
 - `docs/V0.9-OPERATIONS-COMPLIANCE.md`
 - `docs/V0.9-IMPLEMENTATION-RESULT.md`
 - `verifier/openapi.json`
+
+
+## v0.9 Webhooks, Notifications, Roles & Compliance
+
+TrustRelay v0.9 adds the operational controls needed by institutional users:
+
+- explicit organization roles: owner, admin, compliance, verifier, developer, auditor
+- server-enforced least-privilege dashboard responses
+- signed webhook lifecycle management
+- pg_net/Cron delivery with retry, attempt history and dead-letter handling
+- in-app notification inboxes and per-category preferences
+- hash-chained organization administrative audit events
+- private JSON/CSV compliance exports
+- SHA-256 artifact integrity
+- per-organization export hash chaining
+- five-minute signed export downloads
+- 24-hour export availability
+
+Canonical webhook delivery runs through the database maintenance job rather than a public worker.
+
+Canonical compliance exporter:
+
+`trustrelay-compliance-export-v09`
+
+See:
+
+- `docs/V0.9-WEBHOOKS-RBAC-COMPLIANCE.md`
+- `verifier/openapi.json`
