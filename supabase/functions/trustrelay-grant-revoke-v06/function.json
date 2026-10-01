@@ -1,0 +1,6 @@
+{
+  "slug": "trustrelay-grant-revoke-v06",
+  "verify_jwt": true,
+  "staging_version": 3,
+  "sha256": "3727dc5ead870e23042ab18cbe30f58a81485e3ea8d1cb8aead91cdb9c506dfc"
+}
