@@ -75,7 +75,12 @@ async function loadOrganizations(){
 
 async function loadDashboard(){
   if(!state.orgId)return;
-  state.dashboard=await rpc("trustrelay_org_dashboard_v07",{p_org_id:state.orgId});
+  const results=await Promise.all([
+    rpc("trustrelay_org_dashboard_v07",{p_org_id:state.orgId}),
+    rpc("trustrelay_notifications_v09",{p_limit:1,p_unread_only:true}).catch(()=>({unreadCount:0,notifications:[]}))
+  ]);
+  state.dashboard=results[0];
+  state.notifications=results[1];
   render();
 }
 
@@ -174,7 +179,7 @@ function renderEvidenceRequests(){
 }
 
 function renderNotificationBadge(){
-  const count=Number(state.dashboard?.metrics?.unreadNotifications||0);
+  const count=Number(state.notifications?.unreadCount||0);
   if(!els.notificationBadge)return;
   els.notificationBadge.textContent=String(Math.min(count,99));
   els.notificationBadge.classList.toggle("hidden",count<1);
