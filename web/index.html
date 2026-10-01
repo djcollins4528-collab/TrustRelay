@@ -25,8 +25,9 @@
         </span>
       </button>
       <div class="topbar-actions">
-        <span id="environmentBadge" class="env-badge">STAGING</span>
+        <span id="environmentBadge" class="env-badge">V1.0 CANDIDATE</span>
         <a class="button ghost small" href="../verifier/">Verifier portal</a>
+        <a class="button ghost small" href="../legal/" target="_blank" rel="noopener">Legal & Trust</a>
         <button id="verifyTopButton" class="button ghost small" type="button">Verify credential</button>
         <button id="notificationTopButton" class="notification-button hidden" type="button" aria-label="Notifications">🔔<span id="notificationTopBadge" class="notification-badge hidden">0</span></button>
         <button id="accountTopButton" class="avatar-button hidden" type="button" aria-label="Account"></button>
@@ -45,8 +46,8 @@
             <div><span>03</span><p><strong>Prove it cryptographically.</strong><br>Signed ES256 credentials can be independently verified and revoked.</p></div>
           </div>
           <div class="pilot-note">
-            <strong>v0.9 notifications + identity assurance</strong>
-            <span>Email verification remains the baseline. Users can now submit private government-ID and address evidence for reviewer-backed document or high-assurance verification.</span>
+            <strong>TrustRelay v1.0 production candidate</strong>
+            <span>Production-grade runtime gates, organization onboarding and legal versioning are implemented. Commercial launch remains disabled until the published legal package, production infrastructure and billing provider are approved.</span>
           </div>
         </div>
 
@@ -126,8 +127,8 @@
           </nav>
           <div class="sidebar-footer">
             <span class="status-dot"></span>
-            <span>TrustRelay staging</span>
-            <small>v0.8</small>
+            <span>TrustRelay production candidate</span>
+            <small>v1.0</small>
           </div>
         </aside>
 
@@ -461,6 +462,11 @@
                 <h3>Identity assurance</h3>
                 <div id="identityDetails"></div>
                 <button class="button secondary" data-go="identity" type="button">Open Identity & evidence</button>
+              </article>
+              <article class="settings-card">
+                <h3>Legal & privacy</h3>
+                <div id="consumerLegalDetails"></div>
+                <a class="button secondary" href="../legal/" target="_blank" rel="noopener">Open Legal & Trust Center</a>
               </article>
               <article class="settings-card danger-card">
                 <h3>Session</h3>
