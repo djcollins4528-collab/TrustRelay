@@ -99,3 +99,62 @@ See:
 
 - `docs/V0.7-PARTNER-API.md`
 - `verifier/openapi.json`
+
+
+## v0.8 High-Assurance Identity + Evidence
+
+TrustRelay v0.8 adds a high-assurance identity and evidence layer on top of the v0.7 institutional verifier platform.
+
+### Live staging surfaces
+
+- Consumer app: `/web/`
+- Institutional Verifier Portal: `/verifier/`
+- Internal Identity Review Console: `/reviewer/`
+- OpenAPI contract: `/verifier/openapi.json`
+
+### Identity assurance
+
+Assurance levels:
+
+- `none`
+- `email_verified`
+- `document_verified`
+- `high_assurance`
+
+Users can start a consented proofing session and upload private government-ID/address evidence. TrustRelay uses a private Storage bucket, short-lived signed upload/download URLs, and SHA-256 integrity hashes.
+
+Normal users cannot approve their own evidence. Identity reviewers must be explicitly provisioned, and self-review is rejected.
+
+### KYC/provider boundary
+
+v0.8 includes a service-role-only provider adapter that accepts an externally verified result only after provider integration code has authenticated it. Provider result JSON is hashed and the provider cannot promote a user beyond the assurance level the user consented to request.
+
+No external KYC provider is currently configured, and the product does not claim biometric, liveness, AML, sanctions-screening, or regulatory KYC certification.
+
+### Grant policy
+
+New optional rules:
+
+- `minimumAssurance`
+- `requireVerifiedEvidence`
+
+An active grant falls back to `pending_verification` if either participant later drops below its explicit minimum assurance.
+
+`requireVerifiedEvidence` is satisfied only by reviewer-approved TrustRelay documents linked to that grant.
+
+### Institutional evidence workflow
+
+After evaluating a grant, an institution can request supporting evidence. The principal/representative must explicitly attach a private document to that request before the requesting institution gets access to it.
+
+Owner/admin/verifier roles can resolve submitted evidence requests. Auditor roles can view explicitly shared evidence but cannot resolve requests.
+
+### Credentials and Partner API
+
+New credentials use TrustRelay credential version `0.8` and include an assurance-at-issuance snapshot. Public verification returns current live assurance separately.
+
+The stable Partner API route remains `trustrelay-partner-v07` for compatibility, but health and persisted decisions report engine version `0.8.0`.
+
+See:
+
+- `docs/V0.8-IDENTITY-EVIDENCE.md`
+- `verifier/openapi.json`
