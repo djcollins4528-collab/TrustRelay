@@ -230,3 +230,117 @@ See:
 - `docs/V0.9-OPERATIONS-COMPLIANCE.md`
 - `docs/V0.9-IMPLEMENTATION-RESULT.md`
 - `verifier/openapi.json`
+
+
+## v0.9 Webhooks, Notifications, Organization Roles + Compliance/Audit Exports
+
+TrustRelay v0.9 adds the operational controls needed for institutional use while preserving the v0.8 identity/evidence and signed-authority model.
+
+### Organization RBAC
+
+Supported roles:
+
+- `owner`
+- `admin`
+- `compliance`
+- `verifier`
+- `developer`
+- `auditor`
+
+Permissions are resolved from a canonical server-side permission map instead of scattered UI-only role checks. Owner protections prevent removing or demoting the last active owner.
+
+Role changes, member disable/restore/remove actions, invitations, API-key changes, webhook changes, evidence actions and compliance exports are recorded in the organization audit ledger.
+
+### Notifications
+
+Both the consumer app and Verifier Portal include an in-app notification center with unread state and category preferences.
+
+Categories:
+
+- authority
+- evidence
+- identity
+- organization
+- webhook
+- compliance
+- security
+
+Notifications are stored server-side and deduplicated where appropriate.
+
+### Durable webhooks
+
+Webhook subscriptions use Vault-protected HMAC-SHA256 signing secrets.
+
+v0.9 supports:
+
+- queued asynchronous delivery
+- bounded exponential retries
+- per-attempt delivery history
+- dead-letter state
+- failure-threshold pause/disable handling
+- manual retry
+- signing-secret rotation
+- test deliveries
+- delivery-failure notifications
+- one-minute scheduled maintenance
+
+Current organization webhook events:
+
+- `decision.created`
+- `grant.revoked`
+- `credential.revoked`
+- `evidence.requested`
+- `evidence.submitted`
+- `evidence.resolved`
+- `organization.member.invited`
+- `organization.member.joined`
+- `organization.member.role_changed`
+- `organization.member.disabled`
+- `organization.member.restored`
+- `organization.member.removed`
+- `organization.ownership.transferred`
+- `compliance.export.ready`
+- `webhook.test`
+
+Webhook endpoint creation rejects obvious localhost/private-network destinations.
+
+### Compliance / audit exports
+
+Authorized owner/admin/compliance/auditor users can create bounded JSON or CSV exports containing selected operational records such as:
+
+- authorization decisions
+- webhook deliveries and attempts
+- evidence-request history
+- organization members and invitations
+- organization audit events
+- notifications
+- partner API-key metadata when requested
+
+Private identity-document bodies are excluded.
+
+Exports are stored in a private bucket, SHA-256 hashed, linked into the export audit chain, and downloaded only through short-lived signed URLs.
+
+### Audit integrity
+
+Organization operational events are hash chained. v0.9 exposes audit-chain verification and includes chain status in compliance export metadata.
+
+### Verified v0.9 behavior
+
+Rollback integration tests passed for:
+
+- last-owner protection
+- organization invitation and auditor acceptance
+- role promotion to `compliance`
+- compliance export permission resolution
+- exactly one role-change notification
+- webhook queue creation
+- webhook event idempotency/deduplication
+- compliance export completion + SHA-256
+- organization audit-chain verification
+
+All three browser bundles pass JavaScript syntax validation.
+
+See:
+
+- `docs/V0.9-OPERATIONS-COMPLIANCE.md`
+- `verifier/openapi.json`
