@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "TrustRelay Partner API",
-    "version": "0.9.0",
-    "description": "Institutional verification API for scoped TrustRelay delegated authority with live identity assurance, verified evidence, organization audit hooks, signed webhooks, and v0.9 compliance controls."
+    "version": "1.0.0",
+    "description": "TrustRelay v1.0 Partner API. Evaluates scoped delegated authority with live identity assurance/evidence, durable signed webhooks, plan entitlements, and fail-closed production runtime checks."
   },
   "servers": [
     {
@@ -258,7 +258,7 @@
             "description": "Healthy"
           }
         },
-        "description": "Returns Partner API health and engine version 0.9.0."
+        "description": "Returns Partner API health and engine version 1.0.0."
       }
     },
     "/v1/decisions/evaluate": {
@@ -269,7 +269,7 @@
           }
         ],
         "summary": "Evaluate delegated authority",
-        "description": "Verifies the signed credential, refreshes live assurance/evidence state, evaluates policy, records an auditable v0.9 decision and emits decision.created webhooks.",
+        "description": "For new requests, validates organization runtime state and plan entitlement, verifies the signed authority credential, refreshes live grant/assurance state, resolves approved grant-linked evidence, evaluates policy, persists decision/audit evidence, and asynchronously queues signed webhooks. Idempotent prior requests may be retrieved without consuming a second decision.",
         "requestBody": {
           "required": true,
           "content": {
@@ -474,5 +474,29 @@
       "attemptHistory": true,
       "signing": "HMAC-SHA256 over <timestamp>.<raw body>"
     }
+  },
+  "x-trustrelay-v10": {
+    "productionRuntime": {
+      "sandbox": "Allowed within sandbox plan limits.",
+      "live": "Requires approved production onboarding and billing status active, trialing, or manual_contract.",
+      "failClosed": true
+    },
+    "billing": {
+      "provider": "Stripe adapter implemented",
+      "checkout": "Hosted Stripe Checkout",
+      "portal": "Stripe Billing Portal",
+      "state": "Provider credentials/price IDs must be configured before commercial checkout is enabled."
+    },
+    "onboarding": {
+      "organization": "Versioned profile/contact/legal/billing/production gates",
+      "legal": "Only binding, counsel-reviewed, effective published documents require acceptance",
+      "activation": "Service-role approval after organization and platform readiness gates"
+    },
+    "plans": [
+      "sandbox",
+      "starter",
+      "growth",
+      "enterprise"
+    ]
   }
 }
