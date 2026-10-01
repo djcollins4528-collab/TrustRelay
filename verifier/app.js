@@ -107,7 +107,14 @@ function render(){
   $("complianceExportForm")?.classList.toggle("hidden",!canExportAudit());
   $("verifyAuditChainButton")?.classList.toggle("hidden",!hasPerm("audit.read"));
   qsa('.verifier-nav [data-view="verify"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("decisions.evaluate")));
+  qsa('.verifier-nav [data-view="evidence"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("evidence.read")));
+  qsa('.verifier-nav [data-view="keys"]').forEach(x=>x.classList.toggle("hidden",!canManageKeys()));
+  qsa('.verifier-nav [data-view="team"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("members.manage")));
+  qsa('.verifier-nav [data-view="webhooks"]').forEach(x=>x.classList.toggle("hidden",!canManageWebhooks()));
   qsa('.verifier-nav [data-view="compliance"]').forEach(x=>x.classList.toggle("hidden",!canExportAudit()));
+  qsa('.verifier-nav [data-view="audit"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("audit.read")));
+  qsa('.verifier-nav [data-view="developer"]').forEach(x=>x.classList.toggle("hidden",!(canManageKeys()||canManageWebhooks())));
+  qsa('[data-go="verify"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("decisions.evaluate")));
 }
 
 function renderDecisions(root,items,compact=false){
