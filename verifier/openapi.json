@@ -3,7 +3,7 @@
   "info": {
     "title": "TrustRelay Partner API",
     "version": "0.9.0",
-    "description": "Institutional verification API for TrustRelay delegated authority. v0.9 adds operational webhooks, notifications, organization RBAC and compliance/audit exports while preserving the v0.8 authority credential format."
+    "description": "Institutional verification API for scoped TrustRelay delegated authority with live identity assurance, verified evidence, organization audit hooks, signed webhooks, and v0.9 compliance controls."
   },
   "servers": [
     {
@@ -157,7 +157,7 @@
               "api",
               "portal"
             ],
-            "description": "Decision source: partner API or authenticated Verifier Portal."
+            "description": "Decision source. Portal decisions use the same authorization engine as partner API decisions."
           }
         }
       },
@@ -177,7 +177,8 @@
             "type": "object"
           },
           "organization": {
-            "type": "object"
+            "type": "object",
+            "description": "The authenticated partner organization context used for the decision."
           }
         }
       },
