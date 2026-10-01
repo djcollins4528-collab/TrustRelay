@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07111f">
+  <meta name="description" content="TrustRelay Verifier Portal — verify scoped delegated authority.">
+  <title>TrustRelay Verifier Portal</title>
+  <link rel="stylesheet" href="../web/styles.css">
+  <link rel="stylesheet" href="./verifier.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand verifier-brand" href="./" aria-label="TrustRelay Verifier Portal">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 40 40">
+          <path d="M20 2.5 34 8v10.2c0 9-5.6 15.6-14 19.3C11.6 33.8 6 27.2 6 18.2V8l14-5.5Z" fill="currentColor" opacity=".18"/>
+          <path d="M20 5.8 31 10v8.2c0 7.1-4.2 12.5-11 15.8-6.8-3.3-11-8.7-11-15.8V10l11-4.2Z" fill="none" stroke="currentColor" stroke-width="2.2"/>
+          <path d="m14.2 19.8 3.7 3.7 8-8" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <span>
+        <strong>TrustRelay</strong>
+        <small>Verifier Portal</small>
+      </span>
+    </a>
+    <div class="topbar-actions">
+      <span class="env-badge">SANDBOX</span>
+      <a class="button ghost small" href="../web/">Consumer app</a>
+      <button id="accountButton" class="avatar-button hidden" type="button" aria-label="Account"></button>
+    </div>
+  </header>
+
+  <main>
+    <section id="authView" class="auth-view verifier-auth">
+      <div class="hero">
+        <div class="eyebrow">INSTITUTIONAL VERIFICATION</div>
+        <h1>Know exactly<br>what they can do.</h1>
+        <p class="hero-copy">Verify a representative's signed TrustRelay authority against its live grant, limits, evidence requirements, and revocation state before your organization acts.</p>
+        <div class="trust-points">
+          <div><span>01</span><p><strong>Cryptographic verification.</strong><br>Validate the ES256 credential and its live status.</p></div>
+          <div><span>02</span><p><strong>Policy decision.</strong><br>Evaluate the requested action, resource, amount and evidence.</p></div>
+          <div><span>03</span><p><strong>Auditable evidence.</strong><br>Retain the reason code, policy snapshot and decision hash.</p></div>
+        </div>
+      </div>
+
+      <div class="auth-panel">
+        <div class="auth-card">
+          <div class="auth-intro">
+            <p class="eyebrow">PASSWORDLESS ACCESS</p>
+            <h2>Institutional sign in.</h2>
+            <p>Use your work email. TrustRelay sends a one-time magic link or email code—no portal password is required.</p>
+          </div>
+          <form id="magicForm" class="auth-form">
+            <div class="field">
+              <label for="authName">Full name <span class="optional-label">new accounts</span></label>
+              <input id="authName" type="text" autocomplete="name" maxlength="100" placeholder="Your name">
+            </div>
+            <div class="field">
+              <label for="authEmail">Work email</label>
+              <input id="authEmail" type="email" autocomplete="email" required placeholder="you@organization.com">
+            </div>
+            <button class="button primary full" type="submit">Email me a secure sign-in link</button>
+            <button id="showOtp" class="text-button" type="button">I have a six-digit email code</button>
+          </form>
+          <form id="otpForm" class="auth-form hidden">
+            <div class="field">
+              <label for="otpEmail">Email</label>
+              <input id="otpEmail" type="email" autocomplete="email" required>
+            </div>
+            <div class="field">
+              <label for="otpCode">One-time code</label>
+              <input id="otpCode" class="otp-input" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="123456">
+            </div>
+            <button class="button primary full" type="submit">Verify code</button>
+            <button id="backToMagic" class="text-button" type="button">← Send a new link instead</button>
+          </form>
+          <div id="authMessage" class="message hidden"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="portalView" class="institution-shell hidden">
+      <aside class="institution-sidebar">
+        <div class="org-switcher">
+          <label for="orgSelect">Organization</label>
+          <select id="orgSelect"></select>
+          <button id="newOrgButton" class="button ghost small full" type="button">+ New sandbox organization</button>
+        </div>
+        <nav class="side-nav verifier-nav">
+          <button class="nav-item active" data-view="dashboard" type="button"><span>⌂</span><span>Overview</span></button>
+          <button class="nav-item" data-view="verify" type="button"><span>✓</span><span>Verify authority</span></button>
+          <button class="nav-item" data-view="keys" type="button"><span>⌁</span><span>API keys</span></button>
+          <button class="nav-item" data-view="team" type="button"><span>◎</span><span>Team</span></button>
+          <button class="nav-item" data-view="webhooks" type="button"><span>↗</span><span>Webhooks</span></button>
+          <button class="nav-item" data-view="audit" type="button"><span>≡</span><span>Audit</span></button>
+          <button class="nav-item" data-view="developer" type="button"><span>{ }</span><span>Developer</span></button>
+        </nav>
+        <div class="sidebar-footer">
+          <span class="status-dot"></span><span>Partner API v0.7</span><small>Sandbox</small>
+        </div>
+      </aside>
+
+      <div class="institution-main">
+        <section id="noOrgView" class="portal-section hidden">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">INSTITUTION SETUP</p>
+              <h2>Create your verifier organization.</h2>
+              <p>v0.7 starts organizations in sandbox mode. Production activation will be a separate approval step.</p>
+            </div>
+          </div>
+          <form id="orgForm" class="focus-card org-form">
+            <div class="field"><label for="orgName">Organization name</label><input id="orgName" required maxlength="120" placeholder="Acme Community Bank"></div>
+            <div class="form-grid">
+              <div class="field"><label for="orgIndustry">Industry</label><input id="orgIndustry" maxlength="100" placeholder="Banking, property management, healthcare…"></div>
+              <div class="field"><label for="orgWebsite">Website</label><input id="orgWebsite" type="url" maxlength="500" placeholder="https://example.com"></div>
+            </div>
+            <button class="button primary full" type="submit">Create sandbox organization</button>
+          </form>
+        </section>
+
+        <section id="dashboardView" class="portal-section">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">VERIFIER OVERVIEW</p>
+              <h2 id="orgHeading">Institutional verification</h2>
+              <p id="orgSubheading">Sandbox organization</p>
+            </div>
+            <button class="button primary" data-go="verify" type="button">Verify authority</button>
+          </div>
+          <div class="metric-grid verifier-metrics">
+            <article class="metric-card"><span class="metric-label">Decisions</span><strong id="metricTotal">0</strong><small>total evaluations</small></article>
+            <article class="metric-card allow-card"><span class="metric-label">Allow</span><strong id="metricAllow">0</strong><small>policy satisfied</small></article>
+            <article class="metric-card deny-card"><span class="metric-label">Deny</span><strong id="metricDeny">0</strong><small>request blocked</small></article>
+            <article class="metric-card escalate-card"><span class="metric-label">Escalate</span><strong id="metricEscalate">0</strong><small>manual review</small></article>
+          </div>
+          <div class="portal-grid">
+            <article class="portal-card">
+              <div class="card-heading"><div><h3>Recent decisions</h3><p>Latest institutional authorization results.</p></div><button class="text-button" data-go="audit" type="button">View audit →</button></div>
+              <div id="recentDecisions" class="decision-list"></div>
+            </article>
+            <article class="portal-card">
+              <div class="card-heading"><div><h3>Integration health</h3><p>Current sandbox integration footprint.</p></div></div>
+              <dl id="integrationHealth" class="stats-list"></dl>
+            </article>
+          </div>
+        </section>
+
+        <section id="verifyView" class="portal-section hidden">
+          <div class="page-heading">
+            <div><p class="eyebrow">AUTHORIZATION DECISION</p><h2>Verify scoped authority.</h2><p>Ask whether this credential authorizes one specific action against one specific resource right now.</p></div>
+          </div>
+          <div class="verify-layout verifier-evaluate-layout">
+            <form id="evaluateForm" class="focus-card verifier-form">
+              <div class="field"><label for="credentialToken">TrustRelay credential</label><textarea id="credentialToken" rows="7" required spellcheck="false" placeholder="eyJ..."></textarea></div>
+              <div class="form-grid">
+                <div class="field"><label for="decisionAction">Requested action</label><input id="decisionAction" required placeholder="pay_bill"></div>
+                <div class="field"><label for="decisionResource">Resource</label><input id="decisionResource" required placeholder="checking:1234"></div>
+                <div class="field"><label for="decisionAmount">Amount <span class="optional-label">optional</span></label><input id="decisionAmount" type="number" min="0" step="0.01" placeholder="175.00"></div>
+                <div class="field"><label for="decisionCurrency">Currency</label><select id="decisionCurrency"><option value="">Not applicable</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option><option value="CAD">CAD</option></select></div>
+              </div>
+              <div class="field"><label for="decisionEvidence">Evidence metadata <span class="optional-label">JSON</span></label><textarea id="decisionEvidence" rows="4" spellcheck="false" placeholder='{"invoiceId":"INV-1042"}'></textarea></div>
+              <div class="field"><label for="correlationId">Correlation ID <span class="optional-label">optional</span></label><input id="correlationId" maxlength="160" placeholder="your-workflow-id"></div>
+              <button class="button primary full" type="submit">Evaluate authority</button>
+            </form>
+            <div id="decisionResult" class="decision-result empty">
+              <div class="result-mark">?</div><h3>No decision yet</h3><p>Submit a credential and the exact requested action.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="keysView" class="portal-section hidden">
+          <div class="page-heading">
+            <div><p class="eyebrow">PARTNER API</p><h2>API keys.</h2><p>Server-side keys for integrating TrustRelay authorization decisions into your systems. Raw keys are shown once.</p></div>
+            <button id="createKeyButton" class="button primary" type="button">Create API key</button>
+          </div>
+          <div id="keyList" class="management-list"></div>
+        </section>
+
+        <section id="teamView" class="portal-section hidden">
+          <div class="page-heading">
+            <div><p class="eyebrow">ORGANIZATION ACCESS</p><h2>Team.</h2><p>Keep verifier, developer and audit access separate.</p></div>
+            <button id="inviteMemberButton" class="button primary" type="button">Invite member</button>
+          </div>
+          <div id="teamList" class="management-list"></div>
+          <div id="pendingInvites" class="portal-card compact-card"></div>
+        </section>
+
+        <section id="webhooksView" class="portal-section hidden">
+          <div class="page-heading">
+            <div><p class="eyebrow">EVENT DELIVERY</p><h2>Signed webhooks.</h2><p>Receive HMAC-signed events when TrustRelay decisions or authority state changes.</p></div>
+            <button id="createWebhookButton" class="button primary" type="button">Add endpoint</button>
+          </div>
+          <div id="webhookList" class="management-list"></div>
+          <div class="section-heading"><div><h3>Recent deliveries</h3><p>Status of signed delivery attempts.</p></div></div>
+          <div id="deliveryList" class="management-list"></div>
+        </section>
+
+        <section id="auditView" class="portal-section hidden">
+          <div class="page-heading">
+            <div><p class="eyebrow">DECISION EVIDENCE</p><h2>Audit history.</h2><p>Immutable authorization evidence with decision and audit hashes.</p></div>
+          </div>
+          <div id="auditList" class="audit-list"></div>
+        </section>
+
+        <section id="developerView" class="portal-section hidden">
+          <div class="page-heading">
+            <div><p class="eyebrow">DEVELOPER INTEGRATION</p><h2>Partner API v0.7.</h2><p>Use TrustRelay from your server. Never put a partner API key in browser or mobile client code.</p></div>
+          </div>
+          <div class="developer-grid">
+            <article class="portal-card">
+              <h3>Evaluate authority</h3>
+              <div class="code-block"><pre id="evaluateExample"></pre></div>
+            </article>
+            <article class="portal-card">
+              <h3>Retrieve decision</h3>
+              <div class="code-block"><pre id="getExample"></pre></div>
+            </article>
+            <article class="portal-card">
+              <h3>Decision outcomes</h3>
+              <dl class="stats-list">
+                <dt>ALLOW</dt><dd>The request satisfies the active scoped authority.</dd>
+                <dt>DENY</dt><dd>The credential or requested operation is not authorized.</dd>
+                <dt>ESCALATE</dt><dd>A human or evidence-dependent review is required.</dd>
+              </dl>
+            </article>
+            <article class="portal-card">
+              <h3>Webhook signature</h3>
+              <p>Compute HMAC-SHA256 over <code>&lt;timestamp&gt;.&lt;raw_body&gt;</code> using the webhook signing secret and compare it to <code>X-TrustRelay-Signature: v1=...</code>.</p>
+            </article>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <div id="modalBackdrop" class="modal-backdrop hidden">
+    <section class="modal"><button id="modalClose" class="modal-close" type="button">×</button><div id="modalContent"></div></section>
+  </div>
+  <div id="toastRegion" class="toast-region" aria-live="polite"></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
