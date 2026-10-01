@@ -25,7 +25,7 @@
       </span>
     </a>
     <div class="topbar-actions">
-      <span class="env-badge">SANDBOX</span>
+      <span id="portalEnvironmentBadge" class="env-badge">SANDBOX</span>
       <a class="button ghost small" href="../web/">Consumer app</a>
       <button id="notificationButton" class="notification-button hidden" type="button" aria-label="Notifications">🔔<span id="notificationBadge" class="notification-badge hidden">0</span></button>
       <button id="accountButton" class="avatar-button hidden" type="button" aria-label="Account"></button>
@@ -96,11 +96,12 @@
           <button class="nav-item" data-view="team" type="button"><span>◎</span><span>Team</span></button>
           <button class="nav-item" data-view="webhooks" type="button"><span>↗</span><span>Webhooks</span></button>
           <button class="nav-item" data-view="compliance" type="button"><span>▤</span><span>Compliance</span></button>
+          <button class="nav-item" data-view="launch" type="button"><span>↥</span><span>Launch</span></button>
           <button class="nav-item" data-view="audit" type="button"><span>≡</span><span>Audit</span></button>
           <button class="nav-item" data-view="developer" type="button"><span>{ }</span><span>Developer</span></button>
         </nav>
         <div class="sidebar-footer">
-          <span class="status-dot"></span><span>Partner API v0.9</span><small>Sandbox</small>
+          <span class="status-dot"></span><span>Partner API v1.0</span><small id="portalModeLabel">Sandbox</small>
         </div>
       </aside>
 
@@ -110,7 +111,7 @@
             <div>
               <p class="eyebrow">INSTITUTION SETUP</p>
               <h2>Create your verifier organization.</h2>
-              <p>v0.7 starts organizations in sandbox mode. Production activation will be a separate approval step.</p>
+              <p>Organizations start in sandbox mode. v1.0 production activation requires completed organization onboarding, effective legal terms, active billing and platform readiness approval.</p>
             </div>
           </div>
           <form id="orgForm" class="focus-card org-form">
@@ -239,6 +240,49 @@
           <div id="complianceExportList" class="management-list"></div>
         </section>
 
+        <section id="launchView" class="portal-section hidden">
+          <div class="page-heading">
+            <div><p class="eyebrow">PRODUCTION ONBOARDING</p><h2>Launch readiness.</h2><p>Complete the organization, legal, billing and operational gates required before TrustRelay can activate live mode.</p></div>
+            <button id="requestProductionButton" class="button primary" type="button">Request production activation</button>
+          </div>
+
+          <div id="launchStatusBanner" class="launch-status"></div>
+
+          <div class="portal-grid launch-grid">
+            <form id="launchOrgProfileForm" class="portal-card">
+              <div class="card-heading"><div><h3>Organization profile</h3><p>Production identity and public website.</p></div></div>
+              <div class="field"><label for="launchOrgName">Organization name</label><input id="launchOrgName" maxlength="120" required></div>
+              <div class="field"><label for="launchOrgIndustry">Industry</label><input id="launchOrgIndustry" maxlength="100"></div>
+              <div class="field"><label for="launchOrgWebsite">Website</label><input id="launchOrgWebsite" type="url" maxlength="500" placeholder="https://example.com" required></div>
+              <button class="button secondary" type="submit">Save organization profile</button>
+            </form>
+
+            <form id="launchContactsForm" class="portal-card">
+              <div class="card-heading"><div><h3>Legal & operational contacts</h3><p>Required before a production request can be submitted.</p></div></div>
+              <div class="field"><label for="launchLegalEntityName">Legal entity name</label><input id="launchLegalEntityName" required maxlength="200"></div>
+              <div class="form-grid">
+                <div class="field"><label for="launchPrimaryContact">Primary contact</label><input id="launchPrimaryContact" type="email" required></div>
+                <div class="field"><label for="launchSecurityContact">Security contact</label><input id="launchSecurityContact" type="email" required></div>
+                <div class="field"><label for="launchBillingContact">Billing contact</label><input id="launchBillingContact" type="email" required></div>
+                <div class="field"><label for="launchLegalCountry">Country</label><input id="launchLegalCountry" maxlength="100"></div>
+                <div class="field"><label for="launchLegalRegion">State / region</label><input id="launchLegalRegion" maxlength="100"></div>
+              </div>
+              <div class="field"><label for="launchLegalAddress">Legal address <span class="optional-label">required before commercial activation</span></label><textarea id="launchLegalAddress" rows="3" maxlength="500"></textarea></div>
+              <button class="button secondary" type="submit">Save onboarding contacts</button>
+            </form>
+          </div>
+
+          <div class="section-heading"><div><h3>Legal package</h3><p>Only published effective documents can be accepted. Drafts are available for review in the Trust Center.</p></div><a class="button ghost small" href="../legal/" target="_blank" rel="noopener">Open Legal & Trust Center</a></div>
+          <div id="launchLegalList" class="management-list"></div>
+
+          <div class="section-heading"><div><h3>Billing & plan</h3><p>Stripe-hosted Checkout and Billing Portal are enabled only after the production billing provider is configured.</p></div></div>
+          <div id="billingStatusDetails" class="portal-card compact-card"></div>
+          <div id="billingPlanList" class="billing-plan-grid"></div>
+
+          <div class="section-heading"><div><h3>Production blockers</h3><p>TrustRelay fails closed: every required gate must clear before live activation can be requested.</p></div></div>
+          <div id="productionBlockers" class="management-list"></div>
+        </section>
+
         <section id="auditView" class="portal-section hidden">
           <div class="page-heading">
             <div><p class="eyebrow">DECISION EVIDENCE</p><h2>Audit history.</h2><p>Immutable authorization evidence with decision and audit hashes.</p></div>
@@ -250,7 +294,7 @@
 
         <section id="developerView" class="portal-section hidden">
           <div class="page-heading">
-            <div><p class="eyebrow">DEVELOPER INTEGRATION</p><h2>Partner API v0.9.</h2><p>Use TrustRelay from your server. Never put a partner API key in browser or mobile client code.</p></div>
+            <div><p class="eyebrow">DEVELOPER INTEGRATION</p><h2>Partner API v1.0.</h2><p>Use TrustRelay from your server. Never put a partner API key in browser or mobile client code.</p></div>
           </div>
           <div class="developer-grid">
             <article class="portal-card">
