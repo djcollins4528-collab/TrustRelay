@@ -1,0 +1,1 @@
+Deno.serve(()=>Response.json({error:{code:"ENDPOINT_RETIRED",service:"trustrelay-signing-bootstrap-v06",replacement:"TrustRelay v1.0 production-candidate surface"}},{status:410,headers:{"cache-control":"no-store","x-content-type-options":"nosniff"}}));
