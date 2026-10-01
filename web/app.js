@@ -15,6 +15,7 @@ const state = {
   session: null,
   user: null,
   profile: null,
+  identity: null,
   grants: [],
   grantFilter: "all",
   currentView: "dashboard",
@@ -183,6 +184,18 @@ async function invokeEdge(name, { method = "POST", body = null, authenticated = 
   return data;
 }
 
+async function invokeRpc(name, args = {}) {
+  const { data, error } = await supabase.rpc(name, args);
+  if (error) throw error;
+  if (data?.ok === false) {
+    const err = new Error(data.code || "REQUEST_REJECTED");
+    err.code = data.code || "REQUEST_REJECTED";
+    err.status = data.status || 400;
+    throw err;
+  }
+  return data;
+}
+
 function authRedirectUrl() {
   const url = new URL("/", window.location.origin);
   const pendingInvite = localStorage.getItem("trustrelay_pending_invite");
@@ -235,11 +248,13 @@ function showWorkspaceView(name) {
     "new-grant": "newGrantView",
     "accept-invite": "acceptInviteView",
     verify: "verifyView",
+    identity: "identityView",
     account: "accountView",
   };
   $(map[name] || "dashboardView").classList.remove("hidden");
   qsa(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === name));
   if (name === "dashboard") renderDashboard();
+  if (name === "identity") renderIdentityCenter();
   if (name === "account") renderAccount();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -294,11 +309,15 @@ function setDefaultGrantDates() {
 
 async function bootstrapProfile() {
   await invokeEdge("trustrelay-profile-v06", { method: "POST", body: {} });
-  const result = await invokeEdge("trustrelay-profile-v06", { method: "GET" });
-  const profileResult = await invokeEdge("trustrelay-profile-v06", { method: "POST", body: {} });
+  const [result, profileResult, identityResult] = await Promise.all([
+    invokeEdge("trustrelay-profile-v06", { method: "GET" }),
+    invokeEdge("trustrelay-profile-v06", { method: "POST", body: {} }),
+    invokeRpc("trustrelay_identity_center_v08"),
+  ]);
   state.profile = profileResult;
+  state.identity = identityResult;
   state.grants = Array.isArray(result?.grants) ? result.grants : [];
-  return { profile: state.profile, grants: state.grants };
+  return { profile: state.profile, grants: state.grants, identity: state.identity };
 }
 
 async function refreshApp({ preserveView = true } = {}) {
@@ -313,6 +332,7 @@ async function refreshApp({ preserveView = true } = {}) {
     await bootstrapProfile();
     updateIdentityChrome();
     renderDashboard();
+    renderIdentityCenter();
     renderAccount();
 
     const pendingInvite = localStorage.getItem("trustrelay_pending_invite");
@@ -450,7 +470,8 @@ function renderGrantList(records) {
           <dl class="detail-list">
             <dt>Allowed</dt><dd>${escapeHtml(actions.join(", ") || "—")}</dd>
             <dt>Resources</dt><dd>${escapeHtml(resources.join(", ") || "—")}</dd>
-            <dt>Evidence</dt><dd>${rules.requireEvidence ? "Required" : "Not required"}</dd>
+            <dt>Evidence</dt><dd>${rules.requireVerifiedEvidence ? "Verified document required" : (rules.requireEvidence ? "Supporting evidence required" : "Not required")}</dd>
+            <dt>Minimum assurance</dt><dd>${escapeHtml((rules.minimumAssurance || "email_verified").replaceAll("_"," "))}</dd>
             <dt>Credentials</dt><dd>${credentials.length ? credentials.map((c) => `${escapeHtml(c.jti)} · ${escapeHtml(statusLabel(c.status))}`).join("<br>") : "None"}</dd>
           </dl>
         </div>
@@ -477,13 +498,110 @@ function renderAccount() {
   $("identityDetails").innerHTML = `
     <div class="assurance-banner">
       <div>
-        <strong>${verified ? "Verified for staging" : "Pending verification"}</strong>
-        <span> — ${verified ? "Confirmed email is the current pilot assurance method." : "Confirm your email to complete staging verification."}</span>
+        <strong>${verified ? "Identity assurance active" : "Identity verification pending"}</strong>
+        <span> — Current TrustRelay assurance reflects the strongest completed verification workflow.</span>
       </div>
       <span class="assurance-pill ${verified ? "verified" : "pending"}">${escapeHtml(person?.identity_assurance_level || "none")}</span>
     </div>
-    <p><strong>Important:</strong> email verification establishes control of an email address; it does not prove a legal identity. Higher-assurance document or KYC verification is reserved for a later TrustRelay release.</p>
+    <p>Email verification proves control of an email address. <strong>Document verified</strong> requires approved government-ID evidence. <strong>High assurance</strong> additionally requires approved address evidence or a future configured external KYC provider result.</p>
   `;
+}
+
+function activeProofingSession() {
+  return (state.identity?.sessions || []).find((s) => ["collecting", "submitted", "in_review"].includes(s.status)) || null;
+}
+
+function renderIdentityCenter() {
+  const identity = state.identity || {};
+  const person = identity.person || profilePerson() || {};
+  const level = person.identity_assurance_level || "none";
+  const active = activeProofingSession();
+
+  $("identityAssuranceCard").innerHTML = `
+    <div>
+      <strong>Current assurance: ${escapeHtml(level.replaceAll("_", " "))}</strong>
+      <span> — ${level === "high_assurance"
+        ? "Government-ID and address evidence were independently approved."
+        : level === "document_verified"
+          ? "Government-ID evidence was independently approved."
+          : "Passwordless email verification is the current assurance baseline."}</span>
+    </div>
+    <span class="assurance-pill ${level === "none" ? "pending" : "verified"}">${escapeHtml(level.replaceAll("_", " "))}</span>
+  `;
+
+  $("proofingSession").innerHTML = active ? `
+    <dl class="detail-list">
+      <dt>Status</dt><dd>${escapeHtml(active.status)}</dd>
+      <dt>Requested</dt><dd>${escapeHtml((active.requestedAssurance || "—").replaceAll("_", " "))}</dd>
+      <dt>Started</dt><dd>${escapeHtml(formatDate(active.createdAt, true))}</dd>
+      <dt>Submitted</dt><dd>${escapeHtml(formatDate(active.submittedAt, true))}</dd>
+    </dl>
+    ${active.status === "collecting" ? '<button id="submitProofingButton" class="button secondary full" type="button">Submit evidence for review</button>' : '<p class="fine-print">Evidence is locked for review. You can still view your uploaded files.</p>'}
+  ` : '<div class="empty-state compact-empty"><p>No active proofing session.</p></div>';
+
+  const docs = identity.documents || [];
+  const grantOptions = state.grants.map((r) => `<option value="${escapeHtml(r.grant?.id)}">${escapeHtml(r.grant?.id || "")} · ${escapeHtml(statusLabel(r.grant?.status))}</option>`).join("");
+  $("identityDocumentList").innerHTML = docs.length ? docs.map((d) => `
+    <article class="management-row">
+      <div>
+        <strong>${escapeHtml(d.displayName || d.classification)}</strong>
+        <p>${escapeHtml((d.classification || "other").replaceAll("_"," "))} · ${escapeHtml(d.mimeType || "—")} · ${d.sizeBytes ? Math.ceil(d.sizeBytes/1024) + " KB" : "—"}</p>
+        <div class="row-meta">
+          <span class="small-chip">${escapeHtml(d.scanStatus || "pending")}</span>
+          <span class="small-chip">${escapeHtml(d.reviewStatus || "pending")}</span>
+          ${d.contentSha256 ? `<span class="small-chip">sha256 ${escapeHtml(d.contentSha256.slice(0,12))}…</span>` : ""}
+        </div>
+      </div>
+      <div class="management-actions">
+        ${d.finalizedAt ? `<button class="button ghost small" data-download-doc="${escapeHtml(d.id)}" type="button">Download</button>` : ""}
+        ${d.finalizedAt && grantOptions ? `<select class="compact-select" data-grant-select="${escapeHtml(d.id)}"><option value="">Attach to grant…</option>${grantOptions}</select><button class="button secondary small" data-attach-doc="${escapeHtml(d.id)}" type="button">Attach</button>` : ""}
+      </div>
+    </article>
+  `).join("") : '<div class="empty-management">No private evidence uploaded yet.</div>';
+
+  const requests = identity.evidenceRequests || [];
+  $("evidenceRequestList").innerHTML = requests.length ? requests.map((r) => `
+    <article class="management-row">
+      <div><strong>Evidence request for ${escapeHtml(r.grantId)}</strong><p>Required: ${escapeHtml((r.requiredDocumentTypes || []).join(", ") || "supporting evidence")} · ${escapeHtml(r.status)}</p></div>
+      <div class="management-actions">${docs.some((d)=>d.finalizedAt) ? `<select class="compact-select" data-request-doc-select="${escapeHtml(r.id)}"><option value="">Choose document…</option>${docs.filter(d=>d.finalizedAt).map(d=>`<option value="${escapeHtml(d.id)}">${escapeHtml(d.displayName || d.classification)}</option>`).join("")}</select><button class="button secondary small" data-attach-request="${escapeHtml(r.id)}" type="button">Submit</button>` : ""}</div>
+    </article>
+  `).join("") : '<div class="empty-management">No institutional evidence requests.</div>';
+
+  const submit = $("submitProofingButton");
+  if (submit) submit.onclick = async () => {
+    setBusy(submit, true, "Submitting…");
+    try {
+      await invokeRpc("trustrelay_submit_proofing_v08", { p_session_id: active.id });
+      toast("Identity evidence submitted for review.", "success");
+      await refreshApp();
+    } catch (e) {
+      toast(String(e.code || e.message).replaceAll("_"," "), "error");
+    } finally { setBusy(submit, false); }
+  };
+}
+
+async function secureUploadIdentityDocument(file, classification, purpose) {
+  const active = activeProofingSession();
+  if (purpose === "identity" && !active) throw new Error("Start an identity proofing session first.");
+  if (!file || !file.size) throw new Error("Choose a file.");
+  if (file.size > 10485760) throw new Error("File exceeds the 10 MB limit.");
+  const allowed = ["application/pdf","image/jpeg","image/png","image/webp"];
+  if (!allowed.includes(file.type)) throw new Error("File type is not allowed.");
+
+  const prepared = await invokeEdge("trustrelay-evidence-v08", {
+    body: {
+      action: "prepare",
+      proofingSessionId: purpose === "identity" ? active.id : null,
+      purpose, classification, filename: file.name, mimeType: file.type, sizeBytes: file.size,
+    },
+  });
+  const upload = prepared.upload;
+  const { error } = await supabase.storage
+    .from(upload.bucket)
+    .uploadToSignedUrl(upload.path, upload.token, file, { contentType: file.type, upsert: false });
+  if (error) throw error;
+  await invokeEdge("trustrelay-evidence-v08", { body: { action: "finalize", documentId: prepared.document.id } });
+  return prepared.document.id;
 }
 
 function collectGrantPayload() {
@@ -510,6 +628,9 @@ function collectGrantPayload() {
     rules.allowedCurrencies = [$("currency").value];
   }
   if ($("requireEvidence").checked) rules.requireEvidence = true;
+  if ($("requireVerifiedEvidence").checked) rules.requireVerifiedEvidence = true;
+  const minimumAssurance = $("minimumAssurance").value;
+  if (minimumAssurance && minimumAssurance !== "email_verified") rules.minimumAssurance = minimumAssurance;
 
   return {
     representativeEmail: $("representativeEmail").value.trim(),
@@ -530,6 +651,7 @@ function resetGrantForm() {
   renderCustomTags();
   setDefaultGrantDates();
   $("escalateAboveLimit").checked = true;
+  $("minimumAssurance").value = "email_verified";
 }
 
 function renderCustomTags() {
@@ -800,6 +922,76 @@ function setupHandlers() {
     renderDashboard();
   });
 
+  $("proofingStartForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = event.submitter;
+    setBusy(button, true, "Starting…");
+    try {
+      if (!$("proofingConsent").checked) throw new Error("Consent is required.");
+      await invokeRpc("trustrelay_start_proofing_v08", {
+        p_requested_assurance: $("requestedAssurance").value,
+        p_consent_version: "v0.8",
+      });
+      toast("Identity proofing session started.", "success");
+      await refreshApp();
+      showWorkspaceView("identity");
+    } catch (e) {
+      toast(String(e.code || e.message).replaceAll("_"," "), "error");
+    } finally { setBusy(button, false); }
+  });
+
+  $("identityUploadForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = event.submitter;
+    const file = $("documentFile").files?.[0];
+    setBusy(button, true, "Uploading…");
+    try {
+      await secureUploadIdentityDocument(file, $("documentClassification").value, $("documentPurpose").value);
+      toast("Private evidence uploaded and integrity-hashed.", "success");
+      event.currentTarget.reset();
+      await refreshApp();
+      showWorkspaceView("identity");
+    } catch (e) {
+      toast(String(e.code || e.message).replaceAll("_"," "), "error");
+    } finally { setBusy(button, false); }
+  });
+
+  $("identityDocumentList").addEventListener("click", async (event) => {
+    const download = event.target.closest("[data-download-doc]");
+    if (download) {
+      setBusy(download,true,"Opening…");
+      try {
+        const x=await invokeEdge("trustrelay-evidence-v08",{body:{action:"download",documentId:download.dataset.downloadDoc}});
+        window.open(x.url,"_blank","noopener,noreferrer");
+      } catch(e){toast(String(e.code||e.message).replaceAll("_"," "),"error")} finally {setBusy(download,false)}
+      return;
+    }
+    const attach = event.target.closest("[data-attach-doc]");
+    if (attach) {
+      const select=document.querySelector(`[data-grant-select="${CSS.escape(attach.dataset.attachDoc)}"]`);
+      const grantId=select?.value;
+      if(!grantId){toast("Choose a grant first.","error");return}
+      setBusy(attach,true,"Attaching…");
+      try{
+        await invokeRpc("trustrelay_attach_document_to_grant_v08",{p_grant_id:grantId,p_document_id:attach.dataset.attachDoc});
+        toast("Document attached to grant evidence.","success");
+      }catch(e){toast(String(e.code||e.message).replaceAll("_"," "),"error")}finally{setBusy(attach,false)}
+    }
+  });
+
+  $("evidenceRequestList").addEventListener("click", async (event) => {
+    const button=event.target.closest("[data-attach-request]");
+    if(!button)return;
+    const select=document.querySelector(`[data-request-doc-select="${CSS.escape(button.dataset.attachRequest)}"]`);
+    if(!select?.value){toast("Choose a document first.","error");return}
+    setBusy(button,true,"Submitting…");
+    try{
+      await invokeRpc("trustrelay_attach_document_to_request_v08",{p_request_id:button.dataset.attachRequest,p_document_id:select.value});
+      toast("Evidence submitted to the request.","success");
+      await refreshApp();
+    }catch(e){toast(String(e.code||e.message).replaceAll("_"," "),"error")}finally{setBusy(button,false)}
+  });
+
   $("addCustomAction").addEventListener("click", () => {
     const input = $("customAction");
     const value = input.value.trim().replace(/\s+/g, "_").toLowerCase();
@@ -875,7 +1067,8 @@ function setupHandlers() {
           '<dt>Allowed actions</dt><dd>' + escapeHtml(actions.join(", ") || "—") + '</dd>' +
           '<dt>Resources</dt><dd>' + escapeHtml(resources.join(", ") || "—") + '</dd>' +
           '<dt>Amount limit</dt><dd>' + escapeHtml(limit) + '</dd>' +
-          '<dt>Evidence</dt><dd>' + (rules.requireEvidence ? "Required" : "Not required") + '</dd>' +
+          '<dt>Evidence</dt><dd>' + (rules.requireVerifiedEvidence ? "Verified TrustRelay document required" : (rules.requireEvidence ? "Supporting evidence required" : "Not required")) + '</dd>' +
+          '<dt>Minimum assurance</dt><dd>' + escapeHtml((rules.minimumAssurance || "email_verified").replaceAll("_"," ")) + '</dd>' +
         '</dl>' +
         '<p class="modal-warning">Only accept if you understand and intend to act within this scope. The principal can revoke the grant at any time.</p>' +
         '<div class="modal-actions">' +
