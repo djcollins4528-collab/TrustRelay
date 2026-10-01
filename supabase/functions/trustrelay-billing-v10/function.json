@@ -1,0 +1,6 @@
+{
+  "slug": "trustrelay-billing-v10",
+  "verify_jwt": false,
+  "staging_version": 2,
+  "sha256": "787b4adfe2fbc4f0e71d9f630058d7334cc416905c91e7c9b6480206dff4a9ad"
+}
