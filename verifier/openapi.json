@@ -224,7 +224,7 @@
               "organization.member.joined",
               "organization.member.role_changed",
               "organization.member.disabled",
-              "organization.member.restored",
+              "organization.member.enabled",
               "organization.member.removed",
               "organization.ownership.transferred",
               "compliance.export.ready",
@@ -432,19 +432,18 @@
   "x-trustrelay-v09": {
     "webhookEvents": [
       "decision.created",
-      "grant.created",
-      "grant.accepted",
       "grant.revoked",
-      "credential.issued",
       "credential.revoked",
       "evidence.requested",
       "evidence.submitted",
       "evidence.resolved",
-      "identity.assurance.changed",
-      "organization.member.joined",
       "organization.member.invited",
-      "organization.member.changed",
-      "organization.ownership_transferred",
+      "organization.member.joined",
+      "organization.member.role_changed",
+      "organization.member.disabled",
+      "organization.member.enabled",
+      "organization.member.removed",
+      "organization.ownership.transferred",
       "compliance.export.ready",
       "webhook.test"
     ],
@@ -459,6 +458,18 @@
     "complianceExports": [
       "json",
       "csv"
-    ]
+    ],
+    "webhookRetry": {
+      "defaultMaxAttempts": 5,
+      "schedule": [
+        "about 1 minute",
+        "about 5 minutes",
+        "about 30 minutes",
+        "about 2 hours",
+        "dead-letter after exhaustion"
+      ],
+      "attemptHistory": true,
+      "signing": "HMAC-SHA256 over <timestamp>.<raw body>"
+    }
   }
 }
