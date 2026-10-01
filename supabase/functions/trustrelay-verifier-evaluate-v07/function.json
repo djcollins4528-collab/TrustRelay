@@ -1,0 +1,6 @@
+{
+  "slug": "trustrelay-verifier-evaluate-v07",
+  "verify_jwt": false,
+  "staging_version": 1,
+  "sha256": "8c6997e8a816d3df995a8680a1f2bae39f20af858708a49272450b04b06a2500"
+}
