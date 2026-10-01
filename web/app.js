@@ -26,6 +26,7 @@ const state = {
   identity: null,
   notifications: null,
   onboarding: null,
+  privacyRequests: null,
   legalGateActive: false,
   grants: [],
   grantFilter: "all",
@@ -326,19 +327,21 @@ function setDefaultGrantDates() {
 
 async function bootstrapProfile() {
   await invokeEdge("trustrelay-profile-v06", { method: "POST", body: {} });
-  const [result, profileResult, identityResult, notificationResult, onboardingResult] = await Promise.all([
+  const [result, profileResult, identityResult, notificationResult, onboardingResult, privacyResult] = await Promise.all([
     invokeEdge("trustrelay-profile-v06", { method: "GET" }),
     invokeEdge("trustrelay-profile-v06", { method: "POST", body: {} }),
     invokeRpc("trustrelay_identity_center_v08"),
     invokeRpc("trustrelay_notifications_v09", { p_limit: 25, p_unread_only: false }),
     invokeRpc("trustrelay_user_onboarding_v10"),
+    invokeRpc("trustrelay_my_privacy_requests_v10").catch(() => ({ requests: [] })),
   ]);
   state.profile = profileResult;
   state.identity = identityResult;
   state.notifications = notificationResult;
   state.onboarding = onboardingResult;
+  state.privacyRequests = privacyResult;
   state.grants = Array.isArray(result?.grants) ? result.grants : [];
-  return { profile: state.profile, grants: state.grants, identity: state.identity, notifications: state.notifications, onboarding: state.onboarding };
+  return { profile: state.profile, grants: state.grants, identity: state.identity, notifications: state.notifications, onboarding: state.onboarding, privacyRequests: state.privacyRequests };
 }
 
 async function refreshApp({ preserveView = true } = {}) {
@@ -624,6 +627,71 @@ function renderGrantList(records) {
   }).join("");
 }
 
+async function openPrivacyRequestModal() {
+  try {
+    const latest = await invokeRpc("trustrelay_my_privacy_requests_v10");
+    state.privacyRequests = latest;
+    const requests = Array.isArray(latest?.requests) ? latest.requests : [];
+    openModal(`
+      <p class="eyebrow">PRIVACY REQUESTS</p>
+      <h2>Request access, correction or other privacy action.</h2>
+      <p>TrustRelay may need to verify your identity and may retain records required for security, fraud prevention, disputes, accounting, authority/revocation evidence or other legal obligations.</p>
+      <form id="privacyRequestForm">
+        <div class="field">
+          <label for="privacyRequestType">Request type</label>
+          <select id="privacyRequestType">
+            <option value="access">Access</option>
+            <option value="correction">Correction</option>
+            <option value="deletion">Deletion</option>
+            <option value="restriction">Restriction</option>
+            <option value="portability">Portability</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="privacyRequestDetails">Details <span class="optional-label">avoid unnecessary sensitive information</span></label>
+          <textarea id="privacyRequestDetails" rows="5" maxlength="4000" placeholder="Describe what you are requesting."></textarea>
+        </div>
+        <button class="button primary" type="submit">Submit request</button>
+      </form>
+      <div class="section-heading"><div><h3>Your request history</h3></div></div>
+      <div class="management-list">
+        ${requests.length ? requests.map((r) => `
+          <div class="management-row">
+            <div><strong>${escapeHtml((r.requestType || "request").replaceAll("_"," "))}</strong>
+              <p>${escapeHtml(r.status || "submitted")} · ${escapeHtml(formatDate(r.submittedAt,true))}</p>
+              ${r.responseSummary ? `<p>${escapeHtml(r.responseSummary)}</p>` : ""}
+            </div>
+            <span class="small-chip">${escapeHtml(r.identityVerificationStatus || "pending")}</span>
+          </div>
+        `).join("") : '<div class="empty-management">No privacy requests yet.</div>'}
+      </div>
+    `);
+
+    $("privacyRequestForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = event.submitter;
+      setBusy(button, true, "Submitting…");
+      try {
+        await invokeRpc("trustrelay_submit_privacy_request_v10", {
+          p_request_type: $("privacyRequestType").value,
+          p_org_id: null,
+          p_details: $("privacyRequestDetails").value.trim() || null,
+        });
+        toast("Privacy request submitted.", "success");
+        state.privacyRequests = await invokeRpc("trustrelay_my_privacy_requests_v10");
+        closeModal();
+        renderAccount();
+      } catch (error) {
+        toast(String(error?.code || error?.message || "PRIVACY_REQUEST_FAILED").replaceAll("_"," "), "error");
+        setBusy(button, false);
+      }
+    });
+  } catch (error) {
+    toast(String(error?.code || error?.message || "PRIVACY_REQUESTS_UNAVAILABLE").replaceAll("_"," "), "error");
+  }
+}
+
 function renderAccount() {
   if (!state.user) return;
   const person = profilePerson();
@@ -653,6 +721,13 @@ function renderAccount() {
       : (legalRequired.length
         ? "TrustRelay will require acceptance before normal authenticated use."
         : "You have no unaccepted effective consumer legal documents.")) + '</p>';
+
+  const privacyItems = Array.isArray(state.privacyRequests?.requests) ? state.privacyRequests.requests : [];
+  const openPrivacy = privacyItems.filter((r) => !["completed","denied","cancelled"].includes(r.status)).length;
+  $("privacyRequestSummary").innerHTML =
+    '<dl class="detail-list"><dt>Privacy requests</dt><dd>' +
+    (privacyItems.length ? escapeHtml(String(openPrivacy) + " open · " + String(privacyItems.length) + " total") : "None") +
+    '</dd></dl>';
 
   const verified = person?.identity_status === "verified";
   $("identityDetails").innerHTML = `
@@ -1306,6 +1381,7 @@ function setupHandlers() {
   $("backFromPublicVerify").addEventListener("click", () => state.session ? (showApp(), showWorkspaceView("dashboard")) : showAuth());
   $("brandButton").addEventListener("click", () => state.session ? (showApp(), showWorkspaceView("dashboard")) : showAuth());
   els.accountTopButton.addEventListener("click", () => showWorkspaceView("account"));
+  $("privacyRequestButton")?.addEventListener("click", openPrivacyRequestModal);
   els.notificationTopButton?.addEventListener("click", openConsumerNotifications);
 
   $("signOutButton").addEventListener("click", async () => {
@@ -1316,6 +1392,7 @@ function setupHandlers() {
     state.identity = null;
     state.notifications = null;
     state.onboarding = null;
+    state.privacyRequests = null;
     state.legalGateActive = false;
     state.grants = [];
     showAuth();
