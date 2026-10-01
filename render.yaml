@@ -4,13 +4,17 @@ services:
     runtime: node
     plan: free
     region: virginia
-    autoDeploy: false
-    buildCommand: cat deploy/*.b64 | tr -d '\n' | base64 -d > server.mjs && echo '6293b88e5eb0b15bb0e367772540cc2165bdfdcd9b0d705aaff35669e7ec425b  server.mjs' | sha256sum -c - && node --check server.mjs
+    autoDeploy: true
+    buildCommand: node --check server.mjs
     startCommand: node server.mjs
     healthCheckPath: /healthz
     envVars:
       - key: NODE_ENV
         value: production
+      - key: TRUSTRELAY_ENVIRONMENT
+        value: staging
+      - key: TRUSTRELAY_APP_VERSION
+        value: "1.0.0"
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_PUBLISHABLE_KEY
