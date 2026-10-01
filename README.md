@@ -177,7 +177,7 @@ Supported roles:
 
 Permissions are resolved from a canonical server-side permission map instead of scattered UI-only role checks. Owner protections prevent removing or demoting the last active owner.
 
-Role changes, member disable/restore/remove actions, invitations, API-key changes, webhook changes, evidence actions and compliance exports are recorded in the organization audit ledger.
+Role changes, member disable/enable/remove actions, invitations, API-key changes, webhook changes, evidence actions and compliance exports are recorded in the organization audit ledger.
 
 ### Notifications
 
@@ -224,7 +224,7 @@ Current organization webhook events:
 - `organization.member.joined`
 - `organization.member.role_changed`
 - `organization.member.disabled`
-- `organization.member.restored`
+- `organization.member.enabled`
 - `organization.member.removed`
 - `organization.ownership.transferred`
 - `compliance.export.ready`
@@ -272,3 +272,12 @@ See:
 
 - `docs/V0.9-OPERATIONS-COMPLIANCE.md`
 - `verifier/openapi.json`
+
+
+### Final v0.9 live webhook validation
+
+- A signed `webhook.test` delivery to a synthetic HTTPS echo endpoint returned HTTP 200.
+- Echoed headers confirmed `X-TrustRelay-Event`, delivery ID, timestamp, and `v1=<HMAC-SHA256>` signature were transmitted.
+- A separate HTTP 500 test retained attempt 1, stored `HTTP_500`, moved the delivery to `retrying`, and scheduled the next attempt one minute later.
+- Both synthetic organizations, webhook rows, delivery/attempt rows, and Vault secrets were removed after testing.
+- Canonical webhook event names are defined by `trustrelay_webhook_event_catalog_v09()` and mirrored in `verifier/openapi.json`.
