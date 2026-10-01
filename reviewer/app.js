@@ -1,8 +1,16 @@
 
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
-const SUPABASE_URL = "https://awrradmcwgeepwwdrbzi.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_YHwczFLXsSuJtOQDI_65Lw_dRcyLMjx";
+const runtimeConfig = await fetch("/runtime-config.json", { cache: "no-store" })
+  .then(async (response) => {
+    if (!response.ok) throw new Error("RUNTIME_CONFIG_UNAVAILABLE");
+    return response.json();
+  });
+const SUPABASE_URL = String(runtimeConfig.supabaseUrl || "").replace(/\/$/, "");
+const SUPABASE_PUBLISHABLE_KEY = String(runtimeConfig.supabasePublishableKey || "");
+const TRUSTRELAY_ENVIRONMENT = String(runtimeConfig.environment || "unknown");
+const TRUSTRELAY_APP_VERSION = String(runtimeConfig.appVersion || "1.0.0");
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) throw new Error("RUNTIME_CONFIG_INVALID");
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
