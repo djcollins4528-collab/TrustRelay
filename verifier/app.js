@@ -193,7 +193,7 @@ function renderCompliance(){
   const items=state.dashboard?.complianceExports||[];
   root.innerHTML=items.length?items.map(e=>`
     <div class="management-row">
-      <div><strong>${esc(e.format?.toUpperCase()||"EXPORT")} · ${esc(formatDate(e.createdAt,true))}</strong><p>${esc((e.scopes||[]).join(", "))} · ${esc(formatDate(e.fromAt,true))} → ${esc(formatDate(e.toAt,true))}</p><div class="row-meta"><span class="small-chip">${esc(e.status)}</span>${e.rowCount!=null?`<span class="small-chip">${esc(e.rowCount)} records</span>`:""}${e.sha256?`<span class="small-chip">sha256 ${esc(e.sha256.slice(0,12))}…</span>`:""}</div></div>
+      <div><strong>${esc(e.format?.toUpperCase()||"EXPORT")} · ${esc(formatDate(e.createdAt,true))}</strong><p>${esc((e.scopes||[]).join(", "))} · ${esc(formatDate(e.fromAt,true))} → ${esc(formatDate(e.toAt,true))}</p><div class="row-meta"><span class="small-chip">${esc(e.status)}</span>${e.rowCount!=null?`<span class="small-chip">${esc(e.rowCount)} records</span>`:""}${e.sha256?`<span class="small-chip">sha256 ${esc(e.sha256.slice(0,12))}…</span>`:""}${e.exportHash?`<span class="small-chip">chain ${esc(e.exportHash.slice(0,12))}…</span>`:""}</div></div>
       <div class="management-actions">${e.status==="ready"?`<button class="button secondary small" data-download-export="${esc(e.id)}" type="button">Download</button>`:""}</div>
     </div>`).join(""):'<div class="empty-management">No compliance exports yet.</div>';
 }
