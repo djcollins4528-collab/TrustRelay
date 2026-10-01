@@ -311,7 +311,7 @@ function setup(){
   $("inviteMemberButton").onclick=()=>openModal(`<p class="eyebrow">TEAM INVITATION</p><h2>Invite organization member.</h2><form id="inviteForm"><div class="field"><label for="inviteEmail">Email</label><input id="inviteEmail" type="email" required></div><div class="field"><label for="inviteRole">Role</label><select id="inviteRole"><option value="verifier">Verifier</option><option value="compliance">Compliance</option><option value="developer">Developer</option><option value="auditor">Auditor</option><option value="admin">Admin</option></select></div><div class="modal-actions"><button class="button primary" type="submit">Create invitation</button></div></form>`);
   els.modalContent.addEventListener("submit",async e=>{if(e.target.id==="inviteForm"){e.preventDefault();const b=e.submitter;busy(b,true,"Creating…");try{const x=await rpc("trustrelay_invite_org_member_v07",{p_org_id:state.orgId,p_email:$("inviteEmail").value.trim(),p_role:$("inviteRole").value});const link=location.origin+"/verifier/?org_invite="+encodeURIComponent(x.invitation.token);els.modalContent.innerHTML=`<p class="eyebrow">INVITATION READY</p><h2>Share this one-time invitation.</h2><p>Send it only to <strong>${esc(x.invitation.email)}</strong>.</p><div class="secret-once">${esc(link)}</div><div class="modal-actions"><button id="copyOrgInvite" class="button primary" type="button">Copy invitation link</button></div>`;$("copyOrgInvite").onclick=()=>copyText(link,"Organization invitation copied");await loadDashboard()}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error");busy(b,false)}}});
 
-  $("createWebhookButton").onclick=()=>openModal(`<p class="eyebrow">SIGNED WEBHOOK</p><h2>Add HTTPS endpoint.</h2><form id="webhookForm"><div class="field"><label for="webhookName">Name</label><input id="webhookName" required maxlength="100" placeholder="Authorization events"></div><div class="field"><label for="webhookUrl">HTTPS endpoint</label><input id="webhookUrl" type="url" required placeholder="https://example.com/trustrelay"></div><div class="field"><label>Events</label><div class="scope-checks"><label><input type="checkbox" name="event" value="decision.created" checked> decision.created</label><label><input type="checkbox" name="event" value="grant.revoked"> grant.revoked</label><label><input type="checkbox" name="event" value="credential.revoked"> credential.revoked</label><label><input type="checkbox" name="event" value="evidence.requested"> evidence.requested</label><label><input type="checkbox" name="event" value="evidence.submitted"> evidence.submitted</label><label><input type="checkbox" name="event" value="evidence.resolved"> evidence.resolved</label><label><input type="checkbox" name="event" value="organization.member.invited"> organization.member.invited</label><label><input type="checkbox" name="event" value="organization.member.joined"> organization.member.joined</label><label><input type="checkbox" name="event" value="organization.member.changed"> organization.member.changed</label><label><input type="checkbox" name="event" value="organization.ownership_transferred"> organization.ownership_transferred</label><label><input type="checkbox" name="event" value="compliance.export.ready"> compliance.export.ready</label></div></div><div class="modal-actions"><button class="button primary" type="submit">Create webhook</button></div></form>`);
+  $("createWebhookButton").onclick=()=>openModal(`<p class="eyebrow">SIGNED WEBHOOK</p><h2>Add HTTPS endpoint.</h2><form id="webhookForm"><div class="field"><label for="webhookName">Name</label><input id="webhookName" required maxlength="100" placeholder="Authorization events"></div><div class="field"><label for="webhookUrl">HTTPS endpoint</label><input id="webhookUrl" type="url" required placeholder="https://example.com/trustrelay"></div><div class="field"><label>Events</label><div class="scope-checks"><label><input type="checkbox" name="event" value="decision.created" checked> decision.created</label><label><input type="checkbox" name="event" value="grant.revoked"> grant.revoked</label><label><input type="checkbox" name="event" value="credential.revoked"> credential.revoked</label><label><input type="checkbox" name="event" value="evidence.requested"> evidence.requested</label><label><input type="checkbox" name="event" value="evidence.submitted"> evidence.submitted</label><label><input type="checkbox" name="event" value="evidence.resolved"> evidence.resolved</label><label><input type="checkbox" name="event" value="organization.member.invited"> organization.member.invited</label><label><input type="checkbox" name="event" value="organization.member.joined"> organization.member.joined</label><label><input type="checkbox" name="event" value="organization.member.role_changed"> organization.member.role_changed</label><label><input type="checkbox" name="event" value="organization.member.disabled"> organization.member.disabled</label><label><input type="checkbox" name="event" value="organization.member.restored"> organization.member.restored</label><label><input type="checkbox" name="event" value="organization.member.removed"> organization.member.removed</label><label><input type="checkbox" name="event" value="organization.ownership_transferred"> organization.ownership_transferred</label><label><input type="checkbox" name="event" value="identity.assurance.changed"> identity.assurance.changed</label><label><input type="checkbox" name="event" value="compliance.export.ready"> compliance.export.ready</label></div></div><div class="modal-actions"><button class="button primary" type="submit">Create webhook</button></div></form>`);
   els.modalContent.addEventListener("submit",async e=>{if(e.target.id==="webhookForm"){e.preventDefault();const b=e.submitter;busy(b,true,"Creating…");try{const events=qsa('input[name="event"]:checked',e.target).map(x=>x.value);const x=await rpc("trustrelay_create_webhook_v07",{p_org_id:state.orgId,p_name:$("webhookName").value.trim(),p_endpoint_url:$("webhookUrl").value.trim(),p_events:events});els.modalContent.innerHTML=`<p class="eyebrow">WEBHOOK CREATED</p><h2>Save the signing secret.</h2><p class="warning-copy">It is encrypted in Vault and shown only once.</p><div class="secret-once">${esc(x.signingSecret)}</div><div class="modal-actions"><button id="copyWebhookSecret" class="button primary" type="button">Copy signing secret</button></div>`;$("copyWebhookSecret").onclick=()=>copyText(x.signingSecret,"Webhook secret copied");await loadDashboard()}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error");busy(b,false)}}});
   $("evidenceRequestOrgList").addEventListener("click",async e=>{
     const view=e.target.closest("[data-org-evidence-doc]");
@@ -354,7 +354,7 @@ function setup(){
       const select=document.querySelector(`[data-role-account="${CSS.escape(save.dataset.saveRole)}"]`);
       if(!select)return;
       busy(save,true,"Saving…");
-      try{await rpc("trustrelay_manage_org_member_v09",{p_org_id:state.orgId,p_member_account_id:save.dataset.saveRole,p_action:"role",p_role:select.value,p_title:null});toast("Organization role updated.","success");await loadDashboard()}
+      try{await rpc("trustrelay_update_member_role_v09",{p_org_id:state.orgId,p_account_id:save.dataset.saveRole,p_new_role:select.value});toast("Organization role updated.","success");await loadDashboard()}
       catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(save,false)}
       return;
     }
@@ -369,7 +369,7 @@ function setup(){
     const enable=e.target.closest("[data-enable-member]");
     if(enable){
       busy(enable,true,"Restoring…");
-      try{await rpc("trustrelay_manage_org_member_v09",{p_org_id:state.orgId,p_member_account_id:enable.dataset.enableMember,p_action:"enable",p_role:null,p_title:null});toast("Member access restored.","success");await loadDashboard()}
+      try{await rpc("trustrelay_restore_member_v09",{p_org_id:state.orgId,p_account_id:enable.dataset.enableMember});toast("Member access restored.","success");await loadDashboard()}
       catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(enable,false)}
       return;
     }
@@ -377,7 +377,7 @@ function setup(){
     if(remove){
       if(!confirm("Remove this member from the organization?"))return;
       busy(remove,true,"Removing…");
-      try{await rpc("trustrelay_manage_org_member_v09",{p_org_id:state.orgId,p_member_account_id:remove.dataset.removeMember,p_action:"remove",p_role:null,p_title:null});toast("Member removed.","success");await loadDashboard()}
+      try{await rpc("trustrelay_remove_member_v09",{p_org_id:state.orgId,p_account_id:remove.dataset.removeMember,p_reason:"Removed from Verifier Portal"});toast("Member removed.","success");await loadDashboard()}
       catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(remove,false)}
       return;
     }
@@ -385,7 +385,7 @@ function setup(){
     if(disable){
       if(!confirm("Disable this organization member? Their access will stop immediately."))return;
       busy(disable,true,"Disabling…");
-      try{await rpc("trustrelay_manage_org_member_v09",{p_org_id:state.orgId,p_member_account_id:disable.dataset.disableMember,p_action:"disable",p_role:null,p_title:null});toast("Member access disabled.","success");await loadDashboard()}
+      try{await rpc("trustrelay_disable_member_v09",{p_org_id:state.orgId,p_account_id:disable.dataset.disableMember,p_reason:"Disabled from Verifier Portal"});toast("Member access disabled.","success");await loadDashboard()}
       catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(disable,false)}
     }
   });
@@ -417,7 +417,7 @@ function setup(){
       const scopes=qsa('input[name="exportScope"]:checked',e.target).map(x=>x.value);
       if(!scopes.length)throw new Error("Choose at least one export section.");
       const fromRaw=$("exportFrom").value,toRaw=$("exportTo").value;
-      const x=await complianceEdge({action:"generate",orgId:state.orgId,format:$("exportFormat").value,scopes,fromAt:fromRaw?new Date(fromRaw).toISOString():null,toAt:toRaw?new Date(toRaw).toISOString():null});
+      const x=await complianceEdge({action:"create",orgId:state.orgId,format:$("exportFormat").value,scopes,fromAt:fromRaw?new Date(fromRaw).toISOString():null,toAt:toRaw?new Date(toRaw).toISOString():null});
       toast("Compliance export generated and hashed.","success");
       await loadDashboard();showView("compliance");
       if(x.url)window.open(x.url,"_blank","noopener,noreferrer");
