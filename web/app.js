@@ -17,6 +17,8 @@ const state = {
   profile: null,
   identity: null,
   notifications: null,
+  onboarding: null,
+  legalGateActive: false,
   grants: [],
   grantFilter: "all",
   currentView: "dashboard",
@@ -271,6 +273,7 @@ function openModal(html) {
 }
 
 function closeModal() {
+  if (state.legalGateActive) return;
   els.modalBackdrop.classList.add("hidden");
   els.modalContent.innerHTML = "";
 }
@@ -315,17 +318,19 @@ function setDefaultGrantDates() {
 
 async function bootstrapProfile() {
   await invokeEdge("trustrelay-profile-v06", { method: "POST", body: {} });
-  const [result, profileResult, identityResult, notificationResult] = await Promise.all([
+  const [result, profileResult, identityResult, notificationResult, onboardingResult] = await Promise.all([
     invokeEdge("trustrelay-profile-v06", { method: "GET" }),
     invokeEdge("trustrelay-profile-v06", { method: "POST", body: {} }),
     invokeRpc("trustrelay_identity_center_v08"),
     invokeRpc("trustrelay_notifications_v09", { p_limit: 25, p_unread_only: false }),
+    invokeRpc("trustrelay_user_onboarding_v10"),
   ]);
   state.profile = profileResult;
   state.identity = identityResult;
   state.notifications = notificationResult;
+  state.onboarding = onboardingResult;
   state.grants = Array.isArray(result?.grants) ? result.grants : [];
-  return { profile: state.profile, grants: state.grants, identity: state.identity, notifications: state.notifications };
+  return { profile: state.profile, grants: state.grants, identity: state.identity, notifications: state.notifications, onboarding: state.onboarding };
 }
 
 async function refreshApp({ preserveView = true } = {}) {
@@ -344,6 +349,8 @@ async function refreshApp({ preserveView = true } = {}) {
     renderAccount();
     renderNotificationChrome();
 
+    if (await enforceConsumerLegalGate()) return;
+
     const pendingInvite = localStorage.getItem("trustrelay_pending_invite");
     if (pendingInvite) {
       $("inviteToken").value = pendingInvite;
@@ -358,6 +365,71 @@ async function refreshApp({ preserveView = true } = {}) {
     console.error(error);
     toast("TrustRelay could not load your account. Try signing in again.", "error");
   }
+}
+
+
+async function enforceConsumerLegalGate() {
+  const required = Array.isArray(state.onboarding?.requiredAcceptances) ? state.onboarding.requiredAcceptances : [];
+  if (!required.length) {
+    state.legalGateActive = false;
+    return false;
+  }
+
+  state.legalGateActive = true;
+  els.modalBackdrop.classList.remove("hidden");
+  $("modalClose").classList.add("hidden");
+
+  const rows = required.map(function (d) {
+    return '<label class="management-row legal-accept-row">' +
+      '<div><strong>' + escapeHtml(d.title || d.documentType) + '</strong>' +
+      '<p>Version ' + escapeHtml(d.version) + ' · effective ' + escapeHtml(formatDate(d.effectiveAt)) + '</p>' +
+      '<a href="..' + escapeHtml(d.urlPath) + '" target="_blank" rel="noopener">Review document</a></div>' +
+      '<input type="checkbox" name="consumerLegalDoc" value="' + escapeHtml(d.id) + '" required>' +
+      '</label>';
+  }).join("");
+
+  els.modalContent.innerHTML =
+    '<p class="eyebrow">REQUIRED ACCOUNT TERMS</p>' +
+    '<h2>Review updated TrustRelay terms.</h2>' +
+    '<p>These published versions must be accepted before you continue using authenticated TrustRelay account features.</p>' +
+    '<form id="consumerLegalAcceptanceForm">' +
+      '<div class="management-list">' + rows + '</div>' +
+      '<label class="check-consent"><input id="consumerLegalAuthority" type="checkbox" required> ' +
+        '<span>I have reviewed the documents above and agree to the published TrustRelay terms that apply to my account.</span></label>' +
+      '<button class="button primary full" type="submit">Accept and continue</button>' +
+    '</form>';
+
+  const form = $("consumerLegalAcceptanceForm");
+  form.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    const button = event.submitter;
+    setBusy(button, true, "Recording acceptance…");
+    try {
+      const selected = qsa('input[name="consumerLegalDoc"]:checked', form).map(function (x) { return x.value; });
+      if (selected.length !== required.length) throw new Error("Review and accept every required document.");
+      for (const documentId of selected) {
+        await invokeRpc("trustrelay_accept_legal_v10", {
+          p_document_id: documentId,
+          p_org_id: null,
+          p_context: "consumer",
+          p_metadata: { surface: "consumer-v1.0" },
+        });
+      }
+      state.onboarding = await invokeRpc("trustrelay_user_onboarding_v10");
+      state.legalGateActive = false;
+      $("modalClose").classList.remove("hidden");
+      els.modalBackdrop.classList.add("hidden");
+      els.modalContent.innerHTML = "";
+      renderAccount();
+      toast("TrustRelay terms accepted.", "success");
+      showWorkspaceView("dashboard");
+    } catch (error) {
+      toast(String(error?.code || error?.message || "LEGAL_ACCEPTANCE_FAILED").replaceAll("_", " "), "error");
+      setBusy(button, false);
+    }
+  });
+
+  return true;
 }
 
 function profileAccount() {
@@ -557,6 +629,19 @@ function renderAccount() {
     <dt>Sign-in method</dt><dd>Passwordless email magic link / OTP</dd>
     <dt>Joined</dt><dd>${escapeHtml(formatDate(state.user.created_at, true))}</dd>
   `;
+
+
+  const legalRequired = Array.isArray(state.onboarding?.requiredAcceptances) ? state.onboarding.requiredAcceptances : [];
+  $("consumerLegalDetails").innerHTML =
+    '<dl class="detail-list">' +
+      '<dt>Published terms status</dt><dd>' + (legalRequired.length ? "Action required" : "Current") + '</dd>' +
+      '<dt>Required documents</dt><dd>' +
+        (legalRequired.length ? escapeHtml(legalRequired.map(function (d) { return d.title || d.documentType; }).join(", ")) : "None") +
+      '</dd>' +
+    '</dl>' +
+    '<p>' + (legalRequired.length
+      ? "TrustRelay will require acceptance before normal authenticated use."
+      : "There are no unaccepted published consumer legal documents for this account.") + '</p>';
 
   const verified = person?.identity_status === "verified";
   $("identityDetails").innerHTML = `
@@ -1219,6 +1304,8 @@ function setupHandlers() {
     state.profile = null;
     state.identity = null;
     state.notifications = null;
+    state.onboarding = null;
+    state.legalGateActive = false;
     state.grants = [];
     showAuth();
     toast("Signed out.", "success");
