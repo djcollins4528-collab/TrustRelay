@@ -105,6 +105,7 @@ function reasonLabel(code) {
     CREDENTIAL_SUPERSEDED: "Credential has been superseded",
     GRANT_REVOKED: "Authority grant has been revoked",
     GRANT_EXPIRED: "Authority grant has expired",
+    GRANT_PENDING_VERIFICATION: "Authority grant is pending required identity verification",
     SIGNING_KEY_REVOKED: "Signing key has been revoked",
     SIGNATURE_INVALID: "Cryptographic signature is invalid",
     NOT_YET_VALID: "Credential is not valid yet",
@@ -717,6 +718,8 @@ async function issueCredential(grantId, button) {
         <dt>Key ID</dt><dd>${escapeHtml(credential.kid || "—")}</dd>
         <dt>Algorithm</dt><dd>${escapeHtml(credential.alg || "ES256")}</dd>
         <dt>Expires</dt><dd>${escapeHtml(formatDate(credential.expiresAt, true))}</dd>
+        <dt>Principal assurance</dt><dd>${escapeHtml(credential.assuranceAtIssue?.principal?.assuranceLevel || "—")}</dd>
+        <dt>Representative assurance</dt><dd>${escapeHtml(credential.assuranceAtIssue?.representative?.assuranceLevel || "—")}</dd>
       </dl>
       <div class="modal-actions">
         <button class="button ghost" id="downloadCredential" type="button">Download .jwt</button>
@@ -791,6 +794,8 @@ async function verifyCredential(token, resultElement) {
     });
     const valid = Boolean(result?.valid);
     const authority = result?.authority || {};
+    const currentAssurance = result?.currentAssurance || {};
+    const assuranceAtIssue = result?.credential?.assuranceAtIssue || authority?.assuranceAtIssue || {};
     resultElement.className = `verify-result ${valid ? "valid" : "invalid"}`;
     resultElement.innerHTML = `
       <div class="result-mark">${valid ? "✓" : "×"}</div>
@@ -810,6 +815,10 @@ async function verifyCredential(token, resultElement) {
           <div class="verify-line"><span>Representative</span><span>${escapeHtml(authority.representativePersonId || "—")}</span></div>
           <div class="verify-line"><span>Allowed actions</span><span>${escapeHtml((authority.allowed || []).join(", ") || "—")}</span></div>
           <div class="verify-line"><span>Resources</span><span>${escapeHtml((authority.resources || []).join(", ") || "—")}</span></div>
+          <div class="verify-line"><span>Principal assurance now</span><span>${escapeHtml(currentAssurance?.principal?.assuranceLevel || "—")}</span></div>
+          <div class="verify-line"><span>Representative assurance now</span><span>${escapeHtml(currentAssurance?.representative?.assuranceLevel || "—")}</span></div>
+          <div class="verify-line"><span>Principal assurance at issue</span><span>${escapeHtml(assuranceAtIssue?.principal?.assuranceLevel || "—")}</span></div>
+          <div class="verify-line"><span>Representative assurance at issue</span><span>${escapeHtml(assuranceAtIssue?.representative?.assuranceLevel || "—")}</span></div>
         ` : ""}
       </div>
     `;
