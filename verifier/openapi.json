@@ -221,6 +221,7 @@
               "evidence.requested",
               "evidence.submitted",
               "evidence.resolved",
+              "identity.assurance.changed",
               "organization.member.invited",
               "organization.member.joined",
               "organization.member.role_changed",
