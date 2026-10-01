@@ -35,14 +35,16 @@ function setAuthenticated(on){els.authView.classList.toggle("hidden",on);els.por
 async function rpc(name,args={}){const {data,error}=await supabase.rpc(name,args);if(error)throw error;if(data?.ok===false){const e=new Error(data.code||"REQUEST_REJECTED");e.code=data.code;e.status=data.status;throw e}return data}
 async function token(){const {data,error}=await supabase.auth.getSession();if(error)throw error;return data.session?.access_token||null}
 async function evaluate(body){const t=await token();if(!t)throw new Error("AUTH_REQUIRED");const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-verifier-evaluate-v07",{method:"POST",headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:"Bearer "+t,"content-type":"application/json",accept:"application/json"},body:JSON.stringify(body)});const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}if(!r.ok){const e=new Error(data?.error?.code||"EVALUATION_FAILED");e.code=data?.error?.code||"EVALUATION_FAILED";throw e}return data}
+async function evidenceFile(body){const t=await token();if(!t)throw new Error("AUTH_REQUIRED");const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-evidence-v08",{method:"POST",headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:"Bearer "+t,"content-type":"application/json",accept:"application/json"},body:JSON.stringify(body)});const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}if(!r.ok){const e=new Error(data?.error?.code||"EVIDENCE_REQUEST_FAILED");e.code=data?.error?.code||"EVIDENCE_REQUEST_FAILED";throw e}return data}
 function canManage(){return["owner","admin","developer"].includes(state.dashboard?.membership?.role)}
 function canInvite(){return["owner","admin"].includes(state.dashboard?.membership?.role)}
+function canResolveEvidence(){return["owner","admin","verifier"].includes(state.dashboard?.membership?.role)}
 function currentOrg(){return state.organizations.find(x=>x.organization?.id===state.orgId)?.organization||state.dashboard?.organization||null}
 
 function showView(name){
   state.currentView=name;
   qsa(".portal-section").forEach(x=>x.classList.add("hidden"));
-  const map={dashboard:"dashboardView",verify:"verifyView",keys:"keysView",team:"teamView",webhooks:"webhooksView",audit:"auditView",developer:"developerView"};
+  const map={dashboard:"dashboardView",verify:"verifyView",evidence:"evidenceView",keys:"keysView",team:"teamView",webhooks:"webhooksView",audit:"auditView",developer:"developerView"};
   $(map[name]||"dashboardView").classList.remove("hidden");
   qsa(".verifier-nav .nav-item").forEach(b=>b.classList.toggle("active",b.dataset.view===name));
   window.scrollTo({top:0,behavior:"smooth"});
@@ -81,9 +83,10 @@ function render(){
     <dt>Active partner keys</dt><dd>${m.activeKeys??0}</dd>
     <dt>Active members</dt><dd>${m.members??0}</dd>
     <dt>Active webhooks</dt><dd>${m.activeWebhooks??0}</dd>
+    <dt>Open evidence requests</dt><dd>${m.openEvidenceRequests??0}</dd>
     <dt>Your role</dt><dd>${esc(d.membership?.role||"—")}</dd>`;
   renderDecisions($("recentDecisions"),(d.recentDecisions||[]).slice(0,8),true);
-  renderKeys();renderTeam();renderWebhooks();renderAudit();renderDeveloper();
+  renderKeys();renderTeam();renderWebhooks();renderEvidenceRequests();renderAudit();renderDeveloper();
   $("createKeyButton").classList.toggle("hidden",!canManage());
   $("createWebhookButton").classList.toggle("hidden",!canManage());
   $("inviteMemberButton").classList.toggle("hidden",!canInvite());
@@ -128,6 +131,26 @@ function renderWebhooks(){
   $("deliveryList").innerHTML=del.length?del.map(x=>`<div class="management-row"><div><strong>${esc(x.eventType)}</strong><p>${esc(x.eventId)} · HTTP ${esc(x.responseStatus??"—")} · ${esc(formatDate(x.createdAt,true))}</p><div class="row-meta"><span class="small-chip">${esc(x.status)}</span></div></div></div>`).join(""):'<div class="empty-management">No webhook deliveries yet.</div>';
 }
 
+function renderEvidenceRequests(){
+  const root=$("evidenceRequestOrgList"),items=state.dashboard?.evidenceRequests||[];
+  if(!root)return;
+  if(!items.length){root.innerHTML='<div class="empty-management">No evidence requests yet.</div>';return}
+  root.innerHTML=items.map(r=>{
+    const docs=Array.isArray(r.documents)?r.documents:[];
+    const docHtml=docs.length?docs.map(d=>`
+      <div class="management-row">
+        <div><strong>${esc(d.displayName||d.classification)}</strong><p>${esc((d.classification||"document").replaceAll("_"," "))} · ${esc(d.mimeType||"—")} · ${d.sizeBytes?Math.ceil(d.sizeBytes/1024)+" KB":"—"}</p><div class="row-meta"><span class="small-chip">${esc(d.reviewStatus||"pending")}</span><span class="small-chip">doc ${esc(d.id)}</span>${d.contentSha256?`<span class="small-chip">sha256 ${esc(d.contentSha256.slice(0,12))}…</span>`:""}</div></div>
+        <div class="management-actions"><button class="button ghost small" data-org-evidence-doc="${esc(d.id)}" type="button">View file</button><button class="button secondary small" data-copy-evidence-doc="${esc(d.id)}" type="button">Copy document ID</button></div>
+      </div>`).join(""):'<div class="empty-management">Awaiting document submission.</div>';
+    return `
+      <article class="portal-card">
+        <div class="card-heading"><div><h3>Grant ${esc(r.grantId)}</h3><p>Request ${esc(r.id)} · ${esc((r.requiredDocumentTypes||[]).join(", ")||"supporting evidence")}</p></div><span class="small-chip">${esc(r.status)}</span></div>
+        <div class="management-list">${docHtml}</div>
+        ${r.status==="submitted"&&canResolveEvidence()?`<div class="modal-actions"><button class="button danger small" data-resolve-evidence="${esc(r.id)}" data-resolution="rejected" type="button">Reject evidence</button><button class="button primary small" data-resolve-evidence="${esc(r.id)}" data-resolution="satisfied" type="button">Mark satisfied</button></div>`:""}
+      </article>`;
+  }).join("");
+}
+
 function renderAudit(){
   const root=$("auditList"),items=state.dashboard?.recentDecisions||[];
   if(!items.length){root.innerHTML='<div class="empty-management">No audit evidence yet.</div>';return}
@@ -151,7 +174,8 @@ function renderDeveloper(){
     "resource": "checking:1234",
     "amount": 175,
     "currency": "USD",
-    "evidence": {"invoiceId":"INV-1042"}
+    "evidence": {"invoiceId":"INV-1042"},
+    "evidenceDocumentIds": ["doc_..."]
   }'`;
   $("getExample").textContent=`curl ${base}/v1/decisions/req_123 \\
   -H "X-TrustRelay-Key: YOUR_API_KEY"`;
@@ -200,7 +224,7 @@ function setup(){
     openModal(`<p class="eyebrow">EVIDENCE REQUEST</p><h2>Request supporting documents.</h2><p>This request is tied to the evaluated grant and will appear for its principal and representative.</p><form id="evidenceRequestForm"><div class="field"><label>Required document types</label><div class="scope-checks"><label><input type="checkbox" name="evtype" value="authority_document" checked> Authority document</label><label><input type="checkbox" name="evtype" value="invoice"> Invoice / bill</label><label><input type="checkbox" name="evtype" value="supporting_document"> Supporting document</label><label><input type="checkbox" name="evtype" value="address_evidence"> Address evidence</label></div></div><div class="field"><label for="evidenceDueAt">Due date <span class="optional-label">optional</span></label><input id="evidenceDueAt" type="datetime-local"></div><input id="evidenceGrantId" type="hidden" value="${esc(button.dataset.requestEvidenceGrant)}"><div class="modal-actions"><button class="button primary" type="submit">Create evidence request</button></div></form>`);
   });
 
-  $("evaluateForm").addEventListener("submit",async e=>{e.preventDefault();const b=e.submitter;busy(b,true,"Evaluating…");try{let evidence={};const raw=$("decisionEvidence").value.trim();if(raw){evidence=JSON.parse(raw);if(!evidence||typeof evidence!=="object"||Array.isArray(evidence))throw new Error("Evidence must be a JSON object.")}const amountRaw=$("decisionAmount").value.trim();const result=await evaluate({orgId:state.orgId,requestId:"req_"+crypto.randomUUID().replaceAll("-",""),correlationId:$("correlationId").value.trim()||null,credential:$("credentialToken").value.trim(),action:$("decisionAction").value.trim(),resource:$("decisionResource").value.trim(),amount:amountRaw===""?null:Number(amountRaw),currency:$("decisionCurrency").value||null,evidence});showDecision(result);toast("Authorization decision recorded.","success");await loadDashboard()}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}});
+  $("evaluateForm").addEventListener("submit",async e=>{e.preventDefault();const b=e.submitter;busy(b,true,"Evaluating…");try{let evidence={};const raw=$("decisionEvidence").value.trim();if(raw){evidence=JSON.parse(raw);if(!evidence||typeof evidence!=="object"||Array.isArray(evidence))throw new Error("Evidence must be a JSON object.")}const evidenceDocumentIds=[...new Set($("decisionEvidenceDocuments").value.split(/[\s,]+/).map(x=>x.trim()).filter(Boolean))];const amountRaw=$("decisionAmount").value.trim();const result=await evaluate({orgId:state.orgId,requestId:"req_"+crypto.randomUUID().replaceAll("-",""),correlationId:$("correlationId").value.trim()||null,credential:$("credentialToken").value.trim(),action:$("decisionAction").value.trim(),resource:$("decisionResource").value.trim(),amount:amountRaw===""?null:Number(amountRaw),currency:$("decisionCurrency").value||null,evidence,evidenceDocumentIds});showDecision(result);toast("Authorization decision recorded.","success");await loadDashboard()}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}});
 
   $("createKeyButton").onclick=()=>openModal(`<p class="eyebrow">NEW PARTNER KEY</p><h2>Create server API key.</h2><p>The raw key is shown once. Store it in your server-side secret manager.</p><form id="keyForm"><div class="field"><label for="keyName">Key name</label><input id="keyName" required maxlength="100" placeholder="Production backend"></div><div class="field"><label>Scopes</label><div class="scope-checks"><label><input type="checkbox" name="scope" value="decisions:read" checked> decisions:read</label><label><input type="checkbox" name="scope" value="decisions:write" checked> decisions:write</label></div></div><div class="modal-actions"><button class="button primary" type="submit">Create key</button></div></form>`);
   els.modalContent.addEventListener("submit",async e=>{
@@ -226,7 +250,40 @@ function setup(){
 
   $("createWebhookButton").onclick=()=>openModal(`<p class="eyebrow">SIGNED WEBHOOK</p><h2>Add HTTPS endpoint.</h2><form id="webhookForm"><div class="field"><label for="webhookName">Name</label><input id="webhookName" required maxlength="100" placeholder="Authorization events"></div><div class="field"><label for="webhookUrl">HTTPS endpoint</label><input id="webhookUrl" type="url" required placeholder="https://example.com/trustrelay"></div><div class="field"><label>Events</label><div class="scope-checks"><label><input type="checkbox" name="event" value="decision.created" checked> decision.created</label><label><input type="checkbox" name="event" value="grant.revoked"> grant.revoked</label><label><input type="checkbox" name="event" value="credential.revoked"> credential.revoked</label></div></div><div class="modal-actions"><button class="button primary" type="submit">Create webhook</button></div></form>`);
   els.modalContent.addEventListener("submit",async e=>{if(e.target.id==="webhookForm"){e.preventDefault();const b=e.submitter;busy(b,true,"Creating…");try{const events=qsa('input[name="event"]:checked',e.target).map(x=>x.value);const x=await rpc("trustrelay_create_webhook_v07",{p_org_id:state.orgId,p_name:$("webhookName").value.trim(),p_endpoint_url:$("webhookUrl").value.trim(),p_events:events});els.modalContent.innerHTML=`<p class="eyebrow">WEBHOOK CREATED</p><h2>Save the signing secret.</h2><p class="warning-copy">It is encrypted in Vault and shown only once.</p><div class="secret-once">${esc(x.signingSecret)}</div><div class="modal-actions"><button id="copyWebhookSecret" class="button primary" type="button">Copy signing secret</button></div>`;$("copyWebhookSecret").onclick=()=>copyText(x.signingSecret,"Webhook secret copied");await loadDashboard()}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error");busy(b,false)}}});
+  $("evidenceRequestOrgList").addEventListener("click",async e=>{
+    const view=e.target.closest("[data-org-evidence-doc]");
+    if(view){
+      busy(view,true,"Opening…");
+      try{const x=await evidenceFile({action:"download",documentId:view.dataset.orgEvidenceDoc});window.open(x.url,"_blank","noopener,noreferrer")}
+      catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
+      finally{busy(view,false)}
+      return;
+    }
+    const copy=e.target.closest("[data-copy-evidence-doc]");
+    if(copy){await copyText(copy.dataset.copyEvidenceDoc,"Document ID copied");return}
+    const resolve=e.target.closest("[data-resolve-evidence]");
+    if(resolve){
+      openModal(`<p class="eyebrow">EVIDENCE RESOLUTION</p><h2>${resolve.dataset.resolution==="satisfied"?"Mark request satisfied?":"Reject submitted evidence?"}</h2><form id="evidenceResolutionForm"><input id="evidenceResolutionRequestId" type="hidden" value="${esc(resolve.dataset.resolveEvidence)}"><input id="evidenceResolution" type="hidden" value="${esc(resolve.dataset.resolution)}"><div class="field"><label for="evidenceResolutionReason">Reason code</label><input id="evidenceResolutionReason" maxlength="120" required placeholder="${resolve.dataset.resolution==="satisfied"?"EVIDENCE_ACCEPTED":"EVIDENCE_INSUFFICIENT"}"></div><div class="field"><label for="evidenceResolutionNotes">Notes <span class="optional-label">optional</span></label><textarea id="evidenceResolutionNotes" rows="4" maxlength="2000"></textarea></div><div class="modal-actions"><button class="button ${resolve.dataset.resolution==="satisfied"?"primary":"danger"}" type="submit">Record resolution</button></div></form>`);
+    }
+  });
+
   $("webhookList").addEventListener("click",async e=>{const b=e.target.closest("[data-revoke-webhook]");if(!b)return;if(!confirm("Revoke this webhook endpoint?"))return;busy(b,true,"Revoking…");try{await rpc("trustrelay_revoke_webhook_v07",{p_org_id:state.orgId,p_webhook_id:b.dataset.revokeWebhook});toast("Webhook revoked.","success");await loadDashboard()}catch(err){toast(String(err.code||err.message),"error")}finally{busy(b,false)}});
+
+  els.modalContent.addEventListener("submit",async e=>{
+    if(e.target.id!=="evidenceResolutionForm")return;
+    e.preventDefault();
+    const b=e.submitter;busy(b,true,"Recording…");
+    try{
+      await rpc("trustrelay_resolve_evidence_request_v08",{
+        p_org_id:state.orgId,
+        p_request_id:$("evidenceResolutionRequestId").value,
+        p_resolution:$("evidenceResolution").value,
+        p_reason:$("evidenceResolutionReason").value.trim(),
+        p_notes:$("evidenceResolutionNotes").value.trim()||null
+      });
+      closeModal();toast("Evidence request resolved.","success");await loadDashboard();showView("evidence");
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error");busy(b,false)}
+  });
 
   $("modalClose").onclick=closeModal;els.modalBackdrop.onclick=e=>{if(e.target===els.modalBackdrop)closeModal()};
   els.accountButton.onclick=async()=>{if(confirm("Sign out of the Verifier Portal?"))await supabase.auth.signOut()};
