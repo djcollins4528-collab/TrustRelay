@@ -16,6 +16,7 @@ const state = {
   user: null,
   profile: null,
   identity: null,
+  notifications: null,
   grants: [],
   grantFilter: "all",
   currentView: "dashboard",
@@ -31,6 +32,8 @@ const els = {
   appView: $("appView"),
   publicVerifyView: $("publicVerifyView"),
   accountTopButton: $("accountTopButton"),
+  notificationTopButton: $("notificationTopButton"),
+  notificationTopBadge: $("notificationTopBadge"),
   authMessage: $("authMessage"),
   magicLinkForm: $("magicLinkForm"),
   otpForm: $("otpForm"),
@@ -220,6 +223,7 @@ function showAuth(message = "") {
   els.appView.classList.add("hidden");
   els.authView.classList.remove("hidden");
   els.accountTopButton.classList.add("hidden");
+  els.notificationTopButton?.classList.add("hidden");
   if (message) setMessage(els.authMessage, message, "warning");
 }
 
@@ -239,6 +243,7 @@ function showApp() {
   els.publicVerifyView.classList.add("hidden");
   els.appView.classList.remove("hidden");
   els.accountTopButton.classList.remove("hidden");
+  els.notificationTopButton?.classList.remove("hidden");
 }
 
 function showWorkspaceView(name) {
@@ -310,15 +315,17 @@ function setDefaultGrantDates() {
 
 async function bootstrapProfile() {
   await invokeEdge("trustrelay-profile-v06", { method: "POST", body: {} });
-  const [result, profileResult, identityResult] = await Promise.all([
+  const [result, profileResult, identityResult, notificationResult] = await Promise.all([
     invokeEdge("trustrelay-profile-v06", { method: "GET" }),
     invokeEdge("trustrelay-profile-v06", { method: "POST", body: {} }),
     invokeRpc("trustrelay_identity_center_v08"),
+    invokeRpc("trustrelay_notifications_v09", { p_limit: 25, p_unread_only: false }),
   ]);
   state.profile = profileResult;
   state.identity = identityResult;
+  state.notifications = notificationResult;
   state.grants = Array.isArray(result?.grants) ? result.grants : [];
-  return { profile: state.profile, grants: state.grants, identity: state.identity };
+  return { profile: state.profile, grants: state.grants, identity: state.identity, notifications: state.notifications };
 }
 
 async function refreshApp({ preserveView = true } = {}) {
@@ -335,6 +342,7 @@ async function refreshApp({ preserveView = true } = {}) {
     renderDashboard();
     renderIdentityCenter();
     renderAccount();
+    renderNotificationChrome();
 
     const pendingInvite = localStorage.getItem("trustrelay_pending_invite");
     if (pendingInvite) {
@@ -393,6 +401,61 @@ function roleFor(record) {
 function filteredGrants() {
   if (state.grantFilter === "all") return state.grants;
   return state.grants.filter((record) => roleFor(record) === state.grantFilter);
+}
+
+function renderNotificationChrome() {
+  const count = Number(state.notifications?.unreadCount || 0);
+  if (!els.notificationTopBadge) return;
+  els.notificationTopBadge.textContent = String(Math.min(count, 99));
+  els.notificationTopBadge.classList.toggle("hidden", count < 1);
+}
+
+async function openConsumerNotifications() {
+  try {
+    const data = await invokeRpc("trustrelay_notifications_v09", { p_limit: 50, p_unread_only: false });
+    state.notifications = data;
+    renderNotificationChrome();
+    const notes = Array.isArray(data.notifications) ? data.notifications : [];
+    const categories = ["authority","evidence","identity","organization","webhook","compliance","security"];
+    openModal(`
+      <p class="eyebrow">NOTIFICATIONS</p>
+      <h2>TrustRelay activity.</h2>
+      <p>${Number(data.unreadCount || 0)} unread notification${Number(data.unreadCount || 0) === 1 ? "" : "s"}.</p>
+      <div class="notification-preferences">
+        ${categories.map((cat) => `<label><input type="checkbox" data-consumer-pref="${cat}" ${data.preferences?.[cat] === false ? "" : "checked"}> ${cat}</label>`).join("")}
+      </div>
+      <div class="notification-list">
+        ${notes.length ? notes.map((n) => `
+          <article class="notification-item ${n.readAt ? "" : "unread"}">
+            <div>
+              <span class="small-chip">${escapeHtml(n.severity)}</span>
+              <strong>${escapeHtml(n.title)}</strong>
+              <p>${escapeHtml(n.body)}</p>
+              <small>${escapeHtml(formatDate(n.createdAt, true))}</small>
+            </div>
+            <div class="management-actions">
+              ${!n.readAt ? `<button class="button ghost small" data-consumer-note-read="${escapeHtml(n.id)}" type="button">Mark read</button>` : ""}
+              <button class="button ghost small" data-consumer-note-dismiss="${escapeHtml(n.id)}" type="button">Dismiss</button>
+            </div>
+          </article>
+        `).join("") : '<div class="empty-management">No notifications.</div>'}
+      </div>
+    `);
+    qsa("[data-consumer-note-read]", els.modalContent).forEach((b) => b.onclick = async () => {
+      await invokeRpc("trustrelay_mark_notification_v09", { p_notification_id: b.dataset.consumerNoteRead, p_action: "read" });
+      await openConsumerNotifications();
+    });
+    qsa("[data-consumer-note-dismiss]", els.modalContent).forEach((b) => b.onclick = async () => {
+      await invokeRpc("trustrelay_mark_notification_v09", { p_notification_id: b.dataset.consumerNoteDismiss, p_action: "dismiss" });
+      await openConsumerNotifications();
+    });
+    qsa("[data-consumer-pref]", els.modalContent).forEach((box) => box.onchange = async () => {
+      await invokeRpc("trustrelay_set_notification_preference_v09", { p_category: box.dataset.consumerPref, p_in_app: box.checked });
+      toast("Notification preference updated.", "success");
+    });
+  } catch (error) {
+    toast(String(error?.code || error?.message || "NOTIFICATIONS_FAILED").replaceAll("_", " "), "error");
+  }
 }
 
 function renderDashboard() {
@@ -1147,12 +1210,15 @@ function setupHandlers() {
   $("backFromPublicVerify").addEventListener("click", () => state.session ? (showApp(), showWorkspaceView("dashboard")) : showAuth());
   $("brandButton").addEventListener("click", () => state.session ? (showApp(), showWorkspaceView("dashboard")) : showAuth());
   els.accountTopButton.addEventListener("click", () => showWorkspaceView("account"));
+  els.notificationTopButton?.addEventListener("click", openConsumerNotifications);
 
   $("signOutButton").addEventListener("click", async () => {
     await supabase.auth.signOut();
     state.session = null;
     state.user = null;
     state.profile = null;
+    state.identity = null;
+    state.notifications = null;
     state.grants = [];
     showAuth();
     toast("Signed out.", "success");
