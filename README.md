@@ -234,7 +234,7 @@ Supported event catalog includes:
 - `organization.member.joined`
 - `organization.member.role_changed`
 - `organization.member.disabled`
-- `organization.member.enabled`
+- `organization.member.restored`
 - `organization.member.removed`
 - `organization.ownership.transferred`
 - `compliance.export.ready`
