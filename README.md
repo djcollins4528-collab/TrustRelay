@@ -343,3 +343,74 @@ See:
 
 - `docs/V0.9-WEBHOOKS-RBAC-COMPLIANCE.md`
 - `verifier/openapi.json`
+
+
+## v1.0 Production Candidate
+
+TrustRelay v1.0 adds production hardening, versioned onboarding/legal acceptance, commercial plan entitlements, a Stripe billing adapter, and fail-closed production activation.
+
+### Production runtime
+
+Sandbox organizations continue to operate within plan limits.
+
+A live organization must continuously satisfy:
+
+- approved production onboarding
+- active/trial/manual-contract billing
+- plan entitlement capacity
+
+The Partner API remains on its stable compatibility route while reporting engine version `1.0.0`.
+
+### Onboarding
+
+The Verifier Portal now includes a **Launch** workspace for:
+
+- production organization profile
+- legal entity/contact details
+- legal-package status
+- billing plan/state
+- production blockers
+- activation request
+
+Consumer accounts have a versioned legal-acceptance gate that activates only when binding/effective Consumer Terms and Privacy versions are published.
+
+### Billing
+
+`trustrelay-billing-v10` supports:
+
+- Stripe-hosted Checkout
+- Stripe Billing Portal
+- signed Stripe webhooks
+- idempotent billing-event processing
+- replay payload-hash protection
+
+Commercial checkout remains disabled until production Stripe credentials and price IDs are configured.
+
+### Legal & Trust Center
+
+The candidate includes:
+
+- Privacy Notice
+- Consumer Terms
+- Business Terms
+- Data Processing Addendum
+- Acceptable Use Policy
+- Security Statement
+- Subprocessor List
+- Retention Notice
+
+Current canonical documents are SHA-256–hashed review drafts and explicitly nonbinding/non-effective until counsel approval.
+
+### Launch gates
+
+Production activation is controlled by database-backed readiness controls and is currently blocked intentionally. See:
+
+- `docs/V1.0-PRODUCTION-READINESS.md`
+- `docs/V1.0-IMPLEMENTATION-RESULT.md`
+- `docs/V1.0-PRODUCTION-ACTIVATION.md`
+- `docs/V1.0-LEGAL-REVIEW-CHECKLIST.md`
+- `docs/V1.0-INCIDENT-RESPONSE.md`
+- `docs/V1.0-PRIVACY-REQUEST-PROCEDURE.md`
+- `docs/V1.0-DISASTER-RECOVERY.md`
+
+The public candidate remains `noindex` until the production backend, custom domain/SMTP, live billing, effective legal package, recovery controls and remaining security/operations gates are confirmed.
