@@ -640,16 +640,19 @@ function renderAccount() {
 
 
   const legalRequired = Array.isArray(state.onboarding?.requiredAcceptances) ? state.onboarding.requiredAcceptances : [];
+  const effectiveLegal = state.onboarding?.effectiveConsumerLegalPackagePublished === true;
   $("consumerLegalDetails").innerHTML =
     '<dl class="detail-list">' +
-      '<dt>Published terms status</dt><dd>' + (legalRequired.length ? "Action required" : "Current") + '</dd>' +
+      '<dt>Published terms status</dt><dd>' + (!effectiveLegal ? "Pre-launch drafts only" : (legalRequired.length ? "Action required" : "Current")) + '</dd>' +
       '<dt>Required documents</dt><dd>' +
         (legalRequired.length ? escapeHtml(legalRequired.map(function (d) { return d.title || d.documentType; }).join(", ")) : "None") +
       '</dd>' +
     '</dl>' +
-    '<p>' + (legalRequired.length
-      ? "TrustRelay will require acceptance before normal authenticated use."
-      : "There are no unaccepted published consumer legal documents for this account.") + '</p>';
+    '<p>' + (!effectiveLegal
+      ? "TrustRelay has not published a binding effective consumer legal package yet. Current legal pages are pre-launch drafts."
+      : (legalRequired.length
+        ? "TrustRelay will require acceptance before normal authenticated use."
+        : "You have no unaccepted effective consumer legal documents.")) + '</p>';
 
   const verified = person?.identity_status === "verified";
   $("identityDetails").innerHTML = `
