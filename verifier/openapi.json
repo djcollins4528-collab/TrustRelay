@@ -220,9 +220,13 @@
               "evidence.requested",
               "evidence.submitted",
               "evidence.resolved",
+              "organization.member.invited",
               "organization.member.joined",
               "organization.member.role_changed",
               "organization.member.disabled",
+              "organization.member.restored",
+              "organization.member.removed",
+              "organization.ownership.transferred",
               "compliance.export.ready",
               "webhook.test"
             ]
