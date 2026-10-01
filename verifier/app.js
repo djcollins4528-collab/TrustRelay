@@ -8,7 +8,7 @@ const supabase=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
 });
 
 const state={
-  session:null,user:null,organizations:[],orgId:null,dashboard:null,currentView:"dashboard",notifications:null
+  session:null,user:null,organizations:[],orgId:null,dashboard:null,currentView:"dashboard",notifications:null,launch:null,billing:null
 };
 
 const $=id=>document.getElementById(id);
@@ -37,6 +37,23 @@ async function token(){const {data,error}=await supabase.auth.getSession();if(er
 async function evaluate(body){const t=await token();if(!t)throw new Error("AUTH_REQUIRED");const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-verifier-evaluate-v07",{method:"POST",headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:"Bearer "+t,"content-type":"application/json",accept:"application/json"},body:JSON.stringify(body)});const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}if(!r.ok){const e=new Error(data?.error?.code||"EVALUATION_FAILED");e.code=data?.error?.code||"EVALUATION_FAILED";throw e}return data}
 async function evidenceFile(body){const t=await token();if(!t)throw new Error("AUTH_REQUIRED");const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-evidence-v08",{method:"POST",headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:"Bearer "+t,"content-type":"application/json",accept:"application/json"},body:JSON.stringify(body)});const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}if(!r.ok){const e=new Error(data?.error?.code||"EVIDENCE_REQUEST_FAILED");e.code=data?.error?.code||"EVIDENCE_REQUEST_FAILED";throw e}return data}
 async function complianceEdge(body){const t=await token();if(!t)throw new Error("AUTH_REQUIRED");const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-compliance-export-v09",{method:"POST",headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:"Bearer "+t,"content-type":"application/json",accept:"application/json"},body:JSON.stringify(body)});const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}if(!r.ok){const e=new Error(data?.error?.code||"COMPLIANCE_REQUEST_FAILED");e.code=data?.error?.code||"COMPLIANCE_REQUEST_FAILED";throw e}return data}
+async function billingEdge(body){
+  const t=await token();if(!t)throw new Error("AUTH_REQUIRED");
+  const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-billing-v10",{
+    method:"POST",
+    headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:"Bearer "+t,"content-type":"application/json",accept:"application/json"},
+    body:JSON.stringify(body)
+  });
+  const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}
+  if(!r.ok){
+    const e=new Error(data?.error?.code||"BILLING_REQUEST_FAILED");
+    e.code=data?.error?.code||"BILLING_REQUEST_FAILED";
+    e.status=r.status;
+    e.details=data?.error?.details;
+    throw e
+  }
+  return data
+}
 function perms(){return state.dashboard?.membership?.permissions||{}}
 function hasPerm(name){return perms()[name]===true}
 function canManageKeys(){return hasPerm("api_keys.manage")}
@@ -51,7 +68,7 @@ function currentOrg(){return state.organizations.find(x=>x.organization?.id===st
 function showView(name){
   state.currentView=name;
   qsa(".portal-section").forEach(x=>x.classList.add("hidden"));
-  const map={dashboard:"dashboardView",verify:"verifyView",evidence:"evidenceView",keys:"keysView",team:"teamView",webhooks:"webhooksView",compliance:"complianceView",audit:"auditView",developer:"developerView"};
+  const map={dashboard:"dashboardView",verify:"verifyView",evidence:"evidenceView",keys:"keysView",team:"teamView",webhooks:"webhooksView",compliance:"complianceView",launch:"launchView",audit:"auditView",developer:"developerView"};
   $(map[name]||"dashboardView").classList.remove("hidden");
   qsa(".verifier-nav .nav-item").forEach(b=>b.classList.toggle("active",b.dataset.view===name));
   window.scrollTo({top:0,behavior:"smooth"});
@@ -77,10 +94,14 @@ async function loadDashboard(){
   if(!state.orgId)return;
   const results=await Promise.all([
     rpc("trustrelay_org_dashboard_v07",{p_org_id:state.orgId}),
-    rpc("trustrelay_notifications_v09",{p_limit:1,p_unread_only:true}).catch(()=>({unreadCount:0,notifications:[]}))
+    rpc("trustrelay_notifications_v09",{p_limit:1,p_unread_only:true}).catch(()=>({unreadCount:0,notifications:[]})),
+    rpc("trustrelay_org_onboarding_v10",{p_org_id:state.orgId}).catch(()=>null),
+    billingEdge({action:"status",orgId:state.orgId}).catch(e=>({error:{code:e.code||e.message},providerConfigured:false}))
   ]);
   state.dashboard=results[0];
   state.notifications=results[1];
+  state.launch=results[2];
+  state.billing=results[3];
   render();
 }
 
@@ -100,7 +121,7 @@ function render(){
     <dt>Ready exports</dt><dd>${m.readyExports??0}</dd>
     <dt>Your role</dt><dd>${esc(d.membership?.role||"—")}</dd>`;
   renderDecisions($("recentDecisions"),(d.recentDecisions||[]).slice(0,8),true);
-  renderKeys();renderTeam();renderWebhooks();renderEvidenceRequests();renderCompliance();renderAudit();renderDeveloper();renderNotificationBadge();
+  renderKeys();renderTeam();renderWebhooks();renderEvidenceRequests();renderCompliance();renderLaunch();renderAudit();renderDeveloper();renderNotificationBadge();
   $("createKeyButton").classList.toggle("hidden",!canManageKeys());
   $("createWebhookButton").classList.toggle("hidden",!canManageWebhooks());
   $("inviteMemberButton").classList.toggle("hidden",!canInvite());
@@ -112,6 +133,7 @@ function render(){
   qsa('.verifier-nav [data-view="team"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("members.manage")));
   qsa('.verifier-nav [data-view="webhooks"]').forEach(x=>x.classList.toggle("hidden",!canManageWebhooks()));
   qsa('.verifier-nav [data-view="compliance"]').forEach(x=>x.classList.toggle("hidden",!canExportAudit()));
+  qsa('.verifier-nav [data-view="launch"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("organization.manage")));
   qsa('.verifier-nav [data-view="audit"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("audit.read")));
   qsa('.verifier-nav [data-view="developer"]').forEach(x=>x.classList.toggle("hidden",!(canManageKeys()||canManageWebhooks())));
   qsa('[data-go="verify"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("decisions.evaluate")));
@@ -220,6 +242,113 @@ async function openNotifications(){
   }catch(e){toast(String(e.code||e.message).replaceAll("_"," "),"error")}
 }
 
+function formatMoney(cents,currency="usd"){
+  if(cents==null)return "Pricing not configured";
+  try{return new Intl.NumberFormat(undefined,{style:"currency",currency:String(currency||"usd").toUpperCase(),maximumFractionDigits:0}).format(Number(cents)/100)+"/month"}
+  catch{return "$"+(Number(cents)/100).toFixed(0)+"/month"}
+}
+
+function launchBlockerLabel(code){
+  const labels={
+    ORGANIZATION_WEBSITE_REQUIRED:"Organization website is required",
+    PRIMARY_CONTACT_REQUIRED:"Primary contact is required",
+    SECURITY_CONTACT_REQUIRED:"Security contact is required",
+    BILLING_CONTACT_REQUIRED:"Billing contact is required",
+    LEGAL_ENTITY_REQUIRED:"Legal entity details are required",
+    LEGAL_ACCEPTANCE_REQUIRED:"Published business terms / DPA must be accepted",
+    BILLING_NOT_ACTIVE:"Active billing, trial, or manual contract is required",
+    OWNER_REQUIRED:"At least one active owner is required"
+  };
+  return labels[code]||String(code||"").replaceAll("_"," ");
+}
+
+function renderLaunch(){
+  const root=$("launchStatusBanner");if(!root)return;
+  const x=state.launch,b=state.billing||{};
+  if(!x){
+    root.innerHTML='<div class="message warning">Launch-readiness data is unavailable for this account.</div>';
+    return;
+  }
+  const org=x.organization||{},on=x.onboarding||{},billing=x.billing||{},blockers=x.blockers||[];
+  $("portalEnvironmentBadge").textContent=String(org.mode||"sandbox").toUpperCase();
+  $("portalModeLabel").textContent=String(org.mode||"sandbox");
+  root.innerHTML=`
+    <div>
+      <strong>${org.mode==="live"?"Production active":"Production gated"}</strong>
+      <span> — onboarding ${esc(on.status||"incomplete")} · production ${esc(on.production_status||"sandbox")} · billing ${esc(billing.status||"not_configured")}</span>
+    </div>
+    <span class="assurance-pill ${org.mode==="live"?"verified":"pending"}">${org.mode==="live"?"LIVE":"SANDBOX"}</span>
+  `;
+
+  $("launchOrgName").value=org.name||"";
+  $("launchOrgIndustry").value=org.industry||"";
+  $("launchOrgWebsite").value=org.website||"";
+  $("launchPrimaryContact").value=on.primary_contact_email||"";
+  $("launchSecurityContact").value=on.security_contact_email||"";
+  $("launchBillingContact").value=on.billing_contact_email||billing.billingEmail||"";
+  $("launchLegalEntityName").value=on.legal_entity_name||"";
+  $("launchLegalCountry").value=on.legal_entity_country||"";
+  $("launchLegalRegion").value=on.legal_entity_region||"";
+  $("launchLegalAddress").value=on.legal_entity_address||"";
+
+  const req=x.requiredLegalAcceptances||[];
+  $("launchLegalList").innerHTML=req.length?req.map(d=>`
+    <div class="management-row">
+      <div><strong>${esc(d.title||d.documentType)}</strong><p>Version ${esc(d.version)} · effective ${esc(formatDate(d.effectiveAt))}</p></div>
+      <div class="management-actions"><a class="button ghost small" href="..${esc(d.urlPath)}" target="_blank" rel="noopener">Review</a><button class="button secondary small" data-accept-legal="${esc(d.id)}" type="button">Accept for organization</button></div>
+    </div>`).join(""):`
+    <div class="management-row">
+      <div><strong>No effective production legal package is currently published.</strong><p>The v1.0 legal documents are available as pre-launch drafts in the Trust Center. They cannot be accepted as binding terms until approved and published.</p></div>
+      <div class="management-actions"><a class="button ghost small" href="../legal/" target="_blank" rel="noopener">Review drafts</a></div>
+    </div>`;
+
+  const bs=b.billing||x.billing||{},current=b.currentPlan||x.plan||{};
+  $("billingStatusDetails").innerHTML=`
+    <div class="card-heading"><div><h3>Current billing</h3><p>${esc(current.name||current.code||"Sandbox")} · ${esc(bs.status||"not_configured")}</p></div><span class="small-chip">${b.providerConfigured?"Stripe configured":"Stripe not configured"}</span></div>
+    <dl class="stats-list">
+      <dt>Plan</dt><dd>${esc(current.name||current.code||"—")}</dd>
+      <dt>Billing state</dt><dd>${esc(bs.status||"—")}</dd>
+      <dt>Billing contact</dt><dd>${esc(bs.billingEmail||"—")}</dd>
+      <dt>Commercial checkout</dt><dd>${b.providerConfigured?"Enabled":"Blocked until operator Stripe configuration"}</dd>
+    </dl>
+    ${bs.hasCustomer?'<div class="modal-actions"><button id="manageBillingPortalButton" class="button secondary" type="button">Open billing portal</button></div>':""}
+  `;
+
+  const plans=(b.plans||[]).filter(p=>p.code!=="sandbox");
+  $("billingPlanList").innerHTML=plans.length?plans.map(p=>`
+    <article class="portal-card billing-plan-card ${p.code===bs.planCode?"selected":""}">
+      <div class="card-heading"><div><h3>${esc(p.name)}</h3><p>${esc(formatMoney(p.monthlyPriceCents,p.currency))}</p></div>${p.code===bs.planCode?'<span class="small-chip">selected</span>':""}</div>
+      <p>${esc((p.features||[]).join(" · "))}</p>
+      <div class="row-meta">
+        <span class="small-chip">members ${p.limits?.members??"custom"}</span>
+        <span class="small-chip">decisions/mo ${p.limits?.decisionsPerMonth??"custom"}</span>
+      </div>
+      <div class="modal-actions">
+        ${p.billingMode==="subscription"?
+          `<button class="button secondary small" data-select-plan="${esc(p.code)}" type="button">Select</button><button class="button primary small" data-checkout-plan="${esc(p.code)}" type="button" ${b.providerConfigured?"":"disabled"}>${b.providerConfigured?"Start checkout":"Stripe setup required"}</button>`:
+          '<a class="button ghost small" href="../legal/business-terms.html" target="_blank" rel="noopener">Enterprise contract</a>'}
+      </div>
+    </article>`).join(""):'<div class="empty-management">No commercial plans configured.</div>';
+
+  $("productionBlockers").innerHTML=blockers.length?blockers.map(code=>`
+    <div class="management-row"><div><strong>${esc(launchBlockerLabel(code))}</strong><p>${esc(code)}</p></div><span class="small-chip">organization blocker</span></div>
+  `).join(""):'<div class="management-row"><div><strong>Organization-level onboarding gates are complete.</strong><p>TrustRelay will still verify platform-wide production controls before accepting a production activation request.</p></div><span class="small-chip">ready to request</span></div>';
+
+  const canManage=hasPerm("organization.manage");
+  $("launchOrgProfileForm").classList.toggle("readonly-card",!canManage);
+  $("launchContactsForm").classList.toggle("readonly-card",!canManage);
+  qsa("#launchOrgProfileForm input,#launchContactsForm input,#launchContactsForm textarea,#launchOrgProfileForm button,#launchContactsForm button").forEach(el=>el.disabled=!canManage);
+  $("requestProductionButton").classList.toggle("hidden",!canManage||org.mode==="live");
+  $("requestProductionButton").disabled=!x.readyForProductionRequest;
+
+  const portal=$("manageBillingPortalButton");
+  if(portal)portal.onclick=async()=>{
+    busy(portal,true,"Opening…");
+    try{const r=await billingEdge({action:"portal",orgId:state.orgId});window.open(r.url,"_blank","noopener,noreferrer")}
+    catch(e){toast(String(e.code||e.message).replaceAll("_"," "),"error")}finally{busy(portal,false)}
+  };
+}
+
 function renderAudit(){
   const root=$("auditList"),items=state.dashboard?.recentDecisions||[];
   root.innerHTML=items.length?items.map(x=>`
@@ -284,7 +413,7 @@ function setup(){
   $("otpForm").addEventListener("submit",async e=>{e.preventDefault();const b=e.submitter;busy(b,true,"Verifying…");try{const {data,error}=await supabase.auth.verifyOtp({email:$("otpEmail").value.trim().toLowerCase(),token:$("otpCode").value.trim(),type:"email"});if(error)throw error;state.session=data.session;state.user=data.user;await startPortal()}catch(err){msg(els.authMessage,err.message||"Invalid or expired code.","error")}finally{busy(b,false)}});
 
   qsa(".verifier-nav .nav-item").forEach(b=>b.onclick=()=>showView(b.dataset.view));qsa("[data-go]").forEach(b=>b.onclick=()=>showView(b.dataset.go));
-  els.orgSelect.onchange=async()=>{state.orgId=els.orgSelect.value;await loadDashboard();showView("dashboard")};
+  els.orgSelect.onchange=async()=>{state.orgId=els.orgSelect.value;state.launch=null;state.billing=null;await loadDashboard();showView("dashboard")};
   $("newOrgButton").onclick=()=>{state.orgId=null;$("noOrgView").classList.remove("hidden");qsa(".portal-section").filter(x=>x.id!=="noOrgView").forEach(x=>x.classList.add("hidden"))};
   $("orgForm").addEventListener("submit",async e=>{e.preventDefault();const b=e.submitter;busy(b,true,"Creating…");try{const x=await rpc("trustrelay_create_organization_v07",{p_name:$("orgName").value.trim(),p_industry:$("orgIndustry").value.trim()||null,p_website:$("orgWebsite").value.trim()||null});state.orgId=x.organization.id;toast("Sandbox organization created.","success");e.currentTarget.reset();await loadOrganizations();showView("dashboard")}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}});
 
@@ -445,6 +574,62 @@ function setup(){
   };
 
   els.notificationButton.onclick=openNotifications;
+
+  $("launchOrgProfileForm").addEventListener("submit",async e=>{
+    e.preventDefault();const b=e.submitter;busy(b,true,"Saving…");
+    try{
+      await rpc("trustrelay_update_org_profile_v10",{
+        p_org_id:state.orgId,p_name:$("launchOrgName").value.trim(),
+        p_industry:$("launchOrgIndustry").value.trim()||null,p_website:$("launchOrgWebsite").value.trim()
+      });
+      toast("Organization profile saved.","success");await loadOrganizations();showView("launch");
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}
+  });
+
+  $("launchContactsForm").addEventListener("submit",async e=>{
+    e.preventDefault();const b=e.submitter;busy(b,true,"Saving…");
+    try{
+      await rpc("trustrelay_update_org_onboarding_v10",{
+        p_org_id:state.orgId,
+        p_primary_contact_email:$("launchPrimaryContact").value.trim(),
+        p_security_contact_email:$("launchSecurityContact").value.trim(),
+        p_billing_contact_email:$("launchBillingContact").value.trim(),
+        p_legal_entity_name:$("launchLegalEntityName").value.trim(),
+        p_legal_entity_country:$("launchLegalCountry").value.trim()||null,
+        p_legal_entity_region:$("launchLegalRegion").value.trim()||null,
+        p_legal_entity_address:$("launchLegalAddress").value.trim()||null
+      });
+      toast("Onboarding contacts saved.","success");await loadDashboard();showView("launch");
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}
+  });
+
+  $("launchLegalList").addEventListener("click",async e=>{
+    const b=e.target.closest("[data-accept-legal]");if(!b)return;
+    if(!confirm("Accept this legal document for the organization in your authorized organization role?"))return;
+    busy(b,true,"Accepting…");
+    try{
+      await rpc("trustrelay_accept_legal_v10",{p_document_id:b.dataset.acceptLegal,p_org_id:state.orgId,p_context:"organization",p_metadata:{surface:"verifier-v1.0"}});
+      toast("Legal document accepted.","success");await loadDashboard();showView("launch");
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}
+  });
+
+  $("billingPlanList").addEventListener("click",async e=>{
+    const select=e.target.closest("[data-select-plan]");
+    if(select){busy(select,true,"Selecting…");try{await billingEdge({action:"select_plan",orgId:state.orgId,planCode:select.dataset.selectPlan});toast("Billing plan selected.","success");await loadDashboard();showView("launch")}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(select,false)}return}
+    const checkout=e.target.closest("[data-checkout-plan]");
+    if(checkout){busy(checkout,true,"Opening checkout…");try{const x=await billingEdge({action:"checkout",orgId:state.orgId,planCode:checkout.dataset.checkoutPlan});window.location.assign(x.url)}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(checkout,false)}}
+  });
+
+  $("requestProductionButton").onclick=async()=>{
+    const b=$("requestProductionButton");busy(b,true,"Checking readiness…");
+    try{
+      const x=await rpc("trustrelay_request_production_activation_v10",{p_org_id:state.orgId});
+      toast("Production activation requested.","success");await loadDashboard();showView("launch");
+    }catch(err){
+      const details=err?.details?.platformBlockers||err?.details?.blockers;
+      toast(String(err.code||err.message).replaceAll("_"," ")+(details?" — review blockers in Launch":""),"error");
+    }finally{busy(b,false)}
+  };
 
   $("modalClose").onclick=closeModal;els.modalBackdrop.onclick=e=>{if(e.target===els.modalBackdrop)closeModal()};
   els.accountButton.onclick=async()=>{if(confirm("Sign out of the Verifier Portal?"))await supabase.auth.signOut()};
