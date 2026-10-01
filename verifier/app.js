@@ -16,7 +16,7 @@ const supabase=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
 });
 
 const state={
-  session:null,user:null,organizations:[],orgId:null,dashboard:null,currentView:"dashboard",notifications:null,launch:null,billing:null
+  session:null,user:null,organizations:[],orgId:null,dashboard:null,currentView:"dashboard",notifications:null,launch:null,billing:null,platform:null
 };
 
 const $=id=>document.getElementById(id);
@@ -104,12 +104,14 @@ async function loadDashboard(){
     rpc("trustrelay_org_dashboard_v07",{p_org_id:state.orgId}),
     rpc("trustrelay_notifications_v09",{p_limit:1,p_unread_only:true}).catch(()=>({unreadCount:0,notifications:[]})),
     rpc("trustrelay_org_onboarding_v10",{p_org_id:state.orgId}).catch(()=>null),
-    billingEdge({action:"status",orgId:state.orgId}).catch(e=>({error:{code:e.code||e.message},providerConfigured:false}))
+    billingEdge({action:"status",orgId:state.orgId}).catch(e=>({error:{code:e.code||e.message},providerConfigured:false})),
+    rpc("trustrelay_platform_readiness_v10",{p_org_id:state.orgId}).catch(()=>null)
   ]);
   state.dashboard=results[0];
   state.notifications=results[1];
   state.launch=results[2];
   state.billing=results[3];
+  state.platform=results[4];
   render();
 }
 
@@ -263,7 +265,8 @@ function launchBlockerLabel(code){
     SECURITY_CONTACT_REQUIRED:"Security contact is required",
     BILLING_CONTACT_REQUIRED:"Billing contact is required",
     LEGAL_ENTITY_REQUIRED:"Legal entity details are required",
-    LEGAL_ACCEPTANCE_REQUIRED:"Published business terms / DPA must be accepted",
+    EFFECTIVE_LEGAL_PACKAGE_REQUIRED:"Counsel-reviewed effective production legal package is required",
+    LEGAL_ACCEPTANCE_REQUIRED:"Effective business terms / DPA / acceptable-use terms must be accepted",
     BILLING_NOT_ACTIVE:"Active billing, trial, or manual contract is required",
     OWNER_REQUIRED:"At least one active owner is required"
   };
@@ -272,7 +275,7 @@ function launchBlockerLabel(code){
 
 function renderLaunch(){
   const root=$("launchStatusBanner");if(!root)return;
-  const x=state.launch,b=state.billing||{};
+  const x=state.launch,b=state.billing||{},platform=state.platform||{};
   if(!x){
     root.innerHTML='<div class="message warning">Launch-readiness data is unavailable for this account.</div>';
     return;
@@ -306,7 +309,7 @@ function renderLaunch(){
       <div class="management-actions"><a class="button ghost small" href="..${esc(d.urlPath)}" target="_blank" rel="noopener">Review</a><button class="button secondary small" data-accept-legal="${esc(d.id)}" type="button">Accept for organization</button></div>
     </div>`).join(""):`
     <div class="management-row">
-      <div><strong>No effective production legal package is currently published.</strong><p>The v1.0 legal documents are available as pre-launch drafts in the Trust Center. They cannot be accepted as binding terms until approved and published.</p></div>
+      <div><strong>No effective production legal package is currently published.</strong><p>The v1.0 legal documents are available as pre-launch drafts in the Trust Center. They cannot be accepted as binding terms until counsel-reviewed effective versions are published with immutable hashes.</p></div>
       <div class="management-actions"><a class="button ghost small" href="../legal/" target="_blank" rel="noopener">Review drafts</a></div>
     </div>`;
 
@@ -338,16 +341,23 @@ function renderLaunch(){
       </div>
     </article>`).join(""):'<div class="empty-management">No commercial plans configured.</div>';
 
-  $("productionBlockers").innerHTML=blockers.length?blockers.map(code=>`
-    <div class="management-row"><div><strong>${esc(launchBlockerLabel(code))}</strong><p>${esc(code)}</p></div><span class="small-chip">organization blocker</span></div>
-  `).join(""):'<div class="management-row"><div><strong>Organization-level onboarding gates are complete.</strong><p>TrustRelay will still verify platform-wide production controls before accepting a production activation request.</p></div><span class="small-chip">ready to request</span></div>';
+  const platformBlockers=Array.isArray(platform.blockers)?platform.blockers:[];
+  const orgRows=blockers.map(code=>`
+    <div class="management-row"><div><strong>${esc(launchBlockerLabel(code))}</strong><p>${esc(code)}</p></div><span class="small-chip">organization</span></div>
+  `);
+  const platformRows=platformBlockers.map(item=>`
+    <div class="management-row"><div><strong>${esc(String(item.key||"platform control").replaceAll("_"," "))}</strong><p>${esc(item.ownerNote||item.category||"Platform readiness control is not complete.")}</p></div><span class="small-chip">${esc(item.status||"blocked")}</span></div>
+  `);
+  $("productionBlockers").innerHTML=(orgRows.length||platformRows.length)
+    ? orgRows.concat(platformRows).join("")
+    : '<div class="management-row"><div><strong>Organization and platform production gates are complete.</strong><p>The organization can request final production activation review.</p></div><span class="small-chip">ready</span></div>';
 
   const canManage=hasPerm("organization.manage");
   $("launchOrgProfileForm").classList.toggle("readonly-card",!canManage);
   $("launchContactsForm").classList.toggle("readonly-card",!canManage);
   qsa("#launchOrgProfileForm input,#launchContactsForm input,#launchContactsForm textarea,#launchOrgProfileForm button,#launchContactsForm button").forEach(el=>el.disabled=!canManage);
   $("requestProductionButton").classList.toggle("hidden",!canManage||org.mode==="live");
-  $("requestProductionButton").disabled=!x.readyForProductionRequest;
+  $("requestProductionButton").disabled=!x.readyForProductionRequest||platform.ready!==true;
 
   const portal=$("manageBillingPortalButton");
   if(portal)portal.onclick=async()=>{
@@ -421,7 +431,7 @@ function setup(){
   $("otpForm").addEventListener("submit",async e=>{e.preventDefault();const b=e.submitter;busy(b,true,"Verifying…");try{const {data,error}=await supabase.auth.verifyOtp({email:$("otpEmail").value.trim().toLowerCase(),token:$("otpCode").value.trim(),type:"email"});if(error)throw error;state.session=data.session;state.user=data.user;await startPortal()}catch(err){msg(els.authMessage,err.message||"Invalid or expired code.","error")}finally{busy(b,false)}});
 
   qsa(".verifier-nav .nav-item").forEach(b=>b.onclick=()=>showView(b.dataset.view));qsa("[data-go]").forEach(b=>b.onclick=()=>showView(b.dataset.go));
-  els.orgSelect.onchange=async()=>{state.orgId=els.orgSelect.value;state.launch=null;state.billing=null;await loadDashboard();showView("dashboard")};
+  els.orgSelect.onchange=async()=>{state.orgId=els.orgSelect.value;state.launch=null;state.billing=null;state.platform=null;await loadDashboard();showView("dashboard")};
   $("newOrgButton").onclick=()=>{state.orgId=null;$("noOrgView").classList.remove("hidden");qsa(".portal-section").filter(x=>x.id!=="noOrgView").forEach(x=>x.classList.add("hidden"))};
   $("orgForm").addEventListener("submit",async e=>{e.preventDefault();const b=e.submitter;busy(b,true,"Creating…");try{const x=await rpc("trustrelay_create_organization_v07",{p_name:$("orgName").value.trim(),p_industry:$("orgIndustry").value.trim()||null,p_website:$("orgWebsite").value.trim()||null});state.orgId=x.organization.id;toast("Sandbox organization created.","success");e.currentTarget.reset();await loadOrganizations();showView("dashboard")}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}});
 
