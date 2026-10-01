@@ -171,7 +171,8 @@ function showDecision(result){
       <div><span>Evaluation hash</span><span>${esc(d.evaluationHash||"—")}</span></div>
       <div><span>Audit event</span><span>${esc(d.auditEventId||"—")}</span></div>
       <div><span>Latency</span><span>${esc(d.latencyMs??"—")} ms</span></div>
-    </div>`;
+    </div>
+    ${d.grantId ? `<div class="modal-actions"><button class="button secondary" data-request-evidence-grant="${esc(d.grantId)}" type="button">Request supporting evidence</button></div>` : ""}`;
 }
 
 async function acceptPendingOrgInvite(){
@@ -193,9 +194,29 @@ function setup(){
   $("newOrgButton").onclick=()=>{state.orgId=null;$("noOrgView").classList.remove("hidden");qsa(".portal-section").filter(x=>x.id!=="noOrgView").forEach(x=>x.classList.add("hidden"))};
   $("orgForm").addEventListener("submit",async e=>{e.preventDefault();const b=e.submitter;busy(b,true,"Creating…");try{const x=await rpc("trustrelay_create_organization_v07",{p_name:$("orgName").value.trim(),p_industry:$("orgIndustry").value.trim()||null,p_website:$("orgWebsite").value.trim()||null});state.orgId=x.organization.id;toast("Sandbox organization created.","success");e.currentTarget.reset();await loadOrganizations();showView("dashboard")}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}});
 
+  $("decisionResult").addEventListener("click", (event) => {
+    const button=event.target.closest("[data-request-evidence-grant]");
+    if(!button)return;
+    openModal(`<p class="eyebrow">EVIDENCE REQUEST</p><h2>Request supporting documents.</h2><p>This request is tied to the evaluated grant and will appear for its principal and representative.</p><form id="evidenceRequestForm"><div class="field"><label>Required document types</label><div class="scope-checks"><label><input type="checkbox" name="evtype" value="authority_document" checked> Authority document</label><label><input type="checkbox" name="evtype" value="invoice"> Invoice / bill</label><label><input type="checkbox" name="evtype" value="supporting_document"> Supporting document</label><label><input type="checkbox" name="evtype" value="address_evidence"> Address evidence</label></div></div><div class="field"><label for="evidenceDueAt">Due date <span class="optional-label">optional</span></label><input id="evidenceDueAt" type="datetime-local"></div><input id="evidenceGrantId" type="hidden" value="${esc(button.dataset.requestEvidenceGrant)}"><div class="modal-actions"><button class="button primary" type="submit">Create evidence request</button></div></form>`);
+  });
+
   $("evaluateForm").addEventListener("submit",async e=>{e.preventDefault();const b=e.submitter;busy(b,true,"Evaluating…");try{let evidence={};const raw=$("decisionEvidence").value.trim();if(raw){evidence=JSON.parse(raw);if(!evidence||typeof evidence!=="object"||Array.isArray(evidence))throw new Error("Evidence must be a JSON object.")}const amountRaw=$("decisionAmount").value.trim();const result=await evaluate({orgId:state.orgId,requestId:"req_"+crypto.randomUUID().replaceAll("-",""),correlationId:$("correlationId").value.trim()||null,credential:$("credentialToken").value.trim(),action:$("decisionAction").value.trim(),resource:$("decisionResource").value.trim(),amount:amountRaw===""?null:Number(amountRaw),currency:$("decisionCurrency").value||null,evidence});showDecision(result);toast("Authorization decision recorded.","success");await loadDashboard()}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}});
 
   $("createKeyButton").onclick=()=>openModal(`<p class="eyebrow">NEW PARTNER KEY</p><h2>Create server API key.</h2><p>The raw key is shown once. Store it in your server-side secret manager.</p><form id="keyForm"><div class="field"><label for="keyName">Key name</label><input id="keyName" required maxlength="100" placeholder="Production backend"></div><div class="field"><label>Scopes</label><div class="scope-checks"><label><input type="checkbox" name="scope" value="decisions:read" checked> decisions:read</label><label><input type="checkbox" name="scope" value="decisions:write" checked> decisions:write</label></div></div><div class="modal-actions"><button class="button primary" type="submit">Create key</button></div></form>`);
+  els.modalContent.addEventListener("submit",async e=>{
+    if(e.target.id!=="evidenceRequestForm")return;
+    e.preventDefault();
+    const b=e.submitter;busy(b,true,"Creating…");
+    try{
+      const types=qsa('input[name="evtype"]:checked',e.target).map(x=>x.value);
+      if(!types.length)throw new Error("Choose at least one evidence type.");
+      const raw=$("evidenceDueAt").value;
+      const due=raw?new Date(raw).toISOString():null;
+      await rpc("trustrelay_create_evidence_request_v08",{p_org_id:state.orgId,p_grant_id:$("evidenceGrantId").value,p_types:types,p_due_at:due});
+      closeModal();toast("Evidence request created.","success");await loadDashboard();
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error");busy(b,false)}
+  });
+
   els.modalContent.addEventListener("submit",async e=>{if(e.target.id==="keyForm"){e.preventDefault();const b=e.submitter;busy(b,true,"Creating…");try{const scopes=qsa('input[name="scope"]:checked',e.target).map(x=>x.value);const x=await rpc("trustrelay_create_api_key_v07",{p_org_id:state.orgId,p_name:$("keyName").value.trim(),p_scopes:scopes,p_expires_at:null});els.modalContent.innerHTML=`<p class="eyebrow">KEY CREATED</p><h2>Copy this key now.</h2><p class="warning-copy">TrustRelay stores only its SHA-256 hash. This raw key cannot be recovered later.</p><div class="secret-once">${esc(x.apiKey)}</div><div class="modal-actions"><button id="copyNewKey" class="button primary" type="button">Copy API key</button></div>`;$("copyNewKey").onclick=()=>copyText(x.apiKey,"API key copied");await loadDashboard()}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error");busy(b,false)}}});
 
   $("keyList").addEventListener("click",async e=>{const b=e.target.closest("[data-revoke-key]");if(!b)return;if(!confirm("Revoke this API key? Existing integrations using it will immediately fail."))return;busy(b,true,"Revoking…");try{await rpc("trustrelay_revoke_api_key_v07",{p_org_id:state.orgId,p_key_id:b.dataset.revokeKey});toast("API key revoked.","success");await loadDashboard()}catch(err){toast(String(err.code||err.message),"error")}finally{busy(b,false)}});
