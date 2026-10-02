@@ -152,6 +152,11 @@ do $mig$ begin
  end if;
 end $mig$;
 do $mig$ begin
+ if not exists(select 1 from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='legal_documents' and con.conname='legal_documents_pkey') then
+  alter table public.legal_documents add constraint "legal_documents_pkey" PRIMARY KEY (id);
+ end if;
+end $mig$;
+do $mig$ begin
  if not exists(select 1 from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='legal_acceptances' and con.conname='legal_acceptances_account_id_organization_id_document_id_key') then
   alter table public.legal_acceptances add constraint "legal_acceptances_account_id_organization_id_document_id_key" UNIQUE (account_id, organization_id, document_id);
  end if;
@@ -189,11 +194,6 @@ end $mig$;
 do $mig$ begin
  if not exists(select 1 from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='legal_documents' and con.conname='legal_documents_document_type_version_key') then
   alter table public.legal_documents add constraint "legal_documents_document_type_version_key" UNIQUE (document_type, version);
- end if;
-end $mig$;
-do $mig$ begin
- if not exists(select 1 from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='legal_documents' and con.conname='legal_documents_pkey') then
-  alter table public.legal_documents add constraint "legal_documents_pkey" PRIMARY KEY (id);
  end if;
 end $mig$;
 do $mig$ begin
