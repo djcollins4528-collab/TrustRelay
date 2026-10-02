@@ -19,11 +19,13 @@
 
 Each directory contains the current staging `index.ts` plus `function.json` where applicable. `trustrelay-webhook-egress-v10` is intentionally `verify_jwt=false` because it is an internal transport endpoint authenticated with a high-entropy Vault-backed `X-TrustRelay-Egress-Key`; it does not trust caller-supplied destination validation and independently resolves/validates/pins the outbound target.
 
-## One-time bootstrap
+## Signing-key bootstrap
 
-- trustrelay-signing-bootstrap-v06
+Production does **not** require the retired `trustrelay-signing-bootstrap-v06` endpoint.
 
-Deploy/invoke this only to establish the production ES256 signing key material, then disable or otherwise restrict the bootstrap surface. Do not leave key-bootstrap capability as an ordinary production runtime feature.
+`trustrelay-credential-issue-v06` establishes a fresh environment-local ES256 signing key on first credential issuance if no active key exists. The private JWK is stored in that environment's Supabase Vault through the service-role-only `trustrelay_bootstrap_signing_key_v06` RPC. No signing key material is copied between staging and production.
+
+The repository copy of `trustrelay-signing-bootstrap-v06` is an HTTP 410 retired stub and should not be deployed as an ordinary production runtime feature.
 
 ## Intentionally excluded from production runtime
 
