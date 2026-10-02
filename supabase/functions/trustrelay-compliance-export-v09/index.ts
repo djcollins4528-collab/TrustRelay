@@ -2,11 +2,12 @@
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
 
 const URL=Deno.env.get("SUPABASE_URL")||"";
+const APP_ORIGIN=(Deno.env.get("TRUSTRELAY_APP_ORIGIN")||"").replace(/\/$/,"");
 function envJson(n){try{return JSON.parse(Deno.env.get(n)||"{}")}catch{return{}}}
 function sec(){const x=envJson("SUPABASE_SECRET_KEYS");return x.default||Object.values(x).find(v=>typeof v==="string"&&v)||Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||""}
 function pub(){const x=envJson("SUPABASE_PUBLISHABLE_KEYS");return x.default||Deno.env.get("SUPABASE_ANON_KEY")||""}
 function sh(){const k=sec();const h={apikey:k,"content-type":"application/json",accept:"application/json"};if(k&&!k.startsWith("sb_secret_"))h.authorization="Bearer "+k;return h}
-function out(d,s=200){return Response.json(d,{status:s,headers:{"cache-control":"no-store","x-content-type-options":"nosniff"}})}
+function out(d,s=200,req=null){return Response.json(d,{status:s,headers:{"cache-control":"no-store","x-content-type-options":"nosniff",...corsHeaders(req)}})}
 async function parse(r){const t=await r.text();let d=null;try{d=t?JSON.parse(t):null}catch{}return{ok:r.ok,status:r.status,data:d}}
 async function user(req){
   const auth=req.headers.get("authorization")||"";
@@ -78,16 +79,33 @@ function toCsv(dataset,manifest){
 }
 const admin=createClient(URL,sec(),{auth:{persistSession:false,autoRefreshToken:false}});
 
+function corsHeaders(req){
+  const origin=req?.headers?.get?.("origin")||"";
+  if(!origin||!APP_ORIGIN||origin!==APP_ORIGIN)return{};
+  return {
+    "access-control-allow-origin":origin,
+    "access-control-allow-methods":"POST, OPTIONS",
+    "access-control-allow-headers":"authorization, apikey, content-type",
+    "access-control-max-age":"86400",
+    "vary":"Origin"
+  };
+}
+function corsPreflight(req){
+  const origin=req.headers.get("origin")||"";
+  if(!APP_ORIGIN||origin!==APP_ORIGIN)return Response.json({error:{code:"CORS_ORIGIN_DENIED"}},{status:403});
+  return new Response(null,{status:204,headers:corsHeaders(req)});
+}
 Deno.serve(async req=>{
   try{
-    if(req.method!=="POST")return out({error:{code:"METHOD_NOT_ALLOWED"}},405);
+    if(req.method==="OPTIONS")return corsPreflight(req);
+    if(req.method!=="POST")return out({error:{code:"METHOD_NOT_ALLOWED"}},405,req);
     const session=await user(req);
     const body=await req.json();
     const action=String(body.action||"");
 
     if(action==="list"){
       const center=await userRpc(session.auth,"trustrelay_compliance_center_v09",{p_org_id:String(body.orgId||"")});
-      return out(center);
+      return out(center,200,req);
     }
 
     if(action==="download"){
@@ -109,7 +127,7 @@ Deno.serve(async req=>{
         .from(record.storage_bucket)
         .createSignedUrl(record.storage_key,300,{download:"trustrelay-"+exportId+"."+record.format});
       if(error||!data?.signedUrl)throw{status:503,code:"EXPORT_DOWNLOAD_UNAVAILABLE"};
-      return out({url:data.signedUrl,expiresIn:300,export:item});
+      return out({url:data.signedUrl,expiresIn:300,export:item},200,req);
     }
 
     if(!["create","generate"].includes(action))throw{status:400,code:"ACTION_INVALID"};
@@ -172,7 +190,7 @@ Deno.serve(async req=>{
         manifest:storedManifest,
         url:signedError?null:signed?.signedUrl||null,
         expiresIn:signedError?null:300
-      },201);
+      },201,req);
     }catch(e){
       await rpc("trustrelay_fail_compliance_export_v09",{
         p_export_id:exp.id,
@@ -182,6 +200,6 @@ Deno.serve(async req=>{
       throw e;
     }
   }catch(e){
-    return out({error:{code:e?.code||"INTERNAL_ERROR"}},Number(e?.status)||500);
+    return out({error:{code:e?.code||"INTERNAL_ERROR"}},Number(e?.status)||500,req);
   }
 });
