@@ -75,6 +75,18 @@ grant select,insert,update on public.retention_runs to service_role;
 create index if not exists idx_retention_runs_type_status_completed_v10
   on public.retention_runs(run_type,status,completed_at desc);
 
+drop policy if exists trustrelay_deny_clients on public.pilot_runs;
+create policy trustrelay_deny_clients on public.pilot_runs
+  as restrictive for all to anon,authenticated using(false) with check(false);
+
+create index if not exists idx_privacy_requests_requester_v10
+  on public.privacy_requests(requester_account_id);
+create index if not exists idx_privacy_requests_organization_v10
+  on public.privacy_requests(organization_id);
+create index if not exists idx_retention_policies_approved_by_v10
+  on public.retention_policies(approved_by_account_id);
+
+
 -- No retention policy periods/actions are seeded here. Those require approved legal/business policy.
 
 -- LIVE MIGRATION 20261001230035: trustrelay_v10_governance_retention_hardening
