@@ -47,7 +47,18 @@ async function rpcAdmin(name,payload){
  if(x.data?.ok===false)throw{status:Number(x.data?.status)||400,code:x.data?.code||"REQUEST_REJECTED",details:x.data};
  return x.data
 }
-function out(data,status=200){return Response.json(data,{status,headers:{"cache-control":"no-store","x-content-type-options":"nosniff"}})}
+function corsHeaders(req){
+ const origin=req?.headers?.get?.("origin")||"";
+ if(!origin||!APP_ORIGIN||origin!==APP_ORIGIN)return{};
+ return {
+   "access-control-allow-origin":origin,
+   "access-control-allow-methods":"POST, OPTIONS",
+   "access-control-allow-headers":"authorization, apikey, content-type",
+   "access-control-max-age":"86400",
+   "vary":"Origin"
+ };
+}
+function out(data,status=200,req=null){return Response.json(data,{status,headers:{"cache-control":"no-store","x-content-type-options":"nosniff",...corsHeaders(req)}})}
 function safeOrigin(req){
  const configured=APP_ORIGIN;
  const origin=req.headers.get("origin")||"";
@@ -88,7 +99,12 @@ async function verifyStripeSignature(raw,header){
 
 Deno.serve(async req=>{
  try{
-  if(req.method!=="POST")return out({error:{code:"METHOD_NOT_ALLOWED"}},405);
+  if(req.method==="OPTIONS"){
+    const origin=req.headers.get("origin")||"";
+    if(!APP_ORIGIN||origin!==APP_ORIGIN)return out({error:{code:"CORS_ORIGIN_DENIED"}},403,req);
+    return new Response(null,{status:204,headers:corsHeaders(req)});
+  }
+  if(req.method!=="POST")return out({error:{code:"METHOD_NOT_ALLOWED"}},405,req);
 
   const stripeSig=req.headers.get("stripe-signature");
   if(stripeSig){
@@ -100,7 +116,7 @@ Deno.serve(async req=>{
     const applied=await rpcAdmin("trustrelay_apply_stripe_event_v10",{
       p_event_id:String(event.id),p_event_type:String(event.type),p_payload_json:raw
     });
-    return out({received:true,result:applied});
+    return out({received:true,result:applied},200,req);
   }
 
   const {authorization}=await userFrom(req);
@@ -111,7 +127,20 @@ Deno.serve(async req=>{
 
   if(action==="status"){
     const status=await rpcUser("trustrelay_billing_status_v10",{p_org_id:orgId},authorization);
-    return out({...status,providerConfigured:providerConfigured(),checkoutPlans:{starter:Boolean(PRICE_STARTER),growth:Boolean(PRICE_GROWTH)}});
+    const secretsConfigured=providerConfigured();
+    let stripeAccountOk=false, stripeAccountError=null;
+    if(secretsConfigured){
+      try{await assertStripeAccount();stripeAccountOk=true}
+      catch(e){stripeAccountError=e?.code||"STRIPE_ACCOUNT_CHECK_FAILED"}
+    }
+    return out({
+      ...status,
+      providerConfigured:secretsConfigured&&stripeAccountOk,
+      providerSecretsConfigured:secretsConfigured,
+      stripeAccountOk,
+      stripeAccountError,
+      checkoutPlans:{starter:Boolean(PRICE_STARTER),growth:Boolean(PRICE_GROWTH)}
+    },200,req);
   }
 
   const perms=await rpcUser("trustrelay_my_org_permissions_v09",{p_org_id:orgId},authorization);
@@ -146,7 +175,7 @@ Deno.serve(async req=>{
 
     const session=await stripe("checkout/sessions",params);
     if(!session?.url)throw{status:502,code:"STRIPE_CHECKOUT_URL_MISSING"};
-    return out({url:session.url,sessionId:session.id,planCode},201);
+    return out({url:session.url,sessionId:session.id,planCode},201,req);
   }
 
   if(action==="portal"){
@@ -154,11 +183,11 @@ Deno.serve(async req=>{
     if(!ctx?.billing?.customerId)throw{status:409,code:"BILLING_CUSTOMER_NOT_CREATED"};
     const session=await stripe("billing_portal/sessions",{customer:ctx.billing.customerId,return_url:safeOrigin(req)+"/verifier/?billing=return"});
     if(!session?.url)throw{status:502,code:"STRIPE_PORTAL_URL_MISSING"};
-    return out({url:session.url});
+    return out({url:session.url},200,req);
   }
 
   throw{status:400,code:"ACTION_INVALID"};
  }catch(e){
-  return out({error:{code:e?.code||"INTERNAL_ERROR",details:e?.details||null}},Number(e?.status)||500)
+  return out({error:{code:e?.code||"INTERNAL_ERROR",details:e?.details||null}},Number(e?.status)||500,req)
  }
 });
