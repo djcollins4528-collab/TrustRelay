@@ -11,13 +11,8 @@ begin
     );
   end if;
 
-  if not exists(select 1 from vault.secrets where name='trustrelay-webhook-egress-url-v10') then
-    perform vault.create_secret(
-      'https://awrradmcwgeepwwdrbzi.supabase.co/functions/v1/trustrelay-webhook-egress-v10',
-      'trustrelay-webhook-egress-url-v10',
-      'TrustRelay v1.0 webhook egress Edge Function URL; replace in production backend'
-    );
-  end if;
+  -- Environment-specific egress URL is provisioned after the Edge Function is deployed.
+  -- Never seed a URL from another Supabase project here.
 end $$;
 
 create or replace function public.trustrelay_webhook_egress_secret_v10()
