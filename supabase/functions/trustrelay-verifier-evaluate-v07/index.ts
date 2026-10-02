@@ -1,6 +1,7 @@
 
 const URL=Deno.env.get("SUPABASE_URL")||"";
-const APP_ORIGIN=(Deno.env.get("TRUSTRELAY_APP_ORIGIN")||"").replace(/\/$/,"");
+const CANONICAL_APP_ORIGIN=URL.includes("msfrbsnihylfynrtdgxe")?"https://trustrelay-production.onrender.com":URL.includes("kdvroylluosshcjmfbfq")?"https://trustrelay-staging.onrender.com":"";
+const APP_ORIGIN=(Deno.env.get("TRUSTRELAY_APP_ORIGIN")||CANONICAL_APP_ORIGIN).replace(/\/$/,"");
 function envJson(n){try{return JSON.parse(Deno.env.get(n)||"{}")}catch{return{}}}
 function pub(){const x=envJson("SUPABASE_PUBLISHABLE_KEYS");return x.default||Deno.env.get("SUPABASE_ANON_KEY")||""}
 function sec(){const x=envJson("SUPABASE_SECRET_KEYS");return x.default||Object.values(x).find(v=>typeof v==="string"&&v)||Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||""}
@@ -19,7 +20,7 @@ async function user(req){
 }
 function corsHeaders(req){
   const origin=req?.headers?.get?.("origin")||"";
-  if(!origin||!APP_ORIGIN||origin!==APP_ORIGIN)return{};
+  if(!origin||!CANONICAL_APP_ORIGIN||origin!==CANONICAL_APP_ORIGIN)return{};
   return {
     "access-control-allow-origin":origin,
     "access-control-allow-methods":"POST, OPTIONS",
@@ -30,7 +31,7 @@ function corsHeaders(req){
 }
 function corsPreflight(req){
   const origin=req.headers.get("origin")||"";
-  if(!APP_ORIGIN||origin!==APP_ORIGIN)return Response.json({error:{code:"CORS_ORIGIN_DENIED"}},{status:403});
+  if(!CANONICAL_APP_ORIGIN||origin!==CANONICAL_APP_ORIGIN)return Response.json({error:{code:"CORS_ORIGIN_DENIED"}},{status:403});
   return new Response(null,{status:204,headers:corsHeaders(req)});
 }
 function out(data,status=200,req=null){
