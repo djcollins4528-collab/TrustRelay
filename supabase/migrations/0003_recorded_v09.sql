@@ -344,6 +344,59 @@ grant execute on function private.trustrelay_notify_org_v09(text,text[],text,tex
 grant execute on function public.trustrelay_emit_org_event_v09(text,text,jsonb) to service_role;
 grant execute on function public.trustrelay_verify_org_audit_chain_v09(text) to service_role;
 
+-- Durable webhook schema reconcile for clean installs.
+alter table public.webhook_deliveries
+  add column if not exists max_attempts integer not null default 5,
+  add column if not exists next_attempt_at text,
+  add column if not exists dead_lettered_at text,
+  add column if not exists net_request_id bigint,
+  add column if not exists last_attempt_at text,
+  add column if not exists last_attempt_duration_ms integer,
+  add column if not exists manually_redelivered_count integer not null default 0;
+
+alter table public.webhook_subscriptions
+  add column if not exists api_version text not null default 'v0.9',
+  add column if not exists failure_threshold integer not null default 10,
+  add column if not exists pause_reason text,
+  add column if not exists paused_at text,
+  add column if not exists last_success_at text,
+  add column if not exists last_failure_at text,
+  add column if not exists secret_rotated_at text;
+
+alter table public.webhook_deliveries
+  drop constraint if exists webhook_deliveries_status_v07;
+alter table public.webhook_deliveries
+  drop constraint if exists webhook_deliveries_status_v09;
+alter table public.webhook_deliveries
+  add constraint webhook_deliveries_status_v09
+  check (status = any(array['pending','dispatched','retrying','delivered','dead_letter','failed']::text[]));
+
+alter table public.webhook_subscriptions
+  drop constraint if exists webhook_subscriptions_status_v07;
+alter table public.webhook_subscriptions
+  drop constraint if exists webhook_subscriptions_status_v09;
+alter table public.webhook_subscriptions
+  add constraint webhook_subscriptions_status_v09
+  check (status = any(array['active','paused','disabled','revoked']::text[]));
+
+alter table public.webhook_deliveries
+  drop constraint if exists webhook_deliveries_subscription_event_v09;
+alter table public.webhook_deliveries
+  add constraint webhook_deliveries_subscription_event_v09 unique(subscription_id,event_id);
+
+alter table public.webhook_deliveries
+  drop constraint if exists webhook_deliveries_max_attempts_v09;
+alter table public.webhook_deliveries
+  add constraint webhook_deliveries_max_attempts_v09 check (max_attempts between 1 and 20);
+
+alter table public.webhook_subscriptions
+  drop constraint if exists webhook_subscriptions_failure_threshold_v09;
+alter table public.webhook_subscriptions
+  add constraint webhook_subscriptions_failure_threshold_v09 check (failure_threshold between 1 and 100);
+
+create index if not exists idx_webhook_deliveries_due_v09
+  on public.webhook_deliveries(status,next_attempt_at,created_at);
+
 -- ============================================================
 -- 20261001204426 trustrelay_v09_event_notifications_finalize
 -- ============================================================
