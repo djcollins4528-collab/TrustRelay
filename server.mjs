@@ -255,10 +255,10 @@ async function proxyWebhookEgress(req,res){
 const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url||"/","http://localhost");
   if(url.pathname==="/internal/webhook-egress"){
-    return proxyWebhookEgress(req,res);
+    return sendJson(res,410,{error:{code:"WEBHOOK_EGRESS_RETIRED",replacement:"trustrelay-webhook-egress-v10"}});
   }
   if(url.pathname==="/healthz"){
-    return sendJson(res,200,{status:"ok",service:"trustrelay-web",version:VERSION,environment:ENVIRONMENT,webhookEgressConfigured:Boolean(WEBHOOK_EGRESS_SECRET)});
+    return sendJson(res,200,{status:"ok",service:"trustrelay-web",version:VERSION,environment:ENVIRONMENT,webhookEgressMode:"supabase-edge-pinned-tls-v10"});
   }
   if(url.pathname==="/version"){
     return sendJson(res,200,{version:VERSION,environment:ENVIRONMENT});
