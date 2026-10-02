@@ -2,6 +2,324 @@
 -- Apply in listed order to an empty compatible Supabase project.
 
 -- ============================================================
+-- Clean-bootstrap prelude: v0.9 objects that existed in live staging
+-- before the recorded migration history was exported.
+-- ============================================================
+create schema if not exists private;
+
+create table if not exists public.account_notifications (
+  id text primary key,
+  account_id text not null references public.accounts(id) on delete cascade,
+  organization_id text references public.organizations(id) on delete cascade,
+  event_type text not null,
+  severity text not null default 'info',
+  title text not null,
+  body text not null,
+  resource_type text,
+  resource_id text,
+  metadata_json text not null default '{}',
+  status text not null default 'unread',
+  read_at text,
+  dismissed_at text,
+  created_at text not null
+);
+
+create table if not exists public.notification_preferences (
+  account_id text not null references public.accounts(id) on delete cascade,
+  category text not null,
+  in_app boolean not null default true,
+  created_at text,
+  updated_at text,
+  primary key (account_id,category),
+  constraint notification_preferences_category_v09
+    check (category = any(array['authority','evidence','identity','organization','webhook','compliance','security']::text[]))
+);
+
+create table if not exists public.notifications (
+  id text primary key,
+  account_id text not null references public.accounts(id) on delete cascade,
+  organization_id text references public.organizations(id) on delete cascade,
+  category text not null,
+  event_type text not null,
+  severity text not null default 'info',
+  title text not null,
+  body text not null,
+  data_json text not null default '{}',
+  dedupe_key text,
+  status text not null default 'unread',
+  read_at text,
+  archived_at text,
+  created_at text not null,
+  updated_at text,
+  constraint notifications_category_v09
+    check (category = any(array['authority','evidence','identity','organization','webhook','compliance','security']::text[])),
+  constraint notifications_severity_v09
+    check (severity = any(array['info','success','warning','critical']::text[])),
+  constraint notifications_status_v09
+    check (status = any(array['unread','read','archived']::text[]))
+);
+create unique index if not exists ux_notifications_account_dedupe_v09
+  on public.notifications(account_id,dedupe_key) where dedupe_key is not null;
+
+create table if not exists public.organization_audit_events (
+  id text primary key,
+  organization_id text not null references public.organizations(id) on delete cascade,
+  actor_account_id text references public.accounts(id) on delete set null,
+  event_type text not null,
+  target_type text,
+  target_id text,
+  metadata_json text not null default '{}',
+  prev_hash text,
+  event_hash text not null,
+  created_at text not null
+);
+create index if not exists idx_org_audit_org_created_v09
+  on public.organization_audit_events(organization_id,created_at,id);
+create unique index if not exists ux_org_audit_org_hash_v09
+  on public.organization_audit_events(organization_id,event_hash);
+
+create table if not exists public.webhook_delivery_attempts (
+  id text primary key,
+  delivery_id text not null references public.webhook_deliveries(id) on delete cascade,
+  attempt_number integer not null,
+  net_request_id bigint,
+  request_timestamp text,
+  response_status integer,
+  response_body_excerpt text,
+  error_text text,
+  success boolean,
+  duration_ms integer,
+  created_at text not null,
+  completed_at text,
+  constraint webhook_delivery_attempts_number_v09 check (attempt_number > 0),
+  unique (delivery_id,attempt_number)
+);
+create index if not exists idx_webhook_attempts_delivery_created_v09
+  on public.webhook_delivery_attempts(delivery_id,created_at);
+
+create table if not exists public.compliance_exports (
+  id text primary key,
+  organization_id text not null references public.organizations(id) on delete cascade,
+  requested_by_account_id text references public.accounts(id) on delete set null,
+  format text not null,
+  scopes_json text not null default '[]',
+  from_at text not null,
+  to_at text not null,
+  status text not null default 'preparing',
+  storage_bucket text not null,
+  storage_key text not null,
+  content_sha256 text,
+  row_count integer,
+  size_bytes bigint,
+  manifest_json text,
+  previous_export_hash text,
+  export_hash text,
+  audit_chain_valid boolean,
+  audit_chain_head text,
+  generated_at text,
+  completed_at text,
+  expires_at text not null,
+  error_code text,
+  error_message text,
+  created_at text not null,
+  constraint compliance_exports_format_v09 check (format = any(array['json','csv']::text[])),
+  constraint compliance_exports_status_v09 check (status = any(array['preparing','ready','failed','expired']::text[])),
+  unique (organization_id,storage_key)
+);
+create index if not exists idx_compliance_exports_org_created_v09
+  on public.compliance_exports(organization_id,created_at desc);
+
+alter table public.account_notifications enable row level security;
+alter table public.notification_preferences enable row level security;
+alter table public.notifications enable row level security;
+alter table public.organization_audit_events enable row level security;
+alter table public.webhook_delivery_attempts enable row level security;
+alter table public.compliance_exports enable row level security;
+
+revoke all on table public.account_notifications from public,anon,authenticated;
+revoke all on table public.notification_preferences from public,anon,authenticated;
+revoke all on table public.notifications from public,anon,authenticated;
+revoke all on table public.organization_audit_events from public,anon,authenticated;
+revoke all on table public.webhook_delivery_attempts from public,anon,authenticated;
+revoke all on table public.compliance_exports from public,anon,authenticated;
+
+grant select,insert,update,delete on table public.account_notifications to service_role;
+grant select,insert,update,delete on table public.notification_preferences to service_role;
+grant select,insert,update,delete on table public.notifications to service_role;
+grant select,insert on table public.organization_audit_events to service_role;
+grant select,insert,update on table public.webhook_delivery_attempts to service_role;
+grant select,insert,update on table public.compliance_exports to service_role;
+
+create or replace function private.trustrelay_org_audit_hash_v09(
+  p_id text,p_org_id text,p_actor_account_id text,p_event_type text,
+  p_target_type text,p_target_id text,p_metadata jsonb,p_prev_hash text,p_created_at text
+)
+returns text
+language sql
+immutable
+set search_path=extensions,pg_catalog
+as $
+  select encode(digest(
+    jsonb_build_object(
+      'id',p_id,
+      'organizationId',p_org_id,
+      'actorAccountId',p_actor_account_id,
+      'eventType',p_event_type,
+      'targetType',p_target_type,
+      'targetId',p_target_id,
+      'metadata',coalesce(p_metadata,'{}'::jsonb),
+      'prevHash',p_prev_hash,
+      'createdAt',p_created_at
+    )::text,
+    'sha256'
+  ),'hex');
+$;
+
+create or replace function private.trustrelay_append_org_audit_v09(
+  p_org_id text,p_actor_account_id text,p_event_type text,
+  p_target_type text,p_target_id text,p_metadata jsonb
+)
+returns text
+language plpgsql
+security definer
+set search_path=public,private,extensions,pg_catalog
+as $
+declare
+  v_id text:='orgaudit_'||replace(gen_random_uuid()::text,'-','');
+  v_now text:=to_char(clock_timestamp() at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+  v_prev text;
+  v_hash text;
+begin
+  if p_org_id is null then return null; end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_org_id,0));
+
+  select event_hash into v_prev
+  from public.organization_audit_events
+  where organization_id=p_org_id
+  order by created_at desc,id desc
+  limit 1;
+
+  v_hash:=private.trustrelay_org_audit_hash_v09(
+    v_id,p_org_id,p_actor_account_id,p_event_type,p_target_type,p_target_id,
+    coalesce(p_metadata,'{}'::jsonb),v_prev,v_now
+  );
+
+  insert into public.organization_audit_events(
+    id,organization_id,actor_account_id,event_type,target_type,target_id,
+    metadata_json,prev_hash,event_hash,created_at
+  ) values(
+    v_id,p_org_id,p_actor_account_id,p_event_type,p_target_type,p_target_id,
+    coalesce(p_metadata,'{}'::jsonb)::text,v_prev,v_hash,v_now
+  );
+  return v_id;
+end;
+$;
+
+create or replace function public.trustrelay_verify_org_audit_chain_v09(p_org_id text)
+returns jsonb
+language plpgsql
+security definer
+set search_path=public,private,pg_catalog
+as $
+declare
+  v_row public.organization_audit_events%rowtype;
+  v_prev text:=null;
+  v_expected text;
+  v_count integer:=0;
+begin
+  for v_row in
+    select * from public.organization_audit_events
+    where organization_id=p_org_id
+    order by created_at,id
+  loop
+    v_expected:=private.trustrelay_org_audit_hash_v09(
+      v_row.id,v_row.organization_id,v_row.actor_account_id,v_row.event_type,
+      v_row.target_type,v_row.target_id,coalesce(v_row.metadata_json,'{}')::jsonb,
+      v_prev,v_row.created_at
+    );
+    if v_row.prev_hash is distinct from v_prev or v_row.event_hash is distinct from v_expected then
+      return jsonb_build_object(
+        'ok',false,'valid',false,'organizationId',p_org_id,
+        'failedEventId',v_row.id,'eventsChecked',v_count
+      );
+    end if;
+    v_prev:=v_row.event_hash;
+    v_count:=v_count+1;
+  end loop;
+  return jsonb_build_object(
+    'ok',true,'valid',true,'organizationId',p_org_id,
+    'eventsChecked',v_count,'headHash',v_prev
+  );
+end;
+$;
+
+create or replace function private.trustrelay_notify_org_v09(
+  p_org_id text,p_roles text[],p_category text,p_event_type text,p_severity text,
+  p_title text,p_body text,p_resource_type text,p_resource_id text,p_metadata jsonb
+)
+returns integer
+language plpgsql
+security definer
+set search_path=public,private,pg_catalog
+as $
+declare
+  v_account_id text;
+  v_count integer:=0;
+begin
+  if p_org_id is null then return 0; end if;
+  for v_account_id in
+    select account_id
+    from public.organization_members
+    where organization_id=p_org_id
+      and status='active'
+      and (p_roles is null or role=any(p_roles))
+  loop
+    perform private.trustrelay_notify_account_v09(
+      v_account_id,p_org_id,p_category,p_event_type,p_severity,p_title,p_body,
+      p_resource_type,p_resource_id,coalesce(p_metadata,'{}'::jsonb)
+    );
+    v_count:=v_count+1;
+  end loop;
+  return v_count;
+end;
+$;
+
+create or replace function public.trustrelay_emit_org_event_v09(
+  p_org_id text,p_event_type text,p_data jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=public,private,pg_catalog
+as $
+declare
+  v_id text:='evt_'||replace(gen_random_uuid()::text,'-','');
+  v_now text:=to_char(clock_timestamp() at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+  v_payload text;
+  v_result jsonb;
+begin
+  v_payload:=jsonb_build_object(
+    'id',v_id,'type',p_event_type,'createdAt',v_now,
+    'organizationId',p_org_id,'data',coalesce(p_data,'{}'::jsonb)
+  )::text;
+  v_result:=public.trustrelay_queue_webhooks_v07(p_org_id,p_event_type,v_id,v_payload);
+  perform public.trustrelay_dispatch_due_webhooks_v09(25);
+  return coalesce(v_result,'{}'::jsonb)||jsonb_build_object('eventId',v_id);
+end;
+$;
+
+revoke all on function private.trustrelay_org_audit_hash_v09(text,text,text,text,text,text,jsonb,text,text) from public,anon,authenticated;
+revoke all on function private.trustrelay_append_org_audit_v09(text,text,text,text,text,jsonb) from public,anon,authenticated;
+revoke all on function private.trustrelay_notify_org_v09(text,text[],text,text,text,text,text,text,text,jsonb) from public,anon,authenticated;
+revoke all on function public.trustrelay_emit_org_event_v09(text,text,jsonb) from public,anon,authenticated;
+revoke all on function public.trustrelay_verify_org_audit_chain_v09(text) from public,anon,authenticated;
+
+grant execute on function private.trustrelay_append_org_audit_v09(text,text,text,text,text,jsonb) to service_role;
+grant execute on function private.trustrelay_notify_org_v09(text,text[],text,text,text,text,text,text,text,jsonb) to service_role;
+grant execute on function public.trustrelay_emit_org_event_v09(text,text,jsonb) to service_role;
+grant execute on function public.trustrelay_verify_org_audit_chain_v09(text) to service_role;
+
+-- ============================================================
 -- 20261001204426 trustrelay_v09_event_notifications_finalize
 -- ============================================================
 create or replace function private.trustrelay_org_member_event_trigger_v09()
@@ -1780,7 +2098,7 @@ $$;
 -- ============================================================
 -- 20261001205653 trustrelay_v09_drop_legacy_notification_table
 -- ============================================================
-drop table public.account_notifications;
+drop table if exists public.account_notifications;
 
 -- ============================================================
 -- 20261001205702 trustrelay_v09_canonical_consolidation
