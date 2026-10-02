@@ -44,7 +44,7 @@ Deno.serve(async req=>{
       p_mime_type:String(v.mimeType||""),
       p_size_bytes:Number(v.sizeBytes||0)
     });
-    if(!prepared?.ok)return out({error:{code:prepared?.code||"DOCUMENT_PREPARE_FAILED"}},Number(prepared?.status)||400);
+    if(!prepared?.ok)return out({error:{code:prepared?.code||"DOCUMENT_PREPARE_FAILED"}},Number(prepared?.status)||400,req);
     const d=prepared.document;
     const {data,error}=await admin.storage.from(d.storage_bucket).createSignedUploadUrl(d.storage_key,{upsert:false});
     if(error||!data?.token)throw{status:503,code:"SIGNED_UPLOAD_UNAVAILABLE"};
@@ -52,7 +52,7 @@ Deno.serve(async req=>{
   }
   if(action==="finalize"){
     const access=await rpc("trustrelay_document_access_v08",{p_uid:u.id,p_document_id:String(v.documentId||""),p_mode:"finalize"});
-    if(!access?.ok)return out({error:{code:access?.code||"DOCUMENT_ACCESS_DENIED"}},Number(access?.status)||403);
+    if(!access?.ok)return out({error:{code:access?.code||"DOCUMENT_ACCESS_DENIED"}},Number(access?.status)||403,req);
     const d=access.document;
     const {data,error}=await admin.storage.from(d.storage_bucket).download(d.storage_key);
     if(error||!data)throw{status:404,code:"UPLOADED_OBJECT_NOT_FOUND"};
@@ -62,8 +62,8 @@ Deno.serve(async req=>{
     const detected=allowed.includes(type)?type:String(d.mime_type||"");
     const hash=await sha256Hex(buf);
     const fin=await rpc("trustrelay_finalize_document_v08",{p_uid:u.id,p_document_id:d.id,p_content_sha256:hash,p_actual_size:size,p_detected_mime:detected});
-    if(!fin?.ok)return out({error:{code:fin?.code||"DOCUMENT_FINALIZE_FAILED"}},Number(fin?.status)||400);
-    return out({document:{id:fin.document.id,classification:fin.document.classification,reviewStatus:fin.document.review_status,scanStatus:fin.document.scan_status,contentSha256:fin.document.content_sha256,sizeBytes:fin.document.size_bytes,finalizedAt:fin.document.finalized_at}},req);
+    if(!fin?.ok)return out({error:{code:fin?.code||"DOCUMENT_FINALIZE_FAILED"}},Number(fin?.status)||400,req);
+    return out({document:{id:fin.document.id,classification:fin.document.classification,reviewStatus:fin.document.review_status,scanStatus:fin.document.scan_status,contentSha256:fin.document.content_sha256,sizeBytes:fin.document.size_bytes,finalizedAt:fin.document.finalized_at}},200,req);
   }
   if(action==="download"){
     const access=await rpc("trustrelay_document_access_v08",{p_uid:u.id,p_document_id:String(v.documentId||""),p_mode:"download"});
@@ -71,8 +71,8 @@ Deno.serve(async req=>{
     const d=access.document;
     const {data,error}=await admin.storage.from(d.storage_bucket).createSignedUrl(d.storage_key,300,{download:d.original_filename||d.display_name||"trustrelay-document"});
     if(error||!data?.signedUrl)throw{status:503,code:"SIGNED_DOWNLOAD_UNAVAILABLE"};
-    return out({url:data.signedUrl,expiresIn:300},req);
+    return out({url:data.signedUrl,expiresIn:300},200,req);
   }
   return out({error:{code:"ACTION_INVALID"}},400,req);
- }catch(e){return out({error:{code:e?.code||"INTERNAL_ERROR"}},Number(e?.status)||500)}
+ }catch(e){return out({error:{code:e?.code||"INTERNAL_ERROR"}},Number(e?.status)||500,req)}
 });
