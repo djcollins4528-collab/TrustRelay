@@ -8,6 +8,8 @@ const STRIPE_WEBHOOK_SECRET=Deno.env.get("STRIPE_WEBHOOK_SECRET")||"";
 const PRICE_STARTER=Deno.env.get("STRIPE_PRICE_STARTER")||"";
 const PRICE_GROWTH=Deno.env.get("STRIPE_PRICE_GROWTH")||"";
 const APP_ORIGIN=(Deno.env.get("TRUSTRELAY_APP_ORIGIN")||"").replace(/\/$/,"");
+const EXPECTED_STRIPE_ACCOUNT=URL.includes("msfrbsnihylfynrtdgxe")?"acct_1UM70OGom69ZF9sJ":URL.includes("kdvroylluosshcjmfbfq")?"acct_1UM70VGlBsQ7ehU9":"";
+let stripeAccountVerified=false;
 
 function providerConfigured(){return Boolean(STRIPE_KEY&&STRIPE_WEBHOOK_SECRET&&PRICE_STARTER&&PRICE_GROWTH&&APP_ORIGIN)}
 function adminHeaders(){
@@ -16,6 +18,15 @@ function adminHeaders(){
  return h
 }
 async function parse(r){const t=await r.text();let d=null;try{d=t?JSON.parse(t):null}catch{}return{ok:r.ok,status:r.status,data:d,text:t}}
+async function assertStripeAccount(){
+ if(stripeAccountVerified)return;
+ if(!STRIPE_KEY||!EXPECTED_STRIPE_ACCOUNT)throw{status:503,code:"BILLING_NOT_CONFIGURED"};
+ const r=await fetch("https://api.stripe.com/v1/account",{headers:{authorization:"Bearer "+STRIPE_KEY,accept:"application/json"}});
+ const x=await parse(r);
+ if(!x.ok)throw{status:502,code:"STRIPE_PROVIDER_ERROR",details:{providerStatus:x.status,type:x.data?.error?.type||null,code:x.data?.error?.code||null}};
+ if(x.data?.id!==EXPECTED_STRIPE_ACCOUNT)throw{status:503,code:"STRIPE_ACCOUNT_MISMATCH"};
+ stripeAccountVerified=true;
+}
 async function userFrom(req){
  const auth=req.headers.get("authorization")||"";
  if(!/^Bearer\s+\S+/i.test(auth))throw{status:401,code:"AUTH_REQUIRED"};
@@ -45,6 +56,7 @@ function safeOrigin(req){
 }
 async function stripe(path,params){
  if(!STRIPE_KEY)throw{status:503,code:"BILLING_NOT_CONFIGURED"};
+ await assertStripeAccount();
  const body=new URLSearchParams();
  for(const [k,v] of Object.entries(params||{})){if(v!==null&&v!==undefined&&v!=="")body.append(k,String(v))}
  const r=await fetch("https://api.stripe.com/v1/"+path,{method:"POST",headers:{authorization:"Bearer "+STRIPE_KEY,"content-type":"application/x-www-form-urlencoded"},body});
@@ -84,6 +96,7 @@ Deno.serve(async req=>{
     await verifyStripeSignature(raw,stripeSig);
     let event;try{event=JSON.parse(raw)}catch{throw{status:400,code:"STRIPE_PAYLOAD_INVALID"}}
     if(!event?.id||!event?.type)throw{status:400,code:"STRIPE_EVENT_INVALID"};
+    await assertStripeAccount();
     const applied=await rpcAdmin("trustrelay_apply_stripe_event_v10",{
       p_event_id:String(event.id),p_event_type:String(event.type),p_payload_json:raw
     });
