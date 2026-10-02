@@ -2434,7 +2434,7 @@ as $$
 declare
   v_now text := to_char(clock_timestamp() at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
 begin
-  if new.email_confirmed_at is not null then
+  if new.confirmed_at is not null then
     update public.persons p
     set
       identity_status='verified',
@@ -2461,7 +2461,7 @@ for each row execute function private.trustrelay_sync_email_verification_v061();
 
 drop trigger if exists zz_trustrelay_auth_email_confirmed_update_v061 on auth.users;
 create trigger zz_trustrelay_auth_email_confirmed_update_v061
-after update of email_confirmed_at on auth.users
+after update of confirmed_at on auth.users
 for each row execute function private.trustrelay_sync_email_verification_v061();
 
 create or replace function private.trustrelay_activate_verified_grants_v061()
