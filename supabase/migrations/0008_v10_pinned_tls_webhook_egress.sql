@@ -256,6 +256,29 @@ begin
 end;
 $$;
 
+create or replace function public.trustrelay_webhook_maintenance_v09()
+returns jsonb
+language plpgsql
+security definer
+set search_path=public,pg_catalog
+as $maint$
+declare
+  v_reconcile jsonb;
+  v_dispatch jsonb;
+begin
+  v_reconcile:=public.trustrelay_reconcile_webhooks_v09(100);
+  v_dispatch:=public.trustrelay_dispatch_due_webhooks_v09(100);
+  return jsonb_build_object(
+    'ok',true,
+    'reconcile',v_reconcile,
+    'dispatch',v_dispatch
+  );
+end;
+$maint$;
+
+revoke all on function public.trustrelay_webhook_maintenance_v09() from public,anon,authenticated;
+grant execute on function public.trustrelay_webhook_maintenance_v09() to service_role;
+
 revoke all on function public.trustrelay_dispatch_due_webhooks_v09(integer) from public,anon,authenticated;
 revoke all on function public.trustrelay_reconcile_webhooks_v09(integer) from public,anon,authenticated;
 grant execute on function public.trustrelay_dispatch_due_webhooks_v09(integer) to service_role;
