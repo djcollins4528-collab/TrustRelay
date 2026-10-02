@@ -14,6 +14,7 @@ const SUPABASE_URL=String(process.env.SUPABASE_URL||"").replace(/\/$/,"");
 const SUPABASE_PUBLISHABLE_KEY=String(process.env.SUPABASE_PUBLISHABLE_KEY||"");
 const ENVIRONMENT=String(process.env.TRUSTRELAY_ENVIRONMENT||"staging");
 const VERSION=String(process.env.TRUSTRELAY_APP_VERSION||"1.0.0");
+const TURNSTILE_SITE_KEY=String(process.env.TRUSTRELAY_TURNSTILE_SITE_KEY||"");
 const BODY_LIMIT=Math.max(1024,Number(process.env.TRUSTRELAY_BODY_LIMIT_BYTES||262144));
 const REQUEST_TIMEOUT=Math.max(1000,Number(process.env.TRUSTRELAY_REQUEST_TIMEOUT_MS||8000));
 const WEBHOOK_EGRESS_SECRET=String(process.env.TRUSTRELAY_WEBHOOK_EGRESS_SECRET||"");
@@ -32,11 +33,12 @@ const csp=[
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'none'",
-  "script-src 'self' https://cdn.jsdelivr.net",
+  "script-src 'self' https://cdn.jsdelivr.net https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  `connect-src 'self' ${supabaseOrigin} ${supabaseWs} https://api.stripe.com https://checkout.stripe.com`,
+  `connect-src 'self' ${supabaseOrigin} ${supabaseWs} https://api.stripe.com https://checkout.stripe.com https://challenges.cloudflare.com`,
+  "frame-src https://challenges.cloudflare.com",
   "form-action 'self' https://checkout.stripe.com",
   "upgrade-insecure-requests"
 ].join("; ");
@@ -268,7 +270,8 @@ const server=http.createServer(async(req,res)=>{
       supabaseUrl:SUPABASE_URL,
       supabasePublishableKey:SUPABASE_PUBLISHABLE_KEY,
       environment:ENVIRONMENT,
-      appVersion:VERSION
+      appVersion:VERSION,
+      turnstileSiteKey:TURNSTILE_SITE_KEY
     });
   }
   if(url.pathname.startsWith("/v1/decisions/")){
