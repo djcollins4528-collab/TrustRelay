@@ -2,6 +2,81 @@
 -- Canonical repo catch-up for migrations applied on 2026-10-01/02 after 0004_v10_production_candidate_baseline.sql.
 -- Preserves the exact applied statement order, followed by the cancelled-status readiness fix.
 
+-- Clean-bootstrap prelude for operational tables that existed before the recorded v1.0 hardening migrations.
+
+create table if not exists public.privacy_requests(
+  id text primary key,
+  requester_account_id text references public.accounts(id) on delete set null,
+  organization_id text references public.organizations(id) on delete set null,
+  request_type text,
+  status text not null default 'open',
+  requester_email text,
+  intake_source text,
+  description text,
+  details_json text not null default '{}',
+  acknowledged_at text,
+  completed_at text,
+  denied_at text,
+  denial_reason text,
+  created_at text not null,
+  updated_at text not null
+);
+
+alter table public.privacy_requests enable row level security;
+drop policy if exists trustrelay_deny_clients on public.privacy_requests;
+create policy trustrelay_deny_clients on public.privacy_requests
+  as restrictive for all to anon,authenticated using(false) with check(false);
+revoke all on public.privacy_requests from anon,authenticated;
+grant select,insert,update on public.privacy_requests to service_role;
+create index if not exists idx_privacy_requests_status_created_v10
+  on public.privacy_requests(status,created_at desc);
+
+create table if not exists public.retention_policies(
+  record_class text primary key,
+  retention_days integer,
+  action text,
+  status text not null default 'draft',
+  legal_basis_note text,
+  approved_by_account_id text references public.accounts(id) on delete set null,
+  approved_at text,
+  created_at text not null,
+  updated_at text not null,
+  constraint retention_days_positive_v10 check (retention_days is null or retention_days > 0)
+);
+
+alter table public.retention_policies enable row level security;
+drop policy if exists trustrelay_deny_clients on public.retention_policies;
+create policy trustrelay_deny_clients on public.retention_policies
+  as restrictive for all to anon,authenticated using(false) with check(false);
+revoke all on public.retention_policies from anon,authenticated;
+grant select,insert,update on public.retention_policies to service_role;
+
+create table if not exists public.retention_runs(
+  id text primary key,
+  run_type text not null,
+  status text not null,
+  policy_snapshot_json text not null default '[]',
+  candidate_counts_json text not null default '{}',
+  action_counts_json text not null default '{}',
+  evidence_hash text,
+  started_at text not null,
+  completed_at text,
+  initiated_by text,
+  error_code text,
+  error_message text
+);
+
+alter table public.retention_runs enable row level security;
+drop policy if exists trustrelay_deny_clients on public.retention_runs;
+create policy trustrelay_deny_clients on public.retention_runs
+  as restrictive for all to anon,authenticated using(false) with check(false);
+revoke all on public.retention_runs from anon,authenticated;
+grant select,insert,update on public.retention_runs to service_role;
+create index if not exists idx_retention_runs_type_status_completed_v10
+  on public.retention_runs(run_type,status,completed_at desc);
+
+-- No retention policy periods/actions are seeded here. Those require approved legal/business policy.
+
 -- LIVE MIGRATION 20261001230035: trustrelay_v10_governance_retention_hardening
 alter table private.identity_reviewers
   add column if not exists approval_status text not null default 'legacy',
