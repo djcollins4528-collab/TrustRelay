@@ -11,6 +11,69 @@ const TRUSTRELAY_ENVIRONMENT = String(runtimeConfig.environment || "unknown");
 const TRUSTRELAY_APP_VERSION = String(runtimeConfig.appVersion || "1.0.0");
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) throw new Error("RUNTIME_CONFIG_INVALID");
 
+const TURNSTILE_SITE_KEY = String(runtimeConfig.turnstileSiteKey || "");
+let turnstileToken = "";
+let turnstileWidgetId = null;
+let turnstileScriptPromise = null;
+
+function loadTurnstile() {
+  if (!TURNSTILE_SITE_KEY) return Promise.resolve(null);
+  if (window.turnstile) return Promise.resolve(window.turnstile);
+  if (!turnstileScriptPromise) {
+    turnstileScriptPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        const started = Date.now();
+        const wait = () => {
+          if (window.turnstile) return resolve(window.turnstile);
+          if (Date.now() - started > 10000) return reject(new Error("SECURITY_CHECK_UNAVAILABLE"));
+          setTimeout(wait, 50);
+        };
+        wait();
+      };
+      script.onerror = () => reject(new Error("SECURITY_CHECK_UNAVAILABLE"));
+      document.head.appendChild(script);
+    });
+  }
+  return turnstileScriptPromise;
+}
+
+async function mountTurnstile(form) {
+  if (!TURNSTILE_SITE_KEY || !form || form.dataset.turnstileMounted === "1") return;
+  form.dataset.turnstileMounted = "1";
+  const slot = document.createElement("div");
+  slot.className = "turnstile-slot";
+  slot.style.margin = "12px 0";
+  const submit = form.querySelector('button[type="submit"],input[type="submit"]');
+  if (submit) form.insertBefore(slot, submit); else form.appendChild(slot);
+  const turnstile = await loadTurnstile();
+  turnstileWidgetId = turnstile.render(slot, {
+    sitekey: TURNSTILE_SITE_KEY,
+    callback: (token) => { turnstileToken = token || ""; },
+    "expired-callback": () => { turnstileToken = ""; },
+    "error-callback": () => { turnstileToken = ""; }
+  });
+}
+
+function captchaTokenForAuth() {
+  if (TURNSTILE_SITE_KEY && !turnstileToken) {
+    throw new Error("Complete the security check and try again.");
+  }
+  return turnstileToken || undefined;
+}
+
+function resetTurnstile() {
+  if (!TURNSTILE_SITE_KEY) return;
+  turnstileToken = "";
+  if (window.turnstile && turnstileWidgetId !== null) {
+    try { window.turnstile.reset(turnstileWidgetId); } catch {}
+  }
+}
+
+
 const supabase=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
   auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
 });
@@ -429,7 +492,8 @@ function parseUrlInvite(){
 }
 
 function setup(){
-  $("magicForm").addEventListener("submit",async e=>{e.preventDefault();clearMsg(els.authMessage);const b=e.submitter;busy(b,true,"Sending secure link…");const email=$("authEmail").value.trim().toLowerCase(),name=$("authName").value.trim();try{const options={shouldCreateUser:true,emailRedirectTo:authRedirectUrl()};if(name)options.data={full_name:name};const {error}=await supabase.auth.signInWithOtp({email,options});if(error)throw error;localStorage.setItem("trustrelay_verifier_email",email);$("otpEmail").value=email;msg(els.authMessage,"Check your email for the TrustRelay magic link. If your email contains a six-digit code, use the code option below.","success")}catch(err){msg(els.authMessage,err.message||"Could not send sign-in email.","error")}finally{busy(b,false)}});
+  void mountTurnstile($("magicForm")).catch(()=>msg(els.authMessage,"Security check could not load. Refresh and try again.","error"));
+  $("magicForm").addEventListener("submit",async e=>{e.preventDefault();clearMsg(els.authMessage);const b=e.submitter;busy(b,true,"Sending secure link…");const email=$("authEmail").value.trim().toLowerCase(),name=$("authName").value.trim();try{const options={shouldCreateUser:true,emailRedirectTo:authRedirectUrl()};const captchaToken=captchaTokenForAuth();if(captchaToken)options.captchaToken=captchaToken;if(name)options.data={full_name:name};const {error}=await supabase.auth.signInWithOtp({email,options});if(error)throw error;localStorage.setItem("trustrelay_verifier_email",email);$("otpEmail").value=email;msg(els.authMessage,"Check your email for the TrustRelay magic link. If your email contains a six-digit code, use the code option below.","success")}catch(err){msg(els.authMessage,err.message||"Could not send sign-in email.","error")}finally{resetTurnstile();busy(b,false)}});
   $("showOtp").onclick=()=>showOtp(true);$("backToMagic").onclick=()=>showOtp(false);
   $("otpForm").addEventListener("submit",async e=>{e.preventDefault();const b=e.submitter;busy(b,true,"Verifying…");try{const {data,error}=await supabase.auth.verifyOtp({email:$("otpEmail").value.trim().toLowerCase(),token:$("otpCode").value.trim(),type:"email"});if(error)throw error;state.session=data.session;state.user=data.user;await startPortal()}catch(err){msg(els.authMessage,err.message||"Invalid or expired code.","error")}finally{busy(b,false)}});
 
