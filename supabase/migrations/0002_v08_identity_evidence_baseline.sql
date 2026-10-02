@@ -200,6 +200,11 @@ do $mig$ begin
   end if;
 end $mig$;
 do $mig$ begin
+  if not exists(select 1 from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='evidence_requests' and con.conname='evidence_requests_pkey') then
+    alter table public.evidence_requests add constraint "evidence_requests_pkey" PRIMARY KEY (id);
+  end if;
+end $mig$;
+do $mig$ begin
   if not exists(select 1 from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='evidence_request_documents' and con.conname='evidence_request_documents_request_id_fkey') then
     alter table public.evidence_request_documents add constraint "evidence_request_documents_request_id_fkey" FOREIGN KEY (request_id) REFERENCES evidence_requests(id) ON DELETE CASCADE;
   end if;
@@ -212,11 +217,6 @@ end $mig$;
 do $mig$ begin
   if not exists(select 1 from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='evidence_requests' and con.conname='evidence_requests_grant_id_fkey') then
     alter table public.evidence_requests add constraint "evidence_requests_grant_id_fkey" FOREIGN KEY (grant_id) REFERENCES authority_grants(id) ON DELETE CASCADE;
-  end if;
-end $mig$;
-do $mig$ begin
-  if not exists(select 1 from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='evidence_requests' and con.conname='evidence_requests_pkey') then
-    alter table public.evidence_requests add constraint "evidence_requests_pkey" PRIMARY KEY (id);
   end if;
 end $mig$;
 do $mig$ begin
