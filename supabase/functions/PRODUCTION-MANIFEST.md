@@ -43,6 +43,8 @@ The following staging functions are legacy, duplicate, pilot, diagnostic, supers
 
 Production health is provided by the Render `/healthz` endpoint and the Partner API `/healthz` endpoint.
 
+Webhook delivery uses `trustrelay-webhook-egress-v10` as the required v1.0 pinned-TLS egress boundary. The legacy Render `/internal/webhook-egress` route is retired and returns HTTP 410.
+
 ## Required production secrets / configuration
 
 Supabase-managed environment:
