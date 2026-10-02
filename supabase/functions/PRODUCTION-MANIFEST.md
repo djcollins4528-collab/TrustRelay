@@ -15,8 +15,9 @@
 - trustrelay-verifier-evaluate-v07
 - trustrelay-compliance-export-v09
 - trustrelay-billing-v10
+- trustrelay-webhook-egress-v10
 
-Each directory contains the current staging `index.ts` plus `function.json` recording the JWT setting and staged source hash at export time.
+Each directory contains the current staging `index.ts` plus `function.json` where applicable. `trustrelay-webhook-egress-v10` is intentionally `verify_jwt=false` because it is an internal transport endpoint authenticated with a high-entropy Vault-backed `X-TrustRelay-Egress-Key`; it does not trust caller-supplied destination validation and independently resolves/validates/pins the outbound target.
 
 ## One-time bootstrap
 
@@ -57,3 +58,10 @@ TrustRelay billing:
 - TRUSTRELAY_APP_ORIGIN
 
 The Stripe values must be production/test-environment appropriate and must never be committed to Git.
+
+
+TrustRelay webhook egress:
+- Vault secret `trustrelay-webhook-egress-v10` — internal dispatcher-to-egress authentication secret
+- Vault secret `trustrelay-webhook-egress-url-v10` — environment-specific Edge Function URL
+
+The v1.0 egress resolves A/AAAA at delivery time, rejects private/reserved addresses, opens the TCP socket directly to a validated IP, upgrades to TLS using the original hostname for certificate validation, and rejects HTTP redirects.

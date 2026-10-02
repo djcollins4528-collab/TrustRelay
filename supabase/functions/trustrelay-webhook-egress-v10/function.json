@@ -1,6 +1,5 @@
 {
-  "slug": "trustrelay-webhook-egress-v10",
   "verify_jwt": false,
-  "staging_version": 3,
-  "sha256": "7bfe34da2a028f36716ca1c9b27b7912b5b647ab7d406a49668b3626ff626ccc"
+  "source_version": 3,
+  "source_sha256": "7bfe34da2a028f36716ca1c9b27b7912b5b647ab7d406a49668b3626ff626ccc"
 }
