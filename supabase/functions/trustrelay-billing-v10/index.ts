@@ -1,5 +1,6 @@
 
 const URL=Deno.env.get("SUPABASE_URL")||"";
+const CANONICAL_APP_ORIGIN=URL.includes("msfrbsnihylfynrtdgxe")?"https://trustrelay-production.onrender.com":URL.includes("kdvroylluosshcjmfbfq")?"https://trustrelay-staging.onrender.com":"";
 function envJson(name){try{return JSON.parse(Deno.env.get(name)||"{}")}catch{return{}}}
 function secretKey(){const x=envJson("SUPABASE_SECRET_KEYS");return x.default||Object.values(x).find(v=>typeof v==="string"&&v)||Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||""}
 function publishableKey(){const x=envJson("SUPABASE_PUBLISHABLE_KEYS");return x.default||Deno.env.get("SUPABASE_ANON_KEY")||""}
@@ -7,11 +8,11 @@ const STRIPE_KEY=Deno.env.get("STRIPE_SECRET_KEY")||"";
 const STRIPE_WEBHOOK_SECRET=Deno.env.get("STRIPE_WEBHOOK_SECRET")||"";
 const PRICE_STARTER=Deno.env.get("STRIPE_PRICE_STARTER")||"";
 const PRICE_GROWTH=Deno.env.get("STRIPE_PRICE_GROWTH")||"";
-const APP_ORIGIN=(Deno.env.get("TRUSTRELAY_APP_ORIGIN")||"").replace(/\/$/,"");
+const APP_ORIGIN=(Deno.env.get("TRUSTRELAY_APP_ORIGIN")||CANONICAL_APP_ORIGIN).replace(/\/$/,"");
 const EXPECTED_STRIPE_ACCOUNT=URL.includes("msfrbsnihylfynrtdgxe")?"acct_1UM70OGom69ZF9sJ":URL.includes("kdvroylluosshcjmfbfq")?"acct_1UM70VGlBsQ7ehU9":"";
 let stripeAccountVerified=false;
 
-function providerConfigured(){return Boolean(STRIPE_KEY&&STRIPE_WEBHOOK_SECRET&&PRICE_STARTER&&PRICE_GROWTH&&APP_ORIGIN)}
+function providerConfigured(){return Boolean(STRIPE_KEY&&STRIPE_WEBHOOK_SECRET&&PRICE_STARTER&&PRICE_GROWTH&&CANONICAL_APP_ORIGIN)}
 function adminHeaders(){
  const k=secretKey(); const h={apikey:k,"content-type":"application/json",accept:"application/json"};
  if(k&&!k.startsWith("sb_secret_"))h.authorization="Bearer "+k;
@@ -49,7 +50,7 @@ async function rpcAdmin(name,payload){
 }
 function corsHeaders(req){
  const origin=req?.headers?.get?.("origin")||"";
- if(!origin||!APP_ORIGIN||origin!==APP_ORIGIN)return{};
+ if(!origin||!CANONICAL_APP_ORIGIN||origin!==CANONICAL_APP_ORIGIN)return{};
  return {
    "access-control-allow-origin":origin,
    "access-control-allow-methods":"POST, OPTIONS",
