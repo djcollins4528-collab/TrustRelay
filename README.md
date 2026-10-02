@@ -76,7 +76,7 @@ Webhook signing secrets are encrypted in Supabase Vault. Delivery signatures use
 
 `<timestamp>.<raw_body>`
 
-Webhook endpoint creation rejects obvious localhost/private-network targets to reduce SSRF exposure.
+Webhook endpoint creation rejects obvious localhost/private-network targets; v1.0 delivery also re-resolves DNS, rejects private/reserved addresses, pins the TLS socket to a validated public IP, and blocks redirects.
 
 ### v0.7 verification completed
 
@@ -229,14 +229,9 @@ Supported event catalog includes:
 - `evidence.requested`
 - `evidence.submitted`
 - `evidence.resolved`
-- `identity.assurance.changed`
-- `organization.member.invited`
 - `organization.member.joined`
 - `organization.member.role_changed`
 - `organization.member.disabled`
-- `organization.member.restored`
-- `organization.member.removed`
-- `organization.ownership.transferred`
 - `compliance.export.ready`
 - `webhook.test`
 
