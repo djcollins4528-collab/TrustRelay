@@ -168,6 +168,13 @@ Deno.serve(async req=>{
   const perms=await rpcUser("trustrelay_my_org_permissions_v09",{p_org_id:orgId},authorization);
   if(perms?.permissions?.["organization.manage"]!==true)throw{status:403,code:"ORGANIZATION_PERMISSION_DENIED"};
 
+  if(action==="select_plan"){
+    const planCode=String(input.planCode||"").trim();
+    if(!["starter","growth","enterprise"].includes(planCode))throw{status:400,code:"BILLING_PLAN_INVALID"};
+    const selected=await rpcUser("trustrelay_select_billing_plan_v10",{p_org_id:orgId,p_plan_code:planCode},authorization);
+    return out({selected:true,planCode,...selected},200,req);
+  }
+
   if(!providerConfigured())throw{status:503,code:"BILLING_NOT_CONFIGURED"};
 
   if(action==="checkout"){
