@@ -7,9 +7,9 @@ const STRIPE_KEY=Deno.env.get("STRIPE_SECRET_KEY")||"";
 const STRIPE_WEBHOOK_SECRET=Deno.env.get("STRIPE_WEBHOOK_SECRET")||"";
 const PRICE_STARTER=Deno.env.get("STRIPE_PRICE_STARTER")||"";
 const PRICE_GROWTH=Deno.env.get("STRIPE_PRICE_GROWTH")||"";
-const APP_ORIGIN=(Deno.env.get("TRUSTRELAY_APP_ORIGIN")||"https://trustrelay-app-staging.onrender.com").replace(/\/$/,"");
+const APP_ORIGIN=(Deno.env.get("TRUSTRELAY_APP_ORIGIN")||"").replace(/\/$/,"");
 
-function providerConfigured(){return Boolean(STRIPE_KEY&&STRIPE_WEBHOOK_SECRET&&PRICE_STARTER&&PRICE_GROWTH)}
+function providerConfigured(){return Boolean(STRIPE_KEY&&STRIPE_WEBHOOK_SECRET&&PRICE_STARTER&&PRICE_GROWTH&&APP_ORIGIN)}
 function adminHeaders(){
  const k=secretKey(); const h={apikey:k,"content-type":"application/json",accept:"application/json"};
  if(k&&!k.startsWith("sb_secret_"))h.authorization="Bearer "+k;
