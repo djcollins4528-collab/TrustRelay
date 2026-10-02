@@ -404,6 +404,7 @@ Production activation is controlled by database-backed readiness controls and is
 - `docs/V1.0-IMPLEMENTATION-RESULT.md`
 - `docs/V1.0-PRODUCTION-ACTIVATION.md`
 - `docs/V1.0-RELEASE-GATE-FINAL.md`
+- `docs/V1.0-INFRASTRUCTURE-ISOLATION.md`
 - `docs/V1.0-LEGAL-REVIEW-CHECKLIST.md`
 - `docs/V1.0-INCIDENT-RESPONSE.md`
 - `docs/V1.0-PRIVACY-REQUEST-PROCEDURE.md`
