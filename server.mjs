@@ -1,4 +1,9 @@
 import http from "node:http";
+import https from "node:https";
+import dns from "node:dns";
+import net from "node:net";
+import tls from "node:tls";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +16,9 @@ const ENVIRONMENT=String(process.env.TRUSTRELAY_ENVIRONMENT||"staging");
 const VERSION=String(process.env.TRUSTRELAY_APP_VERSION||"1.0.0");
 const BODY_LIMIT=Math.max(1024,Number(process.env.TRUSTRELAY_BODY_LIMIT_BYTES||262144));
 const REQUEST_TIMEOUT=Math.max(1000,Number(process.env.TRUSTRELAY_REQUEST_TIMEOUT_MS||8000));
+const WEBHOOK_EGRESS_SECRET=String(process.env.TRUSTRELAY_WEBHOOK_EGRESS_SECRET||"");
+const WEBHOOK_TARGET_TIMEOUT=Math.max(1000,Math.min(30000,Number(process.env.TRUSTRELAY_WEBHOOK_TARGET_TIMEOUT_MS||10000)));
+const WEBHOOK_RESPONSE_LIMIT=Math.max(4096,Math.min(262144,Number(process.env.TRUSTRELAY_WEBHOOK_RESPONSE_LIMIT_BYTES||65536)));
 
 if(!SUPABASE_URL||!SUPABASE_PUBLISHABLE_KEY){
   console.error("SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY are required");
@@ -69,11 +77,11 @@ function safeFile(urlPath){
   if(candidate!==ROOT&&!candidate.startsWith(ROOT+path.sep))return null;
   return candidate;
 }
-async function readBody(req){
+async function readBody(req,limit=BODY_LIMIT){
   const chunks=[];let size=0;
   for await(const chunk of req){
     size+=chunk.length;
-    if(size>BODY_LIMIT)throw Object.assign(new Error("BODY_TOO_LARGE"),{status:413});
+    if(size>limit)throw Object.assign(new Error("BODY_TOO_LARGE"),{status:413});
     chunks.push(chunk);
   }
   return Buffer.concat(chunks);
@@ -103,10 +111,154 @@ async function proxyPartner(req,res,url){
   }finally{clearTimeout(timer)}
 }
 
+
+function secretEqual(a,b){
+  if(!a||!b)return false;
+  const aa=Buffer.from(String(a));const bb=Buffer.from(String(b));
+  return aa.length===bb.length&&crypto.timingSafeEqual(aa,bb);
+}
+function ipv4Number(ip){
+  const p=ip.split(".").map(Number);
+  if(p.length!==4||p.some(x=>!Number.isInteger(x)||x<0||x>255))return null;
+  return (((p[0]<<24)>>>0)+(p[1]<<16)+(p[2]<<8)+p[3])>>>0;
+}
+function inV4(ip,base,bits){
+  const x=ipv4Number(ip),b=ipv4Number(base);if(x===null||b===null)return true;
+  const mask=bits===0?0:(0xffffffff<<(32-bits))>>>0;
+  return (x&mask)===(b&mask);
+}
+function isPublicIpv4(ip){
+  const blocked=[
+    ["0.0.0.0",8],["10.0.0.0",8],["100.64.0.0",10],["127.0.0.0",8],
+    ["169.254.0.0",16],["172.16.0.0",12],["192.0.0.0",24],["192.0.2.0",24],
+    ["192.88.99.0",24],["192.168.0.0",16],["198.18.0.0",15],["198.51.100.0",24],
+    ["203.0.113.0",24],["224.0.0.0",4],["240.0.0.0",4]
+  ];
+  return !blocked.some(([base,bits])=>inV4(ip,base,bits));
+}
+function isPublicIpv6(ip){
+  const x=ip.toLowerCase().split("%")[0];
+  const firstText=x.split(":")[0];
+  const first=Number.parseInt(firstText,16);
+  if(!Number.isFinite(first)||first<0x2000||first>0x3fff)return false;
+  if(/^2001:(?:0{0,3}0)(?::|$)/.test(x))return false; // Teredo
+  if(/^2001:(?:0{0,3}2)(?::|$)/.test(x))return false; // benchmarking
+  if(/^2001:(?:0{0,3}1[0-9a-f])(?::|$)/.test(x))return false; // ORCHID/reserved
+  if(/^2001:db8(?::|$)/.test(x))return false; // documentation
+  if(/^2002(?::|$)/.test(x))return false; // 6to4
+  return true;
+}
+function isPublicAddress(ip){
+  const kind=net.isIP(ip);
+  if(kind===4)return isPublicIpv4(ip);
+  if(kind===6)return isPublicIpv6(ip);
+  return false;
+}
+async function resolvePinnedTarget(hostname){
+  const raw=hostname.replace(/^\[/,"").replace(/\]$/,"").replace(/\.$/,"").toLowerCase();
+  if(!raw||raw==="localhost"||raw.endsWith(".localhost")||raw.endsWith(".local")||raw.endsWith(".internal")){
+    throw Object.assign(new Error("WEBHOOK_PRIVATE_TARGET"),{status:403});
+  }
+  if(net.isIP(raw)){
+    if(!isPublicAddress(raw))throw Object.assign(new Error("WEBHOOK_PRIVATE_TARGET"),{status:403});
+    return raw;
+  }
+  let answers;
+  try{answers=await dns.promises.lookup(raw,{all:true,verbatim:true})}
+  catch{throw Object.assign(new Error("WEBHOOK_DNS_RESOLUTION_FAILED"),{status:502})}
+  const addresses=[...new Set((answers||[]).map(x=>x.address).filter(Boolean))];
+  if(!addresses.length)throw Object.assign(new Error("WEBHOOK_DNS_RESOLUTION_FAILED"),{status:502});
+  if(addresses.some(ip=>!isPublicAddress(ip))){
+    throw Object.assign(new Error("WEBHOOK_PRIVATE_TARGET"),{status:403});
+  }
+  return addresses[0];
+}
+function webhookHeaders(input,hostHeader,body){
+  const allowed=new Map([
+    ["content-type","Content-Type"],["user-agent","User-Agent"],
+    ["x-trustrelay-event","X-TrustRelay-Event"],["x-trustrelay-delivery","X-TrustRelay-Delivery"],
+    ["x-trustrelay-timestamp","X-TrustRelay-Timestamp"],["x-trustrelay-signature","X-TrustRelay-Signature"]
+  ]);
+  const out={Host:hostHeader,"Content-Length":Buffer.byteLength(body)};
+  for(const [k,v] of Object.entries(input||{})){
+    const target=allowed.get(k.toLowerCase());
+    if(target&&typeof v==="string"&&v.length<=2048)out[target]=v;
+  }
+  if(!out["Content-Type"])out["Content-Type"]="application/json";
+  return out;
+}
+async function deliverPinnedWebhook(endpoint,body,inputHeaders){
+  let u;
+  try{u=new URL(endpoint)}catch{throw Object.assign(new Error("WEBHOOK_URL_INVALID"),{status:400})}
+  if(u.protocol!=="https:"||u.username||u.password||!u.hostname){
+    throw Object.assign(new Error("WEBHOOK_URL_INVALID"),{status:400});
+  }
+  if(u.port&&u.port!=="443")throw Object.assign(new Error("WEBHOOK_PORT_FORBIDDEN"),{status:400});
+  if((u.pathname+u.search).length>8192)throw Object.assign(new Error("WEBHOOK_URL_INVALID"),{status:400});
+  const originalHost=u.hostname.replace(/^\[/,"").replace(/\]$/,"").replace(/\.$/,"");
+  const pinned=await resolvePinnedTarget(originalHost);
+  const requestHeaders=webhookHeaders(inputHeaders,u.host,body);
+  return await new Promise((resolve,reject)=>{
+    const out=https.request({
+      protocol:"https:",hostname:pinned,port:443,method:"POST",path:u.pathname+u.search,
+      servername:originalHost,rejectUnauthorized:true,
+      checkServerIdentity:(_host,cert)=>tls.checkServerIdentity(originalHost,cert),
+      headers:requestHeaders
+    },up=>{
+      const chunks=[];let size=0;
+      up.on("data",chunk=>{
+        size+=chunk.length;
+        if(size>WEBHOOK_RESPONSE_LIMIT){
+          up.destroy(Object.assign(new Error("WEBHOOK_RESPONSE_TOO_LARGE"),{status:502}));
+          return;
+        }
+        chunks.push(chunk);
+      });
+      up.on("end",()=>resolve({
+        status:up.statusCode||502,
+        contentType:up.headers["content-type"]||"application/octet-stream",
+        body:Buffer.concat(chunks)
+      }));
+    });
+    out.setTimeout(WEBHOOK_TARGET_TIMEOUT,()=>out.destroy(Object.assign(new Error("WEBHOOK_TARGET_TIMEOUT"),{status:504})));
+    out.on("error",reject);
+    out.end(body);
+  });
+}
+async function proxyWebhookEgress(req,res){
+  if(!WEBHOOK_EGRESS_SECRET)return sendJson(res,503,{error:{code:"WEBHOOK_EGRESS_NOT_CONFIGURED"}});
+  const auth=String(req.headers.authorization||"");
+  const token=auth.startsWith("Bearer ")?auth.slice(7):"";
+  if(!secretEqual(token,WEBHOOK_EGRESS_SECRET))return sendJson(res,401,{error:{code:"WEBHOOK_EGRESS_UNAUTHORIZED"}});
+  if(req.method!=="POST")return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"POST"});
+  try{
+    const raw=await readBody(req,BODY_LIMIT+65536);
+    let input;try{input=JSON.parse(raw.toString("utf8"))}catch{throw Object.assign(new Error("WEBHOOK_RELAY_PAYLOAD_INVALID"),{status:400})}
+    if(typeof input?.endpointUrl!=="string"||typeof input?.body!=="string"||input.body.length>BODY_LIMIT){
+      throw Object.assign(new Error("WEBHOOK_RELAY_PAYLOAD_INVALID"),{status:400});
+    }
+    const delivered=await deliverPinnedWebhook(input.endpointUrl,input.body,input.headers||{});
+    res.writeHead(delivered.status,headers({
+      "Content-Type":delivered.contentType,
+      "Content-Length":delivered.body.length,
+      "Cache-Control":"no-store"
+    }));
+    res.end(delivered.body);
+  }catch(e){
+    const code=String(e?.message||"WEBHOOK_EGRESS_FAILED");
+    const status=Number(e?.status)||502;
+    console.warn("webhook-egress",code);
+    return sendJson(res,status,{error:{code}});
+  }
+}
+
 const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url||"/","http://localhost");
+  if(url.pathname==="/internal/webhook-egress"){
+    return proxyWebhookEgress(req,res);
+  }
   if(url.pathname==="/healthz"){
-    return sendJson(res,200,{status:"ok",service:"trustrelay-web",version:VERSION,environment:ENVIRONMENT});
+    return sendJson(res,200,{status:"ok",service:"trustrelay-web",version:VERSION,environment:ENVIRONMENT,webhookEgressConfigured:Boolean(WEBHOOK_EGRESS_SECRET)});
   }
   if(url.pathname==="/version"){
     return sendJson(res,200,{version:VERSION,environment:ENVIRONMENT});
