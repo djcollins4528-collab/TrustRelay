@@ -182,8 +182,13 @@ Deno.serve(async req=>{
     const price=priceFor(planCode);
     if(!price)throw{status:400,code:"BILLING_PLAN_NOT_CHECKOUT_ENABLED"};
 
-    await rpcUser("trustrelay_select_billing_plan_v10",{p_org_id:orgId,p_plan_code:planCode},authorization);
     const ctx=await rpcAdmin("trustrelay_billing_provider_context_v10",{p_org_id:orgId});
+    const activeStates=new Set(["active","trialing","past_due","unpaid"]);
+    if(ctx?.billing?.subscriptionId && activeStates.has(String(ctx?.billing?.status||""))){
+      throw{status:409,code:"BILLING_SUBSCRIPTION_EXISTS"};
+    }
+
+    await rpcUser("trustrelay_select_billing_plan_v10",{p_org_id:orgId,p_plan_code:planCode},authorization);
     const origin=safeOrigin(req);
 
     const params={
