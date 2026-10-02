@@ -33,17 +33,20 @@ function corsPreflight(req){
   if(!APP_ORIGIN||origin!==APP_ORIGIN)return Response.json({error:{code:"CORS_ORIGIN_DENIED"}},{status:403});
   return new Response(null,{status:204,headers:corsHeaders(req)});
 }
+function out(data,status=200,req=null){
+  return Response.json(data,{status,headers:{"cache-control":"no-store","x-content-type-options":"nosniff",...corsHeaders(req)}});
+}
 Deno.serve(async req=>{
   try{
     if(req.method==="OPTIONS")return corsPreflight(req);
-    if(req.method!=="POST")return Response.json({error:{code:"METHOD_NOT_ALLOWED"}},{status:405,headers:corsHeaders(req)});
+    if(req.method!=="POST")return out({error:{code:"METHOD_NOT_ALLOWED"}},405,req);
     const u=await user(req);
     const body=await req.json();
     const orgId=String(body.orgId||"").trim();
-    if(!orgId)return Response.json({error:{code:"ORGANIZATION_REQUIRED"}},{status:400,headers:corsHeaders(req)});
+    if(!orgId)return out({error:{code:"ORGANIZATION_REQUIRED"}},400,req);
 
     const key=await rpc("trustrelay_get_portal_key_v07",{p_auth_user_id:u.id,p_org_id:orgId});
-    if(!key?.ok)return Response.json({error:{code:key?.code||"ORGANIZATION_ACCESS_DENIED"}},{status:Number(key?.status)||403,headers:corsHeaders(req)});
+    if(!key?.ok)return out({error:{code:key?.code||"ORGANIZATION_ACCESS_DENIED"}},Number(key?.status)||403,req);
 
     const partnerBody={...body};
     delete partnerBody.orgId;
@@ -59,7 +62,7 @@ Deno.serve(async req=>{
       body:JSON.stringify(partnerBody)
     });
     const result=await parse(partner);
-    if(!result.ok)return Response.json(result.data||{error:{code:"PARTNER_API_ERROR"}},{status:result.status,headers:corsHeaders(req)});
+    if(!result.ok)return out(result.data||{error:{code:"PARTNER_API_ERROR"}},result.status,req);
 
     await rpc("trustrelay_mark_portal_decision_v07",{
       p_auth_user_id:u.id,p_org_id:orgId,p_request_id:String(partnerBody.requestId||"")
@@ -67,9 +70,9 @@ Deno.serve(async req=>{
 
     if(result.data?.decision)result.data.decision.source="portal";
     result.data.portal={organizationId:orgId,role:key.role};
-    return Response.json(result.data,{headers:{"cache-control":"no-store","x-content-type-options":"nosniff"}},{headers:corsHeaders(req)});
+    return out(result.data,200,req);
   }catch(e){
     const status=Number(e?.status)||500;
-    return Response.json({error:{code:e?.code||"INTERNAL_ERROR"}},{status,headers:{"cache-control":"no-store"}},{headers:corsHeaders(req)});
+    return out({error:{code:e?.code||"INTERNAL_ERROR"}},status,req);
   }
 });
