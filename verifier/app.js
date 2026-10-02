@@ -326,6 +326,7 @@ function renderLaunch(){
   `;
 
   const plans=(b.plans||[]).filter(p=>p.code!=="sandbox");
+  const hasLiveSubscription=bs.hasSubscription&&["active","trialing","past_due","unpaid"].includes(String(bs.status||""));
   $("billingPlanList").innerHTML=plans.length?plans.map(p=>`
     <article class="portal-card billing-plan-card ${p.code===bs.planCode?"selected":""}">
       <div class="card-heading"><div><h3>${esc(p.name)}</h3><p>${esc(formatMoney(p.monthlyPriceCents,p.currency))}</p></div>${p.code===bs.planCode?'<span class="small-chip">selected</span>':""}</div>
@@ -336,8 +337,10 @@ function renderLaunch(){
       </div>
       <div class="modal-actions">
         ${p.billingMode==="subscription"?
-          `<button class="button secondary small" data-select-plan="${esc(p.code)}" type="button">Select</button><button class="button primary small" data-checkout-plan="${esc(p.code)}" type="button" ${b.providerConfigured?"":"disabled"}>${b.providerConfigured?"Start checkout":"Stripe setup required"}</button>`:
-          '<a class="button ghost small" href="../legal/business-terms.html" target="_blank" rel="noopener">Enterprise contract</a>'}
+          (hasLiveSubscription
+            ? `<button class="button secondary small" type="button" disabled>${p.code===bs.planCode?"Current plan":"Manage in billing portal"}</button>`
+            : `<button class="button secondary small" data-select-plan="${esc(p.code)}" type="button">Select</button><button class="button primary small" data-checkout-plan="${esc(p.code)}" type="button" ${b.providerConfigured?"":"disabled"}>${b.providerConfigured?"Start checkout":"Stripe setup required"}</button>`)
+          : '<a class="button ghost small" href="../legal/business-terms.html" target="_blank" rel="noopener">Enterprise contract</a>'}
       </div>
     </article>`).join(""):'<div class="empty-management">No commercial plans configured.</div>';
 
