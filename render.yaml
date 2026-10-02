@@ -25,9 +25,3 @@ services:
         value: "262144"
       - key: TRUSTRELAY_REQUEST_TIMEOUT_MS
         value: "8000"
-      - key: TRUSTRELAY_WEBHOOK_EGRESS_SECRET
-        sync: false
-      - key: TRUSTRELAY_WEBHOOK_TARGET_TIMEOUT_MS
-        value: "10000"
-      - key: TRUSTRELAY_WEBHOOK_RESPONSE_LIMIT_BYTES
-        value: "65536"
