@@ -158,7 +158,7 @@ returns text
 language sql
 immutable
 set search_path=extensions,pg_catalog
-as $
+as $tr$
   select encode(digest(
     jsonb_build_object(
       'id',p_id,
@@ -173,7 +173,7 @@ as $
     )::text,
     'sha256'
   ),'hex');
-$;
+$tr$;
 
 create or replace function private.trustrelay_append_org_audit_v09(
   p_org_id text,p_actor_account_id text,p_event_type text,
@@ -183,7 +183,7 @@ returns text
 language plpgsql
 security definer
 set search_path=public,private,extensions,pg_catalog
-as $
+as $tr$
 declare
   v_id text:='orgaudit_'||replace(gen_random_uuid()::text,'-','');
   v_now text:=to_char(clock_timestamp() at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
@@ -213,14 +213,14 @@ begin
   );
   return v_id;
 end;
-$;
+$tr$;
 
 create or replace function public.trustrelay_verify_org_audit_chain_v09(p_org_id text)
 returns jsonb
 language plpgsql
 security definer
 set search_path=public,private,pg_catalog
-as $
+as $tr$
 declare
   v_row public.organization_audit_events%rowtype;
   v_prev text:=null;
@@ -251,7 +251,7 @@ begin
     'eventsChecked',v_count,'headHash',v_prev
   );
 end;
-$;
+$tr$;
 
 create or replace function private.trustrelay_notify_org_v09(
   p_org_id text,p_roles text[],p_category text,p_event_type text,p_severity text,
@@ -261,7 +261,7 @@ returns integer
 language plpgsql
 security definer
 set search_path=public,private,pg_catalog
-as $
+as $tr$
 declare
   v_account_id text;
   v_count integer:=0;
@@ -282,7 +282,7 @@ begin
   end loop;
   return v_count;
 end;
-$;
+$tr$;
 
 create or replace function public.trustrelay_emit_org_event_v09(
   p_org_id text,p_event_type text,p_data jsonb
@@ -291,7 +291,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path=public,private,pg_catalog
-as $
+as $tr$
 declare
   v_id text:='evt_'||replace(gen_random_uuid()::text,'-','');
   v_now text:=to_char(clock_timestamp() at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
@@ -306,7 +306,7 @@ begin
   perform public.trustrelay_dispatch_due_webhooks_v09(25);
   return coalesce(v_result,'{}'::jsonb)||jsonb_build_object('eventId',v_id);
 end;
-$;
+$tr$;
 
 revoke all on function private.trustrelay_org_audit_hash_v09(text,text,text,text,text,text,jsonb,text,text) from public,anon,authenticated;
 revoke all on function private.trustrelay_append_org_audit_v09(text,text,text,text,text,jsonb) from public,anon,authenticated;
