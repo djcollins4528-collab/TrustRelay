@@ -100,6 +100,27 @@ async function verifyStripeSignature(raw,header){
 
 Deno.serve(async req=>{
  try{
+  if(req.method==="GET"){
+    const requestUrl=new URL(req.url);
+    if(requestUrl.pathname.endsWith("/healthz")){
+      const secretsConfigured=providerConfigured();
+      let stripeAccountOk=false, stripeAccountError=null;
+      if(secretsConfigured){
+        try{await assertStripeAccount();stripeAccountOk=true}
+        catch(e){stripeAccountError=e?.code||"STRIPE_ACCOUNT_CHECK_FAILED"}
+      }
+      return out({
+        ok:secretsConfigured&&stripeAccountOk,
+        environment:URL.includes("msfrbsnihylfynrtdgxe")?"production":URL.includes("kdvroylluosshcjmfbfq")?"staging":"unknown",
+        providerSecretsConfigured:secretsConfigured,
+        stripeAccountOk,
+        stripeAccountError,
+        checkoutPlans:{starter:Boolean(PRICE_STARTER),growth:Boolean(PRICE_GROWTH)},
+        appOriginConfigured:Boolean(APP_ORIGIN)
+      },secretsConfigured&&stripeAccountOk?200:503,req);
+    }
+    return out({error:{code:"METHOD_NOT_ALLOWED"}},405,req);
+  }
   if(req.method==="OPTIONS"){
     const origin=req.headers.get("origin")||"";
     if(!APP_ORIGIN||origin!==APP_ORIGIN)return out({error:{code:"CORS_ORIGIN_DENIED"}},403,req);
