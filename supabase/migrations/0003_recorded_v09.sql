@@ -148,7 +148,32 @@ grant select,insert,update,delete on table public.notification_preferences to se
 grant select,insert,update,delete on table public.notifications to service_role;
 grant select,insert on table public.organization_audit_events to service_role;
 grant select,insert,update on table public.webhook_delivery_attempts to service_role;
+
 grant select,insert,update on table public.compliance_exports to service_role;
+
+drop policy if exists trustrelay_deny_clients on public.notification_preferences;
+create policy trustrelay_deny_clients on public.notification_preferences
+  as restrictive for all to anon,authenticated using(false) with check(false);
+drop policy if exists trustrelay_deny_clients on public.notifications;
+create policy trustrelay_deny_clients on public.notifications
+  as restrictive for all to anon,authenticated using(false) with check(false);
+drop policy if exists trustrelay_deny_clients on public.organization_audit_events;
+create policy trustrelay_deny_clients on public.organization_audit_events
+  as restrictive for all to anon,authenticated using(false) with check(false);
+drop policy if exists trustrelay_deny_clients on public.webhook_delivery_attempts;
+create policy trustrelay_deny_clients on public.webhook_delivery_attempts
+  as restrictive for all to anon,authenticated using(false) with check(false);
+drop policy if exists trustrelay_deny_clients on public.compliance_exports;
+create policy trustrelay_deny_clients on public.compliance_exports
+  as restrictive for all to anon,authenticated using(false) with check(false);
+
+create index if not exists idx_compliance_exports_requested_by_v10
+  on public.compliance_exports(requested_by_account_id);
+create index if not exists idx_notifications_organization_v10
+  on public.notifications(organization_id);
+create index if not exists idx_org_audit_actor_v10
+  on public.organization_audit_events(actor_account_id);
+
 
 create or replace function private.trustrelay_org_audit_hash_v09(
   p_id text,p_org_id text,p_actor_account_id text,p_event_type text,
