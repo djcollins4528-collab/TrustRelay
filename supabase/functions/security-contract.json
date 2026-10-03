@@ -38,18 +38,16 @@
       ]
     },
     "trustrelay-verifier-evaluate-v07": {
-      "mode": "validated-bearer-user-plus-service-session-bridge-plus-hmac-internal-edge",
+      "mode": "validated-bearer-user-plus-service-session-bridge-plus-one-time-capability",
       "required": [
         "/auth/v1/user",
         "authorization",
         "CANONICAL_APP_ORIGIN",
         "trustrelay_portal_session_context_v12",
-        "rpcService",
-        "sessionId",
-        "x-trustrelay-internal-sig",
-        "x-trustrelay-internal-ts",
+        "trustrelay_mint_portal_capability_v12",
+        "x-trustrelay-internal-capability",
         "bodyHash",
-        "hmacHex"
+        "randomCapability"
       ]
     },
     "trustrelay-compliance-export-v09": {
