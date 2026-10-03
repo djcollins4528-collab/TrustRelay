@@ -105,7 +105,7 @@ const PUBLIC_EXTENSIONS=new Set([".html",".js",".css",".json",".svg",".png",".jp
 function headers(extra={}){
   return {
     "Content-Security-Policy":csp,
-    "Strict-Transport-Security":"max-age=31536000; includeSubDomains",
+    "Strict-Transport-Security":"max-age=63072000; includeSubDomains; preload",
     "X-Content-Type-Options":"nosniff",
     "X-Frame-Options":"DENY",
     "Referrer-Policy":"strict-origin-when-cross-origin",
@@ -386,7 +386,12 @@ async function proxyWebhookEgress(req,res){
   }
 }
 
-const server=http.createServer(async(req,res)=>{
+const server=http.createServer({
+  maxHeaderSize:8192,
+  requireHostHeader:true,
+  insecureHTTPParser:false,
+  joinDuplicateHeaders:false
+},async(req,res)=>{
   if((req.url||"").length>8192)return sendJson(res,414,{error:{code:"URI_TOO_LONG"}});
   let url;
   try{url=new URL(req.url||"/","http://localhost")}
@@ -452,7 +457,12 @@ const server=http.createServer(async(req,res)=>{
 server.requestTimeout=15000;
 server.headersTimeout=10000;
 server.keepAliveTimeout=5000;
-server.maxHeadersCount=100;
+server.maxHeadersCount=64;
 server.maxRequestsPerSocket=100;
+server.on("clientError",(err,socket)=>{
+  if(!socket.writable)return;
+  const code=err?.code==="HPE_HEADER_OVERFLOW"?"431 Request Header Fields Too Large":"400 Bad Request";
+  socket.end(`HTTP/1.1 ${code}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+});
 
 server.listen(PORT,"0.0.0.0",()=>console.log(`TrustRelay ${VERSION} (${ENVIRONMENT}) listening on ${PORT}`));
