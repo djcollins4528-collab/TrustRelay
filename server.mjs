@@ -34,6 +34,10 @@ const csp=[
   "object-src 'none'",
   "frame-ancestors 'none'",
   "script-src 'self' https://cdn.jsdelivr.net https://challenges.cloudflare.com",
+  "script-src-attr 'none'",
+  "media-src 'none'",
+  "manifest-src 'self'",
+  "worker-src 'self' blob:",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
@@ -48,8 +52,11 @@ const types={
   ".mjs":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",
   ".json":"application/json; charset=utf-8",".svg":"image/svg+xml",
   ".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp",
-  ".ico":"image/x-icon",".txt":"text/plain; charset=utf-8",".map":"application/json; charset=utf-8"
+  ".ico":"image/x-icon",".txt":"text/plain; charset=utf-8"
 };
+
+const PUBLIC_TOP_LEVEL_FILES=new Set(["index.html"]);
+const PUBLIC_DIRECTORIES=new Set(["web","verifier","reviewer","legal","pilot","support"]);
 
 function headers(extra={}){
   return {
@@ -60,6 +67,9 @@ function headers(extra={}){
     "Referrer-Policy":"strict-origin-when-cross-origin",
     "Permissions-Policy":"camera=(), microphone=(), geolocation=(), payment=(self)",
     "Cross-Origin-Opener-Policy":"same-origin",
+    "Cross-Origin-Resource-Policy":"same-origin",
+    "Origin-Agent-Cluster":"?1",
+    "X-Permitted-Cross-Domain-Policies":"none",
     ...extra
   };
 }
@@ -71,10 +81,22 @@ function sendJson(res,status,obj,extra={}){
 function safeFile(urlPath){
   let decoded;
   try{decoded=decodeURIComponent(urlPath)}catch{return null}
-  if(decoded.includes("\0"))return null;
+  if(decoded.includes("\0")||decoded.includes("\\"))return null;
   let rel=decoded.replace(/^\/+/, "");
   if(!rel)rel="index.html";
   if(rel.endsWith("/"))rel+="index.html";
+
+  const segments=rel.split("/").filter(Boolean);
+  if(!segments.length||segments.some(part=>part==="."||part===".."||part.startsWith(".")))return null;
+
+  const top=segments[0];
+  const allowed=segments.length===1
+    ? PUBLIC_TOP_LEVEL_FILES.has(rel)
+    : PUBLIC_DIRECTORIES.has(top);
+  if(!allowed)return null;
+
+  if(path.extname(rel).toLowerCase()===".map")return null;
+
   const candidate=path.resolve(ROOT,rel);
   if(candidate!==ROOT&&!candidate.startsWith(ROOT+path.sep))return null;
   return candidate;
@@ -255,7 +277,10 @@ async function proxyWebhookEgress(req,res){
 }
 
 const server=http.createServer(async(req,res)=>{
-  const url=new URL(req.url||"/","http://localhost");
+  if((req.url||"").length>8192)return sendJson(res,414,{error:{code:"URI_TOO_LONG"}});
+  let url;
+  try{url=new URL(req.url||"/","http://localhost")}
+  catch{return sendJson(res,400,{error:{code:"INVALID_URL"}})}
   if(url.pathname==="/internal/webhook-egress"){
     return sendJson(res,410,{error:{code:"WEBHOOK_EGRESS_RETIRED",replacement:"trustrelay-webhook-egress-v10"}});
   }
@@ -301,5 +326,11 @@ const server=http.createServer(async(req,res)=>{
     sendJson(res,404,{error:{code:"NOT_FOUND"}});
   }
 });
+
+server.requestTimeout=15000;
+server.headersTimeout=10000;
+server.keepAliveTimeout=5000;
+server.maxHeadersCount=100;
+server.maxRequestsPerSocket=100;
 
 server.listen(PORT,"0.0.0.0",()=>console.log(`TrustRelay ${VERSION} (${ENVIRONMENT}) listening on ${PORT}`));
