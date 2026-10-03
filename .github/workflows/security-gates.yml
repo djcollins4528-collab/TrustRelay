@@ -486,7 +486,7 @@ jobs:
           grep -q 'trustrelay_sso_bootstrap_v13' verifier/app.js
           grep -q 'trustrelay_sso_config_v13' verifier/app.js
           grep -q 'trustrelay_set_sso_policy_v13' verifier/app.js
-          grep -q 'action:"discover"' supabase/functions/trustrelay-sso-v13/index.ts
+          grep -q 'action==="discover"' supabase/functions/trustrelay-sso-v13/index.ts
           grep -q 'consume_rate_limit_v05' supabase/functions/trustrelay-sso-v13/index.ts
           grep -q '/auth/v1/user' supabase/functions/trustrelay-sso-v13/index.ts
           grep -q 'SAML_PLAN_UPGRADE_REQUIRED' supabase/functions/trustrelay-sso-v13/index.ts
