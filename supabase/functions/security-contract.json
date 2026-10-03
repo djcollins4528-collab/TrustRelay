@@ -107,15 +107,16 @@
       ]
     },
     "trustrelay-scim-v14": {
-      "mode": "scim-oauth-or-rotatable-bearer",
+      "mode": "organization-scoped-scim-bearer",
       "required": [
         "authorization",
-        "trustrelay_scim_resolve_bearer_v14",
-        "trustrelay_scim_issue_access_token_v14",
-        "client_credentials",
+        "trscim_",
+        "sha256Hex",
+        "trustrelay_scim_auth_v14",
+        "consume_rate_limit_v05",
+        "application/scim+json",
         "ServiceProviderConfig",
-        "urn:ietf:params:scim:schemas:core:2.0:User",
-        "urn:ietf:params:scim:schemas:core:2.0:Group"
+        "urn:ietf:params:scim:schemas:core:2.0:User"
       ]
     }
   }
