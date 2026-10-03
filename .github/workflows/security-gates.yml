@@ -60,11 +60,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export SUPABASE_URL="https://example.supabase.co"
+          export SUPABASE_URL="https://msfrbsnihylfynrtdgxe.supabase.co"
           export SUPABASE_PUBLISHABLE_KEY="sb_publishable_ci_only"
           export TRUSTRELAY_ENVIRONMENT="production"
           export TRUSTRELAY_RATE_LIMIT_PER_MINUTE="120"
           export TRUSTRELAY_ALLOWED_HOSTS="127.0.0.1"
+          export TRUSTRELAY_TURNSTILE_SITE_KEY="ci-test-site-key"
+          export NODE_ENV="production"
           export PORT="18080"
           node server.mjs >/tmp/trustrelay-ci.log 2>&1 &
           pid=$!
@@ -99,6 +101,10 @@ jobs:
           assert_status 404 http://127.0.0.1:18080/reviewer/
           assert_status 200 http://127.0.0.1:18080/
           assert_status 200 http://127.0.0.1:18080/web/
+          post_health="$(curl --silent --request POST --output /tmp/body --write-out '%{http_code}' http://127.0.0.1:18080/healthz)"
+          test "$post_health" = "405"
+          post_config="$(curl --silent --request POST --output /tmp/body --write-out '%{http_code}' http://127.0.0.1:18080/runtime-config.json)"
+          test "$post_config" = "405"
 
           bad_host="$(curl --silent --output /tmp/body --write-out '%{http_code}' -H 'Host: attacker.invalid' http://127.0.0.1:18080/)"
           test "$bad_host" = "421"
