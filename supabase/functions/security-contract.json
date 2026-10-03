@@ -110,9 +110,9 @@
       "mode": "organization-scoped-scim-bearer",
       "required": [
         "authorization",
-        "trscim_",
+        "tr_scim_secret_",
         "sha256Hex",
-        "trustrelay_scim_auth_v14",
+        "trustrelay_scim_resolve_bearer_v14",
         "consume_rate_limit_v05",
         "application/scim+json",
         "ServiceProviderConfig",
