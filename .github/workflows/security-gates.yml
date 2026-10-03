@@ -463,6 +463,48 @@ jobs:
           fi
           grep -R -q 'trustrelay_rotate_signing_key_v12' supabase/migrations/*signing_key_rotation.sql
 
+      - name: Enforce enterprise SSO invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f supabase/migrations/0059_v13_enterprise_sso.sql
+          test -f supabase/migrations/0060_v13_sso_control_plane_hardening.sql
+          test -f supabase/migrations/0061_v13_single_sso_model_reconcile.sql
+          test -f supabase/migrations/0062_v13_sso_disable_recovery.sql
+          test -f supabase/migrations/0063_v13_sso_tenant_linking_hardening.sql
+          test -f supabase/functions/trustrelay-sso-v13/index.ts
+          test -f supabase/functions/trustrelay-sso-v13/function.json
+
+          grep -q 'ACCOUNT_SSO_LINK_REQUIRES_ORG_MEMBERSHIP' supabase/migrations/0063_v13_sso_tenant_linking_hardening.sql
+          grep -q "provider_protocol='email'" supabase/migrations/0063_v13_sso_tenant_linking_hardening.sql
+          grep -q 'SSO_BREAK_GLASS_REQUIRED' supabase/migrations/0063_v13_sso_tenant_linking_hardening.sql
+          grep -q 'SSO_BREAK_GLASS_OWNER_REQUIRED' supabase/migrations/0063_v13_sso_tenant_linking_hardening.sql
+          grep -q "enforcement_mode='optional'" supabase/migrations/0063_v13_sso_tenant_linking_hardening.sql
+          grep -q 'jit_enabled=false' supabase/migrations/0063_v13_sso_tenant_linking_hardening.sql
+          grep -q "'compliance','verifier','developer','auditor'" supabase/migrations/0063_v13_sso_tenant_linking_hardening.sql
+
+          grep -q 'trustrelay_sso_bootstrap_v13' verifier/app.js
+          grep -q 'trustrelay_sso_config_v13' verifier/app.js
+          grep -q 'trustrelay_set_sso_policy_v13' verifier/app.js
+          grep -q 'action:"discover"' supabase/functions/trustrelay-sso-v13/index.ts
+          grep -q 'consume_rate_limit_v05' supabase/functions/trustrelay-sso-v13/index.ts
+          grep -q '/auth/v1/user' supabase/functions/trustrelay-sso-v13/index.ts
+          grep -q 'SAML_PLAN_UPGRADE_REQUIRED' supabase/functions/trustrelay-sso-v13/index.ts
+          grep -q 'trustrelay_store_sso_provider_v13' supabase/functions/trustrelay-sso-v13/index.ts
+
+          if grep -qE 'trustrelay_sso_status_v13|trustrelay_sso_session_bootstrap_v13|trustrelay_set_sso_enforcement_v13|trustrelay_register_sso_connection_v13' verifier/app.js; then
+            echo "Verifier portal references superseded SSO RPCs."
+            exit 1
+          fi
+          if grep -R -n -E 'client_secret|clientSecret' supabase/migrations/*sso*.sql; then
+            echo "SSO client secret material must never be persisted in database migrations."
+            exit 1
+          fi
+          if grep -R -n -E "default_role[^\n]*(owner|admin)|jit_default_role[^\n]*(owner|admin)" supabase/migrations/*sso*.sql; then
+            echo "SSO JIT role policy unexpectedly allows privileged owner/admin defaults."
+            exit 1
+          fi
+
       - name: Verify runtime quarantine kill switch
         shell: bash
         run: |
