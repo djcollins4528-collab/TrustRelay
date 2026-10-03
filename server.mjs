@@ -128,7 +128,7 @@ function headers(extra={}){
 
 function normalizedHost(req){
   const raw=String(req.headers.host||"").trim().toLowerCase();
-  if(!raw||raw.length>255||/[\\s/@\\\\]/.test(raw))return "";
+  if(!raw||raw.length>255||/[\s/@\\]/.test(raw))return "";
   if(raw.startsWith("["))return "";
   return raw.split(":")[0].replace(/\\.$/,"");
 }
