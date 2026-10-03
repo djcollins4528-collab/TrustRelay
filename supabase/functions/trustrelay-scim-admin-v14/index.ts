@@ -163,7 +163,7 @@ Deno.serve(async req=>{
       if(!["compliance","verifier","developer","auditor"].includes(role))
         throw{status:400,code:"SCIM_DEFAULT_ROLE_INVALID"};
 
-      const days=Math.max(31,Math.min(1095,Number(input.expirationDays||365)||365));
+      const days=Math.max(31,Math.min(1095,Number(input.expirationDays||180)||180));
       const expiresAt=new Date(Date.now()+days*86400000).toISOString();
       const clientId="tr_scim_"+randomHex(16);
       const clientSecret=randomSecret(32);
