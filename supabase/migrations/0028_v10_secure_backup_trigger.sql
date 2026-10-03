@@ -104,7 +104,7 @@ begin
   select cron.schedule(
     'trustrelay-offsite-backup-v10',
     p_cron,
-    $$select public.trustrelay_fire_backup_v10('run',null);$$
+    $cmd$select public.trustrelay_fire_backup_v10('run',null);$cmd$
   ) into v_jobid;
 
   return jsonb_build_object('ok',true,'jobId',v_jobid,'schedule',p_cron,'functionUrl',p_function_url);
