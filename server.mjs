@@ -265,6 +265,47 @@ async function proxyPartner(req,res,url){
 }
 
 
+
+async function proxyScim(req,res,url){
+  const suffix=url.pathname==="/oauth2/token"
+    ?"/oauth/token"
+    :url.pathname+url.search;
+  const target=SUPABASE_URL+"/functions/v1/trustrelay-scim-v14"+suffix;
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),REQUEST_TIMEOUT);
+  try{
+    const h={"apikey":SUPABASE_PUBLISHABLE_KEY,"accept":"application/scim+json, application/json"};
+    if(req.headers["content-type"])h["content-type"]=req.headers["content-type"];
+    if(req.headers.authorization)h.authorization=req.headers.authorization;
+    const init={method:req.method,headers:h,signal:controller.signal};
+    if(!["GET","HEAD"].includes(req.method||"GET"))init.body=await readBody(req);
+    const upstream=await fetch(target,init);
+    const body=await readLimitedResponse(upstream);
+    const upstreamType=String(upstream.headers.get("content-type")||"application/scim+json; charset=utf-8");
+    const safeType=/^application\/(?:scim\+json|json|problem\+json)(?:\s*;|$)/i.test(upstreamType)
+      ? upstreamType
+      : "application/octet-stream";
+    const extra={
+      "Content-Type":safeType,
+      "Content-Length":body.length,
+      "Cache-Control":"no-store"
+    };
+    const location=upstream.headers.get("location");
+    if(location)extra.Location=location;
+    res.writeHead(upstream.status,headers(extra));
+    res.end(body);
+  }catch(e){
+    const code=e?.name==="AbortError"
+      ?"UPSTREAM_TIMEOUT"
+      :e?.message==="BODY_TOO_LARGE"
+        ?"BODY_TOO_LARGE"
+        :e?.message==="UPSTREAM_RESPONSE_TOO_LARGE"
+          ?"UPSTREAM_RESPONSE_TOO_LARGE"
+          :"UPSTREAM_UNAVAILABLE";
+    sendJson(res,e?.status||503,{error:{code}});
+  }finally{clearTimeout(timer)}
+}
+
 function secretEqual(a,b){
   if(!a||!b)return false;
   const aa=Buffer.from(String(a));const bb=Buffer.from(String(b));
@@ -374,6 +415,27 @@ const server=http.createServer({
     if(looksLikeBrowserFetch(req))return sendJson(res,403,{error:{code:"BROWSER_PARTNER_API_FORBIDDEN"}});
     if(!["GET","HEAD"].includes(method)&&!jsonContentType(req))return sendJson(res,415,{error:{code:"JSON_CONTENT_TYPE_REQUIRED"}});
     return proxyPartner(req,res,url);
+  }
+  if(url.pathname==="/oauth2/token"||url.pathname==="/scim/v2"||url.pathname.startsWith("/scim/v2/")){
+    if(looksLikeBrowserFetch(req))return sendJson(res,403,{error:{code:"BROWSER_SCIM_FORBIDDEN"}});
+    if(url.pathname==="/oauth2/token"){
+      if(method!=="POST")return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"POST"});
+      const ct=String(req.headers["content-type"]||"").toLowerCase();
+      if(ct&&!ct.startsWith("application/x-www-form-urlencoded")&&!ct.startsWith("application/json")){
+        return sendJson(res,415,{error:{code:"SCIM_TOKEN_CONTENT_TYPE_REQUIRED"}});
+      }
+    }else{
+      if(!["GET","POST","PUT","PATCH","DELETE"].includes(method)){
+        return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, POST, PUT, PATCH, DELETE"});
+      }
+      if(["POST","PUT","PATCH"].includes(method)){
+        const ct=String(req.headers["content-type"]||"").toLowerCase();
+        if(!ct.startsWith("application/scim+json")&&!ct.startsWith("application/json")){
+          return sendJson(res,415,{error:{code:"SCIM_CONTENT_TYPE_REQUIRED"}});
+        }
+      }
+    }
+    return proxyScim(req,res,url);
   }
   if(!["GET","HEAD"].includes(req.method||"GET")){
     return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD"});
