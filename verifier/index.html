@@ -316,33 +316,34 @@
                     </select>
                     <small>SCIM can never grant Owner or Admin.</small>
                   </div>
-                  <div class="field">
-                    <label>Compatibility</label>
-                    <label class="scim-check"><input id="scimAllowBearer" type="checkbox" checked> Allow rotatable bearer token</label>
-                    <label class="scim-check"><input id="scimGroupSync" type="checkbox" checked> Synchronize SCIM groups</label>
+                  <div class="scim-policy-copy">
+                    <strong>180-day credential lifetime</strong>
+                    <p>The bearer token is shown once, stored only as a SHA-256 hash, rate-limited per organization, and can be rotated at any time.</p>
                   </div>
                 </div>
                 <div class="management-actions scim-actions">
-                  <button id="createScimCredentialButton" class="button primary" type="button">Generate SCIM credentials</button>
-                  <button id="rotateScimCredentialButton" class="button secondary hidden" type="button">Add rotation credential</button>
-                  <button id="saveScimPolicyButton" class="button secondary hidden" type="button">Save policy</button>
+                  <button id="enableScimButton" class="button primary" type="button">Enable SCIM</button>
+                  <button id="rotateScimTokenButton" class="button secondary hidden" type="button">Rotate token</button>
+                  <button id="saveScimPolicyButton" class="button secondary hidden" type="button">Save default role</button>
                   <button id="disableScimButton" class="button danger hidden" type="button">Disable SCIM</button>
+                  <button id="reenableScimButton" class="button primary hidden" type="button">Re-enable SCIM</button>
                 </div>
                 <div class="sso-safety">
                   <strong>Safe deprovisioning</strong>
-                  <p>SCIM deactivation removes access to this organization without deleting the user's global TrustRelay identity. Owner and Admin memberships are protected from SCIM deactivation.</p>
+                  <p>SCIM deactivation removes access to this organization without deleting the user's global TrustRelay identity. Owner, Admin, and manually managed memberships are protected from SCIM takeover or deprovisioning.</p>
                 </div>
               </div>
 
               <div>
                 <div class="card-heading"><div><h3>Identity-provider setup</h3><p>Use these values in your enterprise provisioning application.</p></div></div>
                 <div id="scimEndpointList" class="sso-summary"></div>
-                <div class="scim-provider-note"><strong>Microsoft Entra ID</strong><p>Use OAuth 2.0 client credentials. TrustRelay issues one-hour access tokens from the OAuth token endpoint.</p></div>
-                <div class="scim-provider-note"><strong>Okta</strong><p>Use OAuth client credentials or the generated secret directly as the SCIM bearer token while bearer compatibility is enabled.</p></div>
+                <div class="scim-provider-note"><strong>Microsoft Entra ID</strong><p>Use the SCIM Base URL as the Tenant URL and paste the generated TrustRelay token into Secret Token.</p></div>
+                <div class="scim-provider-note"><strong>Okta</strong><p>Use SCIM 2.0 with HTTP Authorization Header and paste the generated TrustRelay token as the bearer credential.</p></div>
+                <div class="scim-provider-note"><strong>Users lifecycle only</strong><p>Create, lookup/filter, update, suspend, reactivate, and deprovision are supported. Group Push is intentionally deferred from this release.</p></div>
               </div>
             </div>
 
-            <div class="section-heading"><div><h3>SCIM credentials</h3><p>Secrets are shown once. TrustRelay stores only SHA-256 hashes and supports overlapping credentials for zero-downtime rotation.</p></div></div>
+            <div class="section-heading"><div><h3>SCIM credential status</h3><p>The secret token is shown only at enablement or rotation. TrustRelay stores only its SHA-256 hash.</p></div></div>
             <div id="scimCredentialList" class="management-list"></div>
           </div>
         </section>
