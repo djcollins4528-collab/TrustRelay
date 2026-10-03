@@ -69,8 +69,12 @@ function endpointFor(tenantKey){
 }
 function decorate(data){
   const endpoint=endpointFor(data?.tenantKey);
+  const counts=data?.users||{};
   return {
     ...data,
+    totalUsers:Number(data?.totalUsers??counts.total??0),
+    activeUsers:Number(data?.activeUsers??counts.active??0),
+    inactiveUsers:Number(data?.inactiveUsers??counts.inactive??0),
     endpoint,
     scimBaseUrl:endpoint,
     serviceProviderConfigUrl:endpoint?endpoint+"/ServiceProviderConfig":null
