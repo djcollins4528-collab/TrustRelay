@@ -78,7 +78,8 @@ const supabase=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
 });
 
 const state={
-  session:null,user:null,organizations:[],orgId:null,dashboard:null,currentView:"dashboard",notifications:null,launch:null,billing:null,platform:null
+  session:null,user:null,organizations:[],orgId:null,dashboard:null,currentView:"dashboard",notifications:null,launch:null,billing:null,platform:null,
+  mfaGateActive:false,portalStarting:false
 };
 
 const $=id=>document.getElementById(id);
@@ -97,13 +98,79 @@ function msg(el,m,t=""){el.className="message "+t;el.textContent=m;el.classList.
 function clearMsg(el){el.className="message hidden";el.textContent=""}
 function busy(btn,on,text="Working…"){if(!btn)return;if(on){btn.dataset.originalText=btn.textContent;btn.textContent=text;btn.disabled=true}else{btn.textContent=btn.dataset.originalText||btn.textContent;btn.disabled=false}}
 function openModal(html){els.modalContent.innerHTML=html;els.modalBackdrop.classList.remove("hidden")}
-function closeModal(){els.modalBackdrop.classList.add("hidden");els.modalContent.innerHTML=""}
+function closeModal(){if(state.mfaGateActive)return;els.modalBackdrop.classList.add("hidden");els.modalContent.innerHTML=""}
+function finishMfaGate(){state.mfaGateActive=false;$("modalClose").classList.remove("hidden");els.modalBackdrop.classList.add("hidden");els.modalContent.innerHTML=""}
 async function copyText(text,label="Copied"){try{await navigator.clipboard.writeText(text);toast(label,"success")}catch{const a=document.createElement("textarea");a.value=text;a.className="clipboard-fallback";document.body.appendChild(a);a.select();document.execCommand("copy");a.remove();toast(label,"success")}}
 function authRedirectUrl(){const u=new URL("/verifier/",window.location.origin);const token=localStorage.getItem("trustrelay_pending_org_invite");if(token)u.searchParams.set("org_invite",token);return u.toString()}
 function showOtp(show){$("magicForm").classList.toggle("hidden",show);$("otpForm").classList.toggle("hidden",!show);if(show){const e=localStorage.getItem("trustrelay_verifier_email")||$("authEmail").value.trim();if(e)$("otpEmail").value=e;setTimeout(()=>$("otpCode").focus(),0)}clearMsg(els.authMessage)}
 function setAuthenticated(on){els.authView.classList.toggle("hidden",on);els.portalView.classList.toggle("hidden",!on);els.accountButton.classList.toggle("hidden",!on);els.notificationButton?.classList.toggle("hidden",!on)}
 async function rpc(name,args={}){const {data,error}=await supabase.rpc(name,args);if(error)throw error;if(data?.ok===false){const e=new Error(data.code||"REQUEST_REJECTED");e.code=data.code;e.status=data.status;throw e}return data}
 async function token(){const {data,error}=await supabase.auth.getSession();if(error)throw error;return data.session?.access_token||null}
+
+async function promptMfaChallenge(factor){
+  state.mfaGateActive=true;
+  $("modalClose").classList.add("hidden");
+  openModal('<p class="eyebrow">ADMIN SECURITY</p><h2>Authenticator verification required.</h2><p class="security-gate-copy">Institutional TrustRelay access requires a verified authenticator factor. Enter the current six-digit code from your authenticator app.</p><form id="mfaChallengeForm"><div class="field"><label for="mfaChallengeCode">Authenticator code</label><input id="mfaChallengeCode" class="otp-input" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="123456"></div><div id="mfaGateMessage" class="message hidden"></div><div class="modal-actions"><button class="button primary" type="submit">Verify & continue</button><button id="mfaSignOut" class="button ghost" type="button">Sign out</button></div></form>');
+  return await new Promise((resolve)=>{
+    $("mfaSignOut").onclick=async()=>{finishMfaGate();await supabase.auth.signOut();resolve(false)};
+    $("mfaChallengeForm").onsubmit=async e=>{
+      e.preventDefault();
+      const b=e.submitter;busy(b,true,"Verifying…");
+      try{
+        const challenge=await supabase.auth.mfa.challenge({factorId:factor.id});
+        if(challenge.error)throw challenge.error;
+        const verify=await supabase.auth.mfa.verify({factorId:factor.id,challengeId:challenge.data.id,code:$("mfaChallengeCode").value.trim()});
+        if(verify.error)throw verify.error;
+        await supabase.auth.refreshSession();
+        finishMfaGate();toast("Multi-factor verification complete.","success");resolve(true);
+      }catch(err){msg($("mfaGateMessage"),err.message||"Authenticator verification failed.","error");busy(b,false)}
+    };
+    setTimeout(()=>$("mfaChallengeCode")?.focus(),0);
+  });
+}
+
+async function promptMfaEnrollment(existingFactors=[]){
+  for(const factor of existingFactors.filter(x=>x.factor_type==="totp"&&x.status!=="verified")){
+    try{await supabase.auth.mfa.unenroll({factorId:factor.id})}catch{}
+  }
+  const enrolled=await supabase.auth.mfa.enroll({factorType:"totp",friendlyName:"TrustRelay Verifier"});
+  if(enrolled.error)throw enrolled.error;
+  const factor=enrolled.data;
+  const qr=esc(factor?.totp?.qr_code||"");
+  const secret=esc(factor?.totp?.secret||"");
+  state.mfaGateActive=true;
+  $("modalClose").classList.add("hidden");
+  openModal('<p class="eyebrow">REQUIRED SECURITY SETUP</p><h2>Enable an authenticator app.</h2><p class="security-gate-copy">TrustRelay requires TOTP multi-factor authentication before institutional or administrative access. Scan this code with 1Password, Google Authenticator, Microsoft Authenticator, Authy, or another TOTP app.</p><div class="mfa-enrollment"><img class="mfa-qr" src="'+qr+'" alt="Authenticator enrollment QR code"><div><p class="fine-print">If you cannot scan the QR code, enter this secret manually:</p><div class="secret-once mfa-secret">'+secret+'</div></div></div><form id="mfaEnrollForm"><div class="field"><label for="mfaEnrollCode">Six-digit authenticator code</label><input id="mfaEnrollCode" class="otp-input" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="123456"></div><div id="mfaGateMessage" class="message hidden"></div><div class="modal-actions"><button class="button primary" type="submit">Enable MFA & continue</button><button id="mfaSignOut" class="button ghost" type="button">Sign out</button></div></form>');
+  return await new Promise((resolve)=>{
+    $("mfaSignOut").onclick=async()=>{finishMfaGate();await supabase.auth.signOut();resolve(false)};
+    $("mfaEnrollForm").onsubmit=async e=>{
+      e.preventDefault();
+      const b=e.submitter;busy(b,true,"Enabling…");
+      try{
+        const challenge=await supabase.auth.mfa.challenge({factorId:factor.id});
+        if(challenge.error)throw challenge.error;
+        const verify=await supabase.auth.mfa.verify({factorId:factor.id,challengeId:challenge.data.id,code:$("mfaEnrollCode").value.trim()});
+        if(verify.error)throw verify.error;
+        await supabase.auth.refreshSession();
+        finishMfaGate();toast("Authenticator MFA enabled.","success");resolve(true);
+      }catch(err){msg($("mfaGateMessage"),err.message||"Could not enable MFA.","error");busy(b,false)}
+    };
+    setTimeout(()=>$("mfaEnrollCode")?.focus(),0);
+  });
+}
+
+async function ensureVerifierMfa(){
+  const factors=await supabase.auth.mfa.listFactors();
+  if(factors.error)throw factors.error;
+  const all=[...(factors.data?.totp||[]),...(factors.data?.phone||[])];
+  const verifiedTotp=(factors.data?.totp||[]).find(x=>x.status==="verified");
+  const aal=await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if(aal.error)throw aal.error;
+  if(verifiedTotp&&aal.data?.currentLevel==="aal2")return true;
+  if(verifiedTotp)return await promptMfaChallenge(verifiedTotp);
+  return await promptMfaEnrollment(all);
+}
+
 async function evaluate(body){const t=await token();if(!t)throw new Error("AUTH_REQUIRED");const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-verifier-evaluate-v07",{method:"POST",headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:"Bearer "+t,"content-type":"application/json",accept:"application/json"},body:JSON.stringify(body)});const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}if(!r.ok){const e=new Error(data?.error?.code||"EVALUATION_FAILED");e.code=data?.error?.code||"EVALUATION_FAILED";throw e}return data}
 async function evidenceFile(body){const t=await token();if(!t)throw new Error("AUTH_REQUIRED");const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-evidence-v08",{method:"POST",headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:"Bearer "+t,"content-type":"application/json",accept:"application/json"},body:JSON.stringify(body)});const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}if(!r.ok){const e=new Error(data?.error?.code||"EVIDENCE_REQUEST_FAILED");e.code=data?.error?.code||"EVIDENCE_REQUEST_FAILED";throw e}return data}
 async function complianceEdge(body){const t=await token();if(!t)throw new Error("AUTH_REQUIRED");const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-compliance-export-v09",{method:"POST",headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:"Bearer "+t,"content-type":"application/json",accept:"application/json"},body:JSON.stringify(body)});const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}if(!r.ok){const e=new Error(data?.error?.code||"COMPLIANCE_REQUEST_FAILED");e.code=data?.error?.code||"COMPLIANCE_REQUEST_FAILED";throw e}return data}
@@ -720,12 +787,22 @@ function setup(){
 }
 
 async function startPortal(){
-  setAuthenticated(true);
-  const {data}=await supabase.auth.getUser();state.user=data.user||state.session?.user;els.accountButton.textContent=initials(state.user?.user_metadata?.full_name||state.user?.email);
-  await rpc("trustrelay_ensure_account_v06",{p_auth_user_id:state.user.id,p_display_name:state.user.user_metadata?.full_name||null}).catch(()=>{});
-  await acceptPendingOrgInvite();
-  await loadOrganizations();
-  if(state.orgId){await loadDashboard();showView("dashboard")}
+  if(state.portalStarting)return;
+  state.portalStarting=true;
+  try{
+    setAuthenticated(true);
+    const {data}=await supabase.auth.getUser();state.user=data.user||state.session?.user;
+    if(!state.user)throw new Error("AUTH_REQUIRED");
+    els.accountButton.textContent=initials(state.user?.user_metadata?.full_name||state.user?.email);
+    await rpc("trustrelay_ensure_account_v06",{p_auth_user_id:state.user.id,p_display_name:state.user.user_metadata?.full_name||null}).catch(()=>{});
+    const mfaReady=await ensureVerifierMfa();
+    if(!mfaReady)return;
+    await acceptPendingOrgInvite();
+    await loadOrganizations();
+    if(state.orgId){await loadDashboard();showView("dashboard")}
+  } finally {
+    state.portalStarting=false;
+  }
 }
 
 async function init(){
