@@ -9,14 +9,28 @@ function jsonpart(v){return JSON.parse(new TextDecoder().decode(b64decode(v)))}
 function id(p){return p+crypto.randomUUID().replaceAll("-","")}
 async function hex(t){return[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t)))].map(b=>b.toString(16).padStart(2,"0")).join("")}
 
-const PUBLIC_HEADERS={"cache-control":"public, max-age=300","x-content-type-options":"nosniff","access-control-allow-origin":"*","access-control-allow-methods":"GET, HEAD, OPTIONS","access-control-allow-headers":"content-type, apikey, authorization"};
+const PUBLIC_HEADERS={"cache-control":"public, max-age=300","x-content-type-options":"nosniff","x-frame-options":"DENY","referrer-policy":"no-referrer","permissions-policy":"camera=(), microphone=(), geolocation=()","access-control-allow-origin":"*","access-control-allow-methods":"GET, HEAD, OPTIONS","access-control-allow-headers":"content-type, apikey, authorization"};
+const JWKS_TTL_MS=300000;
+let jwksBody="";let jwksEtag="";let jwksCachedAt=0;
+async function sha256Hex(t){return[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t)))].map(b=>b.toString(16).padStart(2,"0")).join("")}
+async function loadJwks(){
+ const now=Date.now();
+ if(jwksBody&&now-jwksCachedAt<JWKS_TTL_MS)return{body:jwksBody,etag:jwksEtag};
+ const d=await rpc("trustrelay_list_public_signing_keys_v06",{});
+ const keys=(d.keys||[]).map(x=>({...x.publicJwk,kid:x.kid,alg:x.alg,use:"sig"}));
+ const body=JSON.stringify({keys});
+ const etag='"'+(await sha256Hex(body))+'"';
+ jwksBody=body;jwksEtag=etag;jwksCachedAt=now;
+ return{body,etag};
+}
 Deno.serve(async req=>{
  try{
    if(req.method==="OPTIONS")return new Response(null,{status:204,headers:PUBLIC_HEADERS});
    if(!["GET","HEAD"].includes(req.method))return Response.json({error:{code:"METHOD_NOT_ALLOWED"}},{status:405,headers:{...PUBLIC_HEADERS,Allow:"GET, HEAD"}});
-   const d=await rpc("trustrelay_list_public_signing_keys_v06",{});
-   const keys=(d.keys||[]).map(x=>({...x.publicJwk,kid:x.kid,alg:x.alg,use:"sig"}));
-   if(req.method==="HEAD")return new Response(null,{status:200,headers:PUBLIC_HEADERS});
-   return Response.json({keys},{headers:PUBLIC_HEADERS});
+   const {body,etag}=await loadJwks();
+   const h={...PUBLIC_HEADERS,etag};
+   if(req.headers.get("if-none-match")===etag)return new Response(null,{status:304,headers:h});
+   if(req.method==="HEAD")return new Response(null,{status:200,headers:h});
+   return new Response(body,{status:200,headers:{...h,"content-type":"application/json; charset=utf-8"}});
  }catch{return Response.json({error:{code:"KEY_REGISTRY_UNAVAILABLE"}},{status:503,headers:{"cache-control":"no-store","x-content-type-options":"nosniff","access-control-allow-origin":"*"}})}
 });
