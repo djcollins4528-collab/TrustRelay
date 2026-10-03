@@ -163,7 +163,7 @@ jobs:
           grep -q 'INVALID_REQUEST_TARGET' server.mjs
           grep -q 'DUPLICATE_CRITICAL_HEADER' server.mjs
           grep -Fq '"x-trustrelay-edge-origin"' server.mjs
-          grep -Fq 'ENVIRONMENT!=="production"&&RENDER_EXTERNAL_HOSTNAME' server.mjs
+          grep -Fq 'RENDER_EXTERNAL_HOSTNAME&&(ENVIRONMENT!=="production"||!REQUIRE_EDGE_ORIGIN)' server.mjs
           grep -Fq 'if(ENVIRONMENT!=="production")ALLOWED_HOSTS.add("trustrelay-staging.onrender.com")' server.mjs
           grep -Fq 'if(ENVIRONMENT!=="production"||String(process.env.RENDER||"")!=="true")return false' server.mjs
           grep -q 'trustedStagingRenderIdentity' server.mjs
