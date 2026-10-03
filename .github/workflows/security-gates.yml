@@ -196,6 +196,7 @@ jobs:
 
           grep -q 'TRUSTRELAY_EDGE_ORIGIN_SECRET_WEAK' server.mjs
           grep -q 'TRUSTRELAY_EDGE_ORIGIN_SECRET_REQUIRED' server.mjs
+          grep -q 'TRUSTRELAY_EDGE_ORIGIN_PUBLIC_RENDER_HOST' server.mjs
           grep -q 'TRUSTRELAY_REQUIRE_EDGE_ORIGIN' server.mjs
           grep -q 'x-trustrelay-edge-origin' server.mjs
 
@@ -225,6 +226,33 @@ jobs:
             exit 1
           fi
           grep -q "TRUSTRELAY_EDGE_ORIGIN_SECRET_REQUIRED" /tmp/trustrelay-required-origin.log
+
+      - name: Verify strict edge mode rejects public Render hostname
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SUPABASE_URL="https://msfrbsnihylfynrtdgxe.supabase.co"
+          export SUPABASE_PUBLISHABLE_KEY="sb_publishable_ci_only"
+          export TRUSTRELAY_ENVIRONMENT="production"
+          export TRUSTRELAY_ALLOWED_HOSTS="trustrelay-production.onrender.com"
+          export TRUSTRELAY_TURNSTILE_SITE_KEY="ci-test-site-key"
+          export TRUSTRELAY_REQUIRE_EDGE_ORIGIN="true"
+          export TRUSTRELAY_EDGE_ORIGIN_SECRET="ci-origin-secret-0123456789abcdef0123456789abcdef"
+          export NODE_ENV="production"
+          export RENDER="true"
+          export RENDER_GIT_REPO_SLUG="djcollins4528-collab/TrustRelay"
+          export RENDER_GIT_BRANCH="main"
+          export RENDER_GIT_COMMIT="$GITHUB_SHA"
+          export RENDER_SERVICE_ID="srv-davrsuk9v7es738v9q7g"
+          export RENDER_EXTERNAL_HOSTNAME="trustrelay-production.onrender.com"
+          export TRUSTRELAY_APPROVED_COMMIT_SHA="$GITHUB_SHA"
+          export PORT="18085"
+
+          if node server.mjs >/tmp/trustrelay-render-host.log 2>&1; then
+            echo "Production runtime unexpectedly accepted the public Render hostname in strict edge mode."
+            exit 1
+          fi
+          grep -q "TRUSTRELAY_EDGE_ORIGIN_PUBLIC_RENDER_HOST" /tmp/trustrelay-render-host.log
 
       - name: Verify unapproved production commit is rejected
         shell: bash
