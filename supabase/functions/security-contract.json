@@ -27,29 +27,27 @@
       ]
     },
     "trustrelay-partner-v07": {
-      "mode": "partner-api-key-or-hmac-internal-edge",
+      "mode": "partner-api-key-or-one-time-internal-capability",
       "required": [
         "x-trustrelay-key",
         "p_api_key",
         "p_required_scope",
-        "x-trustrelay-internal-sig",
-        "x-trustrelay-internal-ts",
-        "bodyHash",
-        "hmacHex"
+        "x-trustrelay-internal-capability",
+        "trustrelay_consume_portal_capability_v12",
+        "bodyHash"
       ]
     },
     "trustrelay-verifier-evaluate-v07": {
-      "mode": "validated-bearer-user-plus-service-only-aal2-session-bridge-and-hmac-internal-edge",
+      "mode": "validated-bearer-user-plus-service-session-bridge-plus-one-time-capability",
       "required": [
         "/auth/v1/user",
         "authorization",
         "CANONICAL_APP_ORIGIN",
         "trustrelay_portal_session_context_v12",
-        "p_session_id",
-        "x-trustrelay-internal-sig",
-        "x-trustrelay-internal-ts",
+        "trustrelay_mint_portal_capability_v12",
+        "x-trustrelay-internal-capability",
         "bodyHash",
-        "hmacHex"
+        "randomCapability"
       ]
     },
     "trustrelay-compliance-export-v09": {
