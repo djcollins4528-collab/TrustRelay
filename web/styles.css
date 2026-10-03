@@ -793,3 +793,7 @@ select { cursor:pointer; }
 .notification-item p{margin:0;color:var(--muted);font-size:10px;line-height:1.45}
 .notification-item small{color:var(--muted-2);font-size:9px}
 @media(max-width:720px){.notification-item{grid-template-columns:1fr}.notification-item .management-actions{justify-content:flex-start}}
+
+
+.turnstile-slot { margin: 12px 0; }
+.clipboard-fallback { position: fixed; opacity: 0; pointer-events: none; }
