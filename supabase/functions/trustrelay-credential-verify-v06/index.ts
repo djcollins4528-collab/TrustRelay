@@ -8,15 +8,23 @@ function b64decode(v){const s=v.replaceAll("-","+").replaceAll("_","/")+"===".sl
 function jsonpart(v){return JSON.parse(new TextDecoder().decode(b64decode(v)))}
 function id(p){return p+crypto.randomUUID().replaceAll("-","")}
 async function hex(t){return[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t)))].map(b=>b.toString(16).padStart(2,"0")).join("")}
+const PUBLIC_HEADERS={"cache-control":"no-store","x-content-type-options":"nosniff","access-control-allow-origin":"*","access-control-allow-methods":"POST, OPTIONS","access-control-allow-headers":"content-type, apikey, authorization"};
+function out(data,status=200,extra={}){return Response.json(data,{status,headers:{...PUBLIC_HEADERS,...extra}})}
 
 Deno.serve(async req=>{
  try{
-   const v=await req.json(),token=typeof v.token==="string"?v.token.trim():"";
-   if(!token)return Response.json({error:{code:"TOKEN_REQUIRED"}},{status:400});
+   if(req.method==="OPTIONS")return new Response(null,{status:204,headers:PUBLIC_HEADERS});
+   if(req.method!=="POST")return out({error:{code:"METHOD_NOT_ALLOWED"}},405,{Allow:"POST"});
+   const raw=await req.text();
+   if(raw.length>32768)return out({error:{code:"PAYLOAD_TOO_LARGE"}},413);
+   let v;try{v=raw?JSON.parse(raw):{}}catch{return out({error:{code:"INVALID_JSON"}},400)}
+   const token=typeof v.token==="string"?v.token.trim():"";
+   if(token.length>16384)return out({error:{code:"TOKEN_TOO_LARGE"}},413);
+   if(!token)return out({error:{code:"TOKEN_REQUIRED"}},400);
    const parts=token.split(".");
-   if(parts.length!==3)return Response.json({valid:false,reasonCode:"MALFORMED"});
+   if(parts.length!==3)return out({valid:false,reasonCode:"MALFORMED"});
    const head=jsonpart(parts[0]),claims=jsonpart(parts[1]);
-   if(head.alg!=="ES256"||!head.kid||!claims.jti)return Response.json({valid:false,reasonCode:"MALFORMED"});
+   if(head.alg!=="ES256"||!head.kid||!claims.jti)return out({valid:false,reasonCode:"MALFORMED"});
    const c=await rpc("trustrelay_get_credential_context_v06",{p_jti:claims.jti});
    try{
      const refreshed=await rpc("trustrelay_refresh_grant_status_v06",{p_grant_id:c.grant.id});
@@ -45,6 +53,6 @@ Deno.serve(async req=>{
      p_id:id("verify_"),p_jti:claims.jti,p_kid:head.kid,p_valid:valid,p_reason_code:reason,
      p_request_fingerprint:await hex(token),p_metadata_json:"{}"
    })}catch{}
-   return Response.json({valid,reasonCode:reason,credential:{jti:claims.jti,kid:head.kid,expiresAt:claims.exp?new Date(Number(claims.exp)*1000).toISOString():null,assuranceAtIssue:claims.assurance_at_issue||claims.authority?.assuranceAtIssue||null},authority:valid?claims.authority:null,currentAssurance:valid?{principal:assurance?.principal||null,representative:assurance?.representative||null}:null},{headers:{"cache-control":"no-store"}});
- }catch{return Response.json({valid:false,reasonCode:"MALFORMED_OR_UNKNOWN"},{status:200,headers:{"cache-control":"no-store"}})}
+   return out({valid,reasonCode:reason,credential:{jti:claims.jti,kid:head.kid,expiresAt:claims.exp?new Date(Number(claims.exp)*1000).toISOString():null,assuranceAtIssue:claims.assurance_at_issue||claims.authority?.assuranceAtIssue||null},authority:valid?claims.authority:null,currentAssurance:valid?{principal:assurance?.principal||null,representative:assurance?.representative||null}:null});
+ }catch{return out({valid:false,reasonCode:"MALFORMED_OR_UNKNOWN"})}
 });
