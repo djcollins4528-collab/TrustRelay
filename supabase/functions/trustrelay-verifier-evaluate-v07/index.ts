@@ -37,12 +37,19 @@ function corsPreflight(req){
 function out(data,status=200,req=null){
   return Response.json(data,{status,headers:{"cache-control":"no-store","x-content-type-options":"nosniff",...corsHeaders(req)}});
 }
+async function readJsonBounded(req,maxBytes=131072){
+  const declared=Number(req.headers.get("content-length")||0);
+  if(Number.isFinite(declared)&&declared>maxBytes)throw{status:413,code:"REQUEST_TOO_LARGE"};
+  const raw=await req.text();
+  if(new TextEncoder().encode(raw).length>maxBytes)throw{status:413,code:"REQUEST_TOO_LARGE"};
+  try{return raw?JSON.parse(raw):{}}catch{throw{status:400,code:"JSON_INVALID"}}
+}
 Deno.serve(async req=>{
   try{
     if(req.method==="OPTIONS")return corsPreflight(req);
     if(req.method!=="POST")return out({error:{code:"METHOD_NOT_ALLOWED"}},405,req);
     const u=await user(req);
-    const body=await req.json();
+    const body=await readJsonBounded(req);
     const orgId=String(body.orgId||"").trim();
     if(!orgId)return out({error:{code:"ORGANIZATION_REQUIRED"}},400,req);
 
