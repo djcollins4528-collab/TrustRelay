@@ -1,0 +1,109 @@
+name: Security Gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Use pinned Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+          check-latest: false
+
+      - name: Syntax check
+        run: node --check server.mjs
+
+      - name: Scan tracked files for live secret material
+        shell: python
+        run: |
+          import pathlib, re, subprocess, sys
+
+          patterns = [
+              re.compile(rb"sb_secret_[A-Za-z0-9_-]{20,}"),
+              re.compile(rb"sk_live_[A-Za-z0-9]{20,}"),
+              re.compile(rb"whsec_[A-Za-z0-9]{20,}"),
+              re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+          ]
+          files = subprocess.check_output(["git", "ls-files", "-z"]).split(b"\0")
+          bad = []
+          for raw in files:
+              if not raw:
+                  continue
+              path = pathlib.Path(raw.decode())
+              try:
+                  data = path.read_bytes()
+              except OSError:
+                  continue
+              for pattern in patterns:
+                  if pattern.search(data):
+                      bad.append(str(path))
+                      break
+          if bad:
+              print("Potential live secret material found in tracked files:")
+              print("\n".join(sorted(set(bad))))
+              sys.exit(1)
+
+      - name: Verify production static-surface isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SUPABASE_URL="https://example.supabase.co"
+          export SUPABASE_PUBLISHABLE_KEY="sb_publishable_ci_only"
+          export TRUSTRELAY_ENVIRONMENT="production"
+          export TRUSTRELAY_RATE_LIMIT_PER_MINUTE="120"
+          export PORT="18080"
+          node server.mjs >/tmp/trustrelay-ci.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+
+          for i in {1..20}; do
+            if curl --silent --fail http://127.0.0.1:18080/healthz >/tmp/health.json; then
+              break
+            fi
+            sleep 0.25
+          done
+
+          test "$(cat /tmp/health.json)" = '{"status":"ok"}'
+
+          assert_status() {
+            local expected="$1"
+            local url="$2"
+            local got
+            got="$(curl --silent --output /tmp/body --write-out '%{http_code}' "$url")"
+            if [ "$got" != "$expected" ]; then
+              echo "Expected HTTP $expected for $url, got $got"
+              cat /tmp/body || true
+              exit 1
+            fi
+          }
+
+          assert_status 404 http://127.0.0.1:18080/version
+          assert_status 404 http://127.0.0.1:18080/server.mjs
+          assert_status 404 http://127.0.0.1:18080/render.yaml
+          assert_status 404 http://127.0.0.1:18080/docs/V1.0-RELEASE-GATE-FINAL.md
+          assert_status 404 http://127.0.0.1:18080/supabase/migrations/0034_v10_private_function_acl_hardening.sql
+          assert_status 404 http://127.0.0.1:18080/reviewer/
+          assert_status 200 http://127.0.0.1:18080/
+          assert_status 200 http://127.0.0.1:18080/web/
+
+      - name: Enforce pinned Supabase package imports
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -R -n -E 'npm:@supabase/[^"[:space:]]+@(latest|next|beta)' supabase/functions; then
+            echo "Unpinned or prerelease Supabase package import found."
+            exit 1
+          fi
