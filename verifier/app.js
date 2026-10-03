@@ -288,7 +288,7 @@ function currentOrg(){return state.organizations.find(x=>x.organization?.id===st
 function showView(name){
   state.currentView=name;
   qsa(".portal-section").forEach(x=>x.classList.add("hidden"));
-  const map={dashboard:"dashboardView",verify:"verifyView",evidence:"evidenceView",keys:"keysView",team:"teamView",sso:"ssoView",provisioning:"provisioningView",webhooks:"webhooksView",compliance:"complianceView",launch:"launchView",audit:"auditView",developer:"developerView"};
+  const map={dashboard:"dashboardView",verify:"verifyView",evidence:"evidenceView",keys:"keysView",team:"teamView",sso:"ssoView",webhooks:"webhooksView",compliance:"complianceView",launch:"launchView",audit:"auditView",developer:"developerView"};
   $(map[name]||"dashboardView").classList.remove("hidden");
   qsa(".verifier-nav .nav-item").forEach(b=>b.classList.toggle("active",b.dataset.view===name));
   window.scrollTo({top:0,behavior:"smooth"});
@@ -358,7 +358,6 @@ function render(){
   qsa('.verifier-nav [data-view="keys"]').forEach(x=>x.classList.toggle("hidden",!canManageKeys()));
   qsa('.verifier-nav [data-view="team"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("members.manage")));
   qsa('.verifier-nav [data-view="sso"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("organization.manage")));
-  qsa('.verifier-nav [data-view="provisioning"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("organization.manage")));
   qsa('.verifier-nav [data-view="webhooks"]').forEach(x=>x.classList.toggle("hidden",!canManageWebhooks()));
   qsa('.verifier-nav [data-view="compliance"]').forEach(x=>x.classList.toggle("hidden",!canExportAudit()));
   qsa('.verifier-nav [data-view="launch"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("organization.manage")));
