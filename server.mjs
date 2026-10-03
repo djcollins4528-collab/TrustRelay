@@ -42,7 +42,8 @@ const csp=[
   "media-src 'none'",
   "manifest-src 'self'",
   "worker-src 'self' blob:",
-  "style-src 'self' 'unsafe-inline'",
+  "style-src 'self'",
+  "style-src-attr 'none'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
   `connect-src 'self' ${supabaseOrigin} ${supabaseWs} https://api.stripe.com https://checkout.stripe.com https://challenges.cloudflare.com`,
@@ -61,6 +62,8 @@ const types={
 
 const PUBLIC_TOP_LEVEL_FILES=new Set(["index.html"]);
 const PUBLIC_DIRECTORIES=new Set(["web","verifier","reviewer","legal","pilot","support"]);
+const PUBLIC_EXTENSIONS=new Set([".html",".js",".css",".json",".svg",".png",".jpg",".jpeg",".webp",".ico",".txt"]);
+const ALLOWED_HOSTS=new Set(String(process.env.TRUSTRELAY_ALLOWED_HOSTS||"").split(",").map(x=>x.trim().toLowerCase().replace(/\.$/,"")).filter(Boolean));
 
 function headers(extra={}){
   return {
@@ -75,9 +78,22 @@ function headers(extra={}){
     "Origin-Agent-Cluster":"?1",
     "X-Permitted-Cross-Domain-Policies":"none",
     "X-DNS-Prefetch-Control":"off",
+    "X-XSS-Protection":"0",
     ...extra
   };
 }
+
+function normalizedHost(req){
+  const raw=String(req.headers.host||"").trim().toLowerCase();
+  if(!raw||raw.length>255||/[\\s/@\\\\]/.test(raw))return "";
+  if(raw.startsWith("["))return "";
+  return raw.split(":")[0].replace(/\\.$/,"");
+}
+function hostAllowed(req){
+  if(!ALLOWED_HOSTS.size)return true;
+  return ALLOWED_HOSTS.has(normalizedHost(req));
+}
+
 function sendJson(res,status,obj,extra={}){
   const body=JSON.stringify(obj);
   res.writeHead(status,headers({"Content-Type":"application/json; charset=utf-8","Content-Length":Buffer.byteLength(body),"Cache-Control":"no-store",...extra}));
@@ -100,7 +116,8 @@ function safeFile(urlPath){
     : PUBLIC_DIRECTORIES.has(top);
   if(!allowed)return null;
 
-  if(path.extname(rel).toLowerCase()===".map")return null;
+  const ext=path.extname(rel).toLowerCase();
+  if(!PUBLIC_EXTENSIONS.has(ext)||ext===".map")return null;
 
   const candidate=path.resolve(ROOT,rel);
   if(candidate!==ROOT&&!candidate.startsWith(ROOT+path.sep))return null;
@@ -334,6 +351,7 @@ const server=http.createServer(async(req,res)=>{
   let url;
   try{url=new URL(req.url||"/","http://localhost")}
   catch{return sendJson(res,400,{error:{code:"INVALID_URL"}})}
+  if(!hostAllowed(req))return sendJson(res,421,{error:{code:"HOST_NOT_ALLOWED"}});
   if(!applyRuntimeRateLimit(req,res,url.pathname))return;
   if(url.pathname==="/internal/webhook-egress"){
     return sendJson(res,410,{error:{code:"WEBHOOK_EGRESS_RETIRED",replacement:"trustrelay-webhook-egress-v10"}});
