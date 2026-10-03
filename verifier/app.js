@@ -763,15 +763,31 @@ function renderScim(){
   }
 
   const creds=Array.isArray(x.credentials)?x.credentials:[];
-  credRoot.innerHTML=creds.length?creds.map(c=>`
-    <div class="management-row">
-      <div>
-        <strong>${esc(c.label||"SCIM credential")}</strong>
-        <p>${esc(c.clientId||"")} · expires ${esc(formatDate(c.expiresAt,true))}</p>
-        <div class="row-meta"><span class="small-chip">${esc(c.status||"unknown")}</span><span class="small-chip">last used ${esc(c.lastUsedAt?formatDate(c.lastUsedAt,true):"never")}</span></div>
-      </div>
-      <div class="management-actions">${c.status==="active"?`<button class="button danger small" data-revoke-scim-credential="${esc(c.id)}" type="button">Revoke</button>`:""}</div>
-    </div>`).join(""):'<div class="empty-management">No SCIM credentials have been created.</div>';
+  credRoot.replaceChildren();
+  if(!creds.length){
+    const empty=document.createElement("div");
+    empty.className="empty-management";
+    empty.textContent="No SCIM credentials have been created.";
+    credRoot.appendChild(empty);
+  }else{
+    for(const c of creds){
+      const row=document.createElement("div");row.className="management-row";
+      const details=document.createElement("div");
+      const title=document.createElement("strong");title.textContent=c.label||"SCIM credential";
+      const meta=document.createElement("p");
+      meta.textContent=String(c.clientId||"")+" · expires "+formatDate(c.expiresAt,true);
+      const chips=document.createElement("div");chips.className="row-meta";
+      const statusChip=document.createElement("span");statusChip.className="small-chip";statusChip.textContent=c.status||"unknown";
+      const usedChip=document.createElement("span");usedChip.className="small-chip";usedChip.textContent="last used "+(c.lastUsedAt?formatDate(c.lastUsedAt,true):"never");
+      chips.append(statusChip,usedChip);details.append(title,meta,chips);row.appendChild(details);
+      if(c.status==="active"){
+        const actions=document.createElement("div");actions.className="management-actions";
+        const revoke=document.createElement("button");revoke.className="button danger small";revoke.type="button";
+        revoke.dataset.revokeScimCredential=c.id;revoke.textContent="Revoke";actions.appendChild(revoke);row.appendChild(actions);
+      }
+      credRoot.appendChild(row);
+    }
+  }
 
   const ssoReady=Boolean(state.sso?.configured&&state.sso?.status==="active");
   $("createScimCredentialButton").disabled=!ssoReady;
