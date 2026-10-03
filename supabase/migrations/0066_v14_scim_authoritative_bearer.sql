@@ -890,8 +890,6 @@ revoke all on function public.trustrelay_scim_set_policy_v14(text,text,text,bool
 revoke all on function public.trustrelay_scim_resolve_bearer_v14(text) from public,anon,authenticated;
 revoke all on function public.trustrelay_scim_upsert_user_v14(text,text,text,text,text,text,text,text,text,boolean) from public,anon,authenticated;
 revoke all on function public.trustrelay_scim_delete_user_v14(text,text) from public,anon,authenticated;
-revoke all on function public.trustrelay_scim_get_user_v14(text,text) from public,anon,authenticated;
-revoke all on function public.trustrelay_scim_list_users_v14(text,text,text,integer,integer) from public,anon,authenticated;
 
 grant execute on function public.trustrelay_scim_store_credential_v14(text,text,text,text,text,text,timestamptz) to service_role;
 grant execute on function public.trustrelay_scim_revoke_credential_v14(text,text,text) to service_role;
@@ -900,5 +898,3 @@ grant execute on function public.trustrelay_scim_set_policy_v14(text,text,text,b
 grant execute on function public.trustrelay_scim_resolve_bearer_v14(text) to service_role;
 grant execute on function public.trustrelay_scim_upsert_user_v14(text,text,text,text,text,text,text,text,text,boolean) to service_role;
 grant execute on function public.trustrelay_scim_delete_user_v14(text,text) to service_role;
-grant execute on function public.trustrelay_scim_get_user_v14(text,text) to service_role;
-grant execute on function public.trustrelay_scim_list_users_v14(text,text,text,integer,integer) to service_role;
