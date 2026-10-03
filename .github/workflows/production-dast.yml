@@ -25,11 +25,25 @@ jobs:
         run: |
           set -euo pipefail
 
-          health_code="$(curl --silent --show-error --output /tmp/health --write-out '%{http_code}' --max-time 10 "$TARGET/healthz")"
+          # Render Free services can cold-start. Retry for a bounded window, but
+          # still fail closed if the real application never becomes reachable.
+          health_code="000"
+          for attempt in {1..12}; do
+            health_code="$(curl --silent --show-error --output /tmp/health --write-out '%{http_code}' --max-time 12 "$TARGET/healthz" || true)"
+            if [ "$health_code" = "200" ]; then break; fi
+            echo "Health probe attempt $attempt/12 returned $health_code; retrying."
+            sleep 5
+          done
           test "$health_code" = "200"
           grep -q '"status":"ok"' /tmp/health
 
-          root_code="$(curl --silent --show-error --location --output /tmp/root --write-out '%{http_code}' --max-time 10 "$TARGET/")"
+          root_code="000"
+          for attempt in {1..4}; do
+            root_code="$(curl --silent --show-error --location --output /tmp/root --write-out '%{http_code}' --max-time 12 "$TARGET/" || true)"
+            if [ "$root_code" = "200" ]; then break; fi
+            echo "Root probe attempt $attempt/4 returned $root_code; retrying."
+            sleep 3
+          done
           if [ "$root_code" != "200" ]; then
             echo "Refusing to report a clean DAST result: application root returned HTTP $root_code"
             cat /tmp/root || true
