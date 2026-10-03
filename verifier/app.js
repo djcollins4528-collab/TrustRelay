@@ -79,7 +79,7 @@ const supabase=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
 
 const state={
   session:null,user:null,organizations:[],orgId:null,dashboard:null,currentView:"dashboard",notifications:null,launch:null,billing:null,platform:null,
-  mfaGateActive:false,portalStarting:false
+  mfaGateActive:false,portalStarting:false,mfaStepUpPromise:null
 };
 
 const $=id=>document.getElementById(id);
@@ -104,7 +104,35 @@ async function copyText(text,label="Copied"){try{await navigator.clipboard.write
 function authRedirectUrl(){const u=new URL("/verifier/",window.location.origin);const token=localStorage.getItem("trustrelay_pending_org_invite");if(token)u.searchParams.set("org_invite",token);return u.toString()}
 function showOtp(show){$("magicForm").classList.toggle("hidden",show);$("otpForm").classList.toggle("hidden",!show);if(show){const e=localStorage.getItem("trustrelay_verifier_email")||$("authEmail").value.trim();if(e)$("otpEmail").value=e;setTimeout(()=>$("otpCode").focus(),0)}clearMsg(els.authMessage)}
 function setAuthenticated(on){els.authView.classList.toggle("hidden",on);els.portalView.classList.toggle("hidden",!on);els.accountButton.classList.toggle("hidden",!on);els.notificationButton?.classList.toggle("hidden",!on)}
-async function rpc(name,args={}){const {data,error}=await supabase.rpc(name,args);if(error)throw error;if(data?.ok===false){const e=new Error(data.code||"REQUEST_REJECTED");e.code=data.code;e.status=data.status;throw e}return data}
+const MFA_STEPUP_CODES=new Set(["MFA_ENROLLMENT_REQUIRED","MFA_CHALLENGE_REQUIRED","MFA_REAUTHENTICATION_REQUIRED"]);
+
+async function forceVerifierMfaStepUp(){
+  if(state.mfaStepUpPromise)return await state.mfaStepUpPromise;
+  state.mfaStepUpPromise=(async()=>{
+    const factors=await supabase.auth.mfa.listFactors();
+    if(factors.error)throw factors.error;
+    const all=[...(factors.data?.totp||[]),...(factors.data?.phone||[])];
+    const verified=(factors.data?.totp||[]).find(x=>x.status==="verified");
+    if(verified)return await promptMfaChallenge(verified);
+    return await promptMfaEnrollment(all);
+  })();
+  try{return await state.mfaStepUpPromise}
+  finally{state.mfaStepUpPromise=null}
+}
+
+async function rpc(name,args={},allowMfaRetry=true){
+  const {data,error}=await supabase.rpc(name,args);
+  if(error)throw error;
+  if(data?.ok===false){
+    const code=data.code||"REQUEST_REJECTED";
+    if(allowMfaRetry&&MFA_STEPUP_CODES.has(code)){
+      const ready=await forceVerifierMfaStepUp();
+      if(ready)return await rpc(name,args,false);
+    }
+    const e=new Error(code);e.code=code;e.status=data.status;e.details=data;throw e
+  }
+  return data
+}
 async function token(){const {data,error}=await supabase.auth.getSession();if(error)throw error;return data.session?.access_token||null}
 
 async function promptMfaChallenge(factor){
@@ -171,26 +199,29 @@ async function ensureVerifierMfa(){
   return await promptMfaEnrollment(all);
 }
 
-async function evaluate(body){const t=await token();if(!t)throw new Error("AUTH_REQUIRED");const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-verifier-evaluate-v07",{method:"POST",headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:"Bearer "+t,"content-type":"application/json",accept:"application/json"},body:JSON.stringify(body)});const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}if(!r.ok){const e=new Error(data?.error?.code||"EVALUATION_FAILED");e.code=data?.error?.code||"EVALUATION_FAILED";throw e}return data}
-async function evidenceFile(body){const t=await token();if(!t)throw new Error("AUTH_REQUIRED");const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-evidence-v08",{method:"POST",headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:"Bearer "+t,"content-type":"application/json",accept:"application/json"},body:JSON.stringify(body)});const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}if(!r.ok){const e=new Error(data?.error?.code||"EVIDENCE_REQUEST_FAILED");e.code=data?.error?.code||"EVIDENCE_REQUEST_FAILED";throw e}return data}
-async function complianceEdge(body){const t=await token();if(!t)throw new Error("AUTH_REQUIRED");const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-compliance-export-v09",{method:"POST",headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:"Bearer "+t,"content-type":"application/json",accept:"application/json"},body:JSON.stringify(body)});const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}if(!r.ok){const e=new Error(data?.error?.code||"COMPLIANCE_REQUEST_FAILED");e.code=data?.error?.code||"COMPLIANCE_REQUEST_FAILED";throw e}return data}
-async function billingEdge(body){
+async function edgePost(functionName,body,fallbackCode,allowMfaRetry=true){
   const t=await token();if(!t)throw new Error("AUTH_REQUIRED");
-  const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-billing-v10",{
+  const r=await fetch(SUPABASE_URL+"/functions/v1/"+functionName,{
     method:"POST",
     headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization:"Bearer "+t,"content-type":"application/json",accept:"application/json"},
     body:JSON.stringify(body)
   });
   const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}
   if(!r.ok){
-    const e=new Error(data?.error?.code||"BILLING_REQUEST_FAILED");
-    e.code=data?.error?.code||"BILLING_REQUEST_FAILED";
-    e.status=r.status;
-    e.details=data?.error?.details;
-    throw e
+    const code=data?.error?.code||fallbackCode;
+    if(allowMfaRetry&&MFA_STEPUP_CODES.has(code)){
+      const ready=await forceVerifierMfaStepUp();
+      if(ready)return await edgePost(functionName,body,fallbackCode,false);
+    }
+    const e=new Error(code);e.code=code;e.status=r.status;e.details=data?.error?.details;throw e
   }
   return data
 }
+async function evaluate(body){return await edgePost("trustrelay-verifier-evaluate-v07",body,"EVALUATION_FAILED")}
+async function evidenceFile(body){return await edgePost("trustrelay-evidence-v08",body,"EVIDENCE_REQUEST_FAILED")}
+async function complianceEdge(body){return await edgePost("trustrelay-compliance-export-v09",body,"COMPLIANCE_REQUEST_FAILED")}
+async function billingEdge(body){return await edgePost("trustrelay-billing-v10",body,"BILLING_REQUEST_FAILED")}
+
 function perms(){return state.dashboard?.membership?.permissions||{}}
 function hasPerm(name){return perms()[name]===true}
 function canManageKeys(){return hasPerm("api_keys.manage")}
