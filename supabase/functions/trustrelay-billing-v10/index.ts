@@ -60,6 +60,7 @@ function corsHeaders(req){
  };
 }
 function out(data,status=200,req=null){return Response.json(data,{status,headers:{"cache-control":"no-store","x-content-type-options":"nosniff",...corsHeaders(req)}})}
+async function jsonBody(req,max=65536){const raw=await req.text();if(raw.length>max)throw{status:413,code:"PAYLOAD_TOO_LARGE"};try{return raw?JSON.parse(raw):{}}catch{throw{status:400,code:"INVALID_JSON"}}}
 function safeOrigin(req){
  const configured=APP_ORIGIN;
  const origin=req.headers.get("origin")||"";
@@ -100,27 +101,7 @@ async function verifyStripeSignature(raw,header){
 
 Deno.serve(async req=>{
  try{
-  if(req.method==="GET"){
-    const requestUrl=new URL(req.url);
-    if(requestUrl.pathname.endsWith("/healthz")){
-      const secretsConfigured=providerConfigured();
-      let stripeAccountOk=false, stripeAccountError=null;
-      if(secretsConfigured){
-        try{await assertStripeAccount();stripeAccountOk=true}
-        catch(e){stripeAccountError=e?.code||"STRIPE_ACCOUNT_CHECK_FAILED"}
-      }
-      return out({
-        ok:secretsConfigured&&stripeAccountOk,
-        environment:URL.includes("msfrbsnihylfynrtdgxe")?"production":URL.includes("kdvroylluosshcjmfbfq")?"staging":"unknown",
-        providerSecretsConfigured:secretsConfigured,
-        stripeAccountOk,
-        stripeAccountError,
-        checkoutPlans:{starter:Boolean(PRICE_STARTER),growth:Boolean(PRICE_GROWTH)},
-        appOriginConfigured:Boolean(APP_ORIGIN)
-      },secretsConfigured&&stripeAccountOk?200:503,req);
-    }
-    return out({error:{code:"METHOD_NOT_ALLOWED"}},405,req);
-  }
+  if(req.method==="GET")return out({error:{code:"METHOD_NOT_ALLOWED"}},405,req);
   if(req.method==="OPTIONS"){
     const origin=req.headers.get("origin")||"";
     if(!APP_ORIGIN||origin!==APP_ORIGIN)return out({error:{code:"CORS_ORIGIN_DENIED"}},403,req);
@@ -130,7 +111,10 @@ Deno.serve(async req=>{
 
   const stripeSig=req.headers.get("stripe-signature");
   if(stripeSig){
+    const contentLength=Number(req.headers.get("content-length")||0);
+    if(Number.isFinite(contentLength)&&contentLength>1048576)throw{status:413,code:"PAYLOAD_TOO_LARGE"};
     const raw=await req.text();
+    if(new TextEncoder().encode(raw).byteLength>1048576)throw{status:413,code:"PAYLOAD_TOO_LARGE"};
     await verifyStripeSignature(raw,stripeSig);
     let event;try{event=JSON.parse(raw)}catch{throw{status:400,code:"STRIPE_PAYLOAD_INVALID"}}
     if(!event?.id||!event?.type)throw{status:400,code:"STRIPE_EVENT_INVALID"};
@@ -142,7 +126,7 @@ Deno.serve(async req=>{
   }
 
   const {authorization}=await userFrom(req);
-  const input=await req.json();
+  const input=await jsonBody(req);
   const action=String(input.action||"");
   const orgId=String(input.orgId||"").trim();
   if(!orgId)throw{status:400,code:"ORGANIZATION_ID_REQUIRED"};
