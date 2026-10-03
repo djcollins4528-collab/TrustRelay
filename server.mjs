@@ -391,11 +391,11 @@ const server=http.createServer(async(req,res)=>{
   let url;
   try{url=new URL(req.url||"/","http://localhost")}
   catch{return sendJson(res,400,{error:{code:"INVALID_URL"}})}
-  if(!hostAllowed(req))return sendJson(res,421,{error:{code:"HOST_NOT_ALLOWED"}});
   if(url.pathname==="/healthz"){
     if(!["GET","HEAD"].includes(req.method||"GET"))return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD"});
     return sendJson(res,200,{status:RUNTIME_DISABLED?"quarantined":"ok"});
   }
+  if(!hostAllowed(req))return sendJson(res,421,{error:{code:"HOST_NOT_ALLOWED"}});
   if(RUNTIME_DISABLED){
     return sendJson(res,503,{error:{code:"RUNTIME_QUARANTINED"}},{"Retry-After":"3600"});
   }
