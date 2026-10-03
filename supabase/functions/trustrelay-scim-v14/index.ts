@@ -1,7 +1,7 @@
-const URL=(Deno.env.get("SUPABASE_URL")||"").replace(/\/$/,"");
-const CANONICAL_APP_ORIGIN=URL.includes("msfrbsnihylfynrtdgxe")
+const SUPABASE_URL=(Deno.env.get("SUPABASE_URL")||"").replace(/\/$/,"");
+const CANONICAL_APP_ORIGIN=SUPABASE_URL.includes("msfrbsnihylfynrtdgxe")
   ?"https://trustrelay-production.onrender.com"
-  :URL.includes("kdvroylluosshcjmfbfq")
+  :SUPABASE_URL.includes("kdvroylluosshcjmfbfq")
     ?"https://trustrelay-staging.onrender.com":"";
 
 const USER_SCHEMA="urn:ietf:params:scim:schemas:core:2.0:User";
@@ -25,7 +25,7 @@ async function parse(r){
   return{ok:r.ok,status:r.status,data:d,text:t};
 }
 async function rpc(name,payload){
-  const r=await fetch(URL+"/rest/v1/rpc/"+name,{
+  const r=await fetch(SUPABASE_URL+"/rest/v1/rpc/"+name,{
     method:"POST",headers:adminHeaders(),body:JSON.stringify(payload||{})
   });
   const x=await parse(r);
@@ -274,7 +274,7 @@ function mapDbError(e){
 
 Deno.serve(async req=>{
   try{
-    if(!URL||!secretKey()||!CANONICAL_APP_ORIGIN)
+    if(!SUPABASE_URL||!secretKey()||!CANONICAL_APP_ORIGIN)
       throw{status:503,code:"SCIM_SERVICE_NOT_CONFIGURED"};
     if(req.headers.get("origin"))
       throw{status:403,code:"BROWSER_SCIM_FORBIDDEN"};
