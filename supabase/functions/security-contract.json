@@ -39,7 +39,7 @@
       ]
     },
     "trustrelay-verifier-evaluate-v07": {
-      "mode": "validated-bearer-user-plus-service-verified-session-plus-hmac-internal-edge",
+      "mode": "validated-bearer-user-plus-service-session-bridge-plus-hmac-internal-edge",
       "required": [
         "/auth/v1/user",
         "authorization",
