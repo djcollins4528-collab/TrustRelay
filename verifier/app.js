@@ -936,7 +936,7 @@ function setup(){
     try{
       const x=await scimAdminEdge({
         action:"create_credential",orgId:state.orgId,
-        defaultRole:$("scimDefaultRole").value,label:"Primary",expirationDays:180
+        defaultRole:$("scimDefaultRole").value,label:"Primary",expirationDays:365
       });
       showScimCredentials(x);
       state.scim=await scimStatus();renderScim();
@@ -950,7 +950,7 @@ function setup(){
     try{
       const x=await scimAdminEdge({
         action:"rotate_credential",orgId:state.orgId,
-        defaultRole:$("scimDefaultRole").value,label:"Rotation",expirationDays:180
+        defaultRole:$("scimDefaultRole").value,label:"Rotation",expirationDays:365
       });
       showScimCredentials(x);
       state.scim=await scimStatus();renderScim();
@@ -987,7 +987,7 @@ function setup(){
     try{
       const x=await scimAdminEdge({
         action:"create_credential",orgId:state.orgId,
-        defaultRole:$("scimDefaultRole").value,label:"Re-enabled",expirationDays:180
+        defaultRole:$("scimDefaultRole").value,label:"Re-enabled",expirationDays:365
       });
       showScimCredentials(x);
       state.scim=await scimStatus();renderScim();
