@@ -730,7 +730,7 @@ function renderScim(){
   const base=x.scimBaseUrl||scimBaseUrl();
   const credentials=Array.isArray(x.credentials)?x.credentials:[];
   const activeCredentials=credentials.filter(c=>c.status==="active"&&(!c.expiresAt||Date.parse(c.expiresAt)>Date.now()));
-  const users=x.users||{};
+  const counts=x.counts||{},users={active:counts.activeUsers??0,total:counts.users??0};
   const defaultRole=x.defaultRole||cfg.defaultRole||"verifier";
 
   $("scimStatusChip").textContent=!configured?"NOT CONFIGURED":active?"ACTIVE":"DISABLED";
@@ -936,7 +936,7 @@ function setup(){
     try{
       const x=await scimAdminEdge({
         action:"create_credential",orgId:state.orgId,
-        defaultRole:$("scimDefaultRole").value,label:"Primary",expirationDays:365
+        defaultRole:$("scimDefaultRole").value,label:"Primary",expirationDays:180
       });
       showScimCredentials(x);
       state.scim=await scimStatus();renderScim();
@@ -950,7 +950,7 @@ function setup(){
     try{
       const x=await scimAdminEdge({
         action:"rotate_credential",orgId:state.orgId,
-        defaultRole:$("scimDefaultRole").value,label:"Rotation",expirationDays:365
+        defaultRole:$("scimDefaultRole").value,label:"Rotation",expirationDays:180
       });
       showScimCredentials(x);
       state.scim=await scimStatus();renderScim();
@@ -987,7 +987,7 @@ function setup(){
     try{
       const x=await scimAdminEdge({
         action:"create_credential",orgId:state.orgId,
-        defaultRole:$("scimDefaultRole").value,label:"Re-enabled",expirationDays:365
+        defaultRole:$("scimDefaultRole").value,label:"Re-enabled",expirationDays:180
       });
       showScimCredentials(x);
       state.scim=await scimStatus();renderScim();
