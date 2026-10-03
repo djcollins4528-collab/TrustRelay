@@ -99,7 +99,11 @@
         "CANONICAL_APP_ORIGIN",
         "consume_rate_limit_v05",
         "trustrelay_sso_discover_v13",
-        "trustrelay_store_sso_provider_v13"
+        "trustrelay_store_sso_provider_v13",
+        "trustrelay_set_sso_domain_challenge_v13",
+        "trustrelay_mark_sso_domain_verified_v13",
+        "cloudflare-dns.com",
+        "SAML_PLAN_UPGRADE_REQUIRED"
       ]
     }
   }
