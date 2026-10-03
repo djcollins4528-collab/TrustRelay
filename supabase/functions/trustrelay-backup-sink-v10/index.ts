@@ -37,10 +37,14 @@ Deno.serve(async req=>{
   try{
     if(SB_URL.includes("msfrbsnihylfynrtdgxe"))return Response.json({error:{code:"BACKUP_SINK_WRONG_ENVIRONMENT"}},{status:503});
     if(req.method==="GET")return Response.json({error:{code:"METHOD_NOT_ALLOWED"}},{status:405,headers:{"allow":"POST","cache-control":"no-store","x-content-type-options":"nosniff"}});
-    if(req.method!=="POST")return Response.json({error:{code:"METHOD_NOT_ALLOWED"}},{status:405});
+    if(req.method!=="POST")return Response.json({error:{code:"METHOD_NOT_ALLOWED"}},{status:405,headers:{Allow:"POST","cache-control":"no-store","x-content-type-options":"nosniff"}});
+    const contentLength=Number(req.headers.get("content-length")||0);
+    if(Number.isFinite(contentLength)&&contentLength>6_000_000)return Response.json({error:{code:"PAYLOAD_TOO_LARGE"}},{status:413,headers:{"cache-control":"no-store","x-content-type-options":"nosniff"}});
     const bodyText=await req.text();
+    if(bodyText.length>6_000_000)return Response.json({error:{code:"PAYLOAD_TOO_LARGE"}},{status:413,headers:{"cache-control":"no-store","x-content-type-options":"nosniff"}});
     await verifySignedRequest(req,bodyText);
-    const v=JSON.parse(bodyText||"{}"),action=String(v.action||"");
+    let v;try{v=bodyText?JSON.parse(bodyText):{}}catch{return Response.json({error:{code:"INVALID_JSON"}},{status:400,headers:{"cache-control":"no-store","x-content-type-options":"nosniff"}})}
+    const action=String(v.action||"");
     const bucket=await ensureBucket();
 
     if(action==="begin"){
@@ -109,8 +113,8 @@ Deno.serve(async req=>{
       return Response.json({ok:true,runId:run.run_id,recoveryKeyKid:run.recovery_key_kid,dataKeyB64:bytesToB64(raw),manifestSha256:run.manifest_sha256});
     }
 
-    return Response.json({error:{code:"ACTION_INVALID"}},{status:400});
+    return Response.json({error:{code:"ACTION_INVALID"}},{status:400,headers:{"cache-control":"no-store","x-content-type-options":"nosniff"}});
   }catch(e){
-    return Response.json({error:{code:String(e?.message||"BACKUP_SINK_ERROR")}},{status:Number(e?.status)||500});
+    return Response.json({error:{code:String(e?.message||"BACKUP_SINK_ERROR")}},{status:Number(e?.status)||500,headers:{"cache-control":"no-store","x-content-type-options":"nosniff"}});
   }
 });
