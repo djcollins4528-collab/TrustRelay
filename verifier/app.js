@@ -22,7 +22,7 @@ function loadTurnstile() {
   if (!turnstileScriptPromise) {
     turnstileScriptPromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";\n      script.referrerPolicy = "no-referrer";
       script.async = true;
       script.defer = true;
       script.onload = () => {
@@ -73,8 +73,18 @@ function resetTurnstile() {
 }
 
 
+const AUTH_STORAGE_KEY = (() => {
+  try {
+    const projectRef = new URL(SUPABASE_URL).hostname.split(".")[0];
+    return projectRef ? `sb-${projectRef}-auth-token` : "";
+  } catch { return ""; }
+})();
+if (AUTH_STORAGE_KEY) {
+  try { window.localStorage.removeItem(AUTH_STORAGE_KEY); } catch {}
+}
+
 const supabase=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
-  auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
+  auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:window.sessionStorage}
 });
 
 const state={
@@ -101,8 +111,8 @@ function openModal(html){els.modalContent.innerHTML=html;els.modalBackdrop.class
 function closeModal(){if(state.mfaGateActive)return;els.modalBackdrop.classList.add("hidden");els.modalContent.innerHTML=""}
 function finishMfaGate(){state.mfaGateActive=false;$("modalClose").classList.remove("hidden");els.modalBackdrop.classList.add("hidden");els.modalContent.innerHTML=""}
 async function copyText(text,label="Copied"){try{await navigator.clipboard.writeText(text);toast(label,"success")}catch{const a=document.createElement("textarea");a.value=text;a.className="clipboard-fallback";document.body.appendChild(a);a.select();document.execCommand("copy");a.remove();toast(label,"success")}}
-function authRedirectUrl(){const u=new URL("/verifier/",window.location.origin);const token=localStorage.getItem("trustrelay_pending_org_invite");if(token)u.searchParams.set("org_invite",token);return u.toString()}
-function showOtp(show){$("magicForm").classList.toggle("hidden",show);$("otpForm").classList.toggle("hidden",!show);if(show){const e=localStorage.getItem("trustrelay_verifier_email")||$("authEmail").value.trim();if(e)$("otpEmail").value=e;setTimeout(()=>$("otpCode").focus(),0)}clearMsg(els.authMessage)}
+function authRedirectUrl(){const u=new URL("/verifier/",window.location.origin);const token=sessionStorage.getItem("trustrelay_pending_org_invite");if(token)u.searchParams.set("org_invite",token);return u.toString()}
+function showOtp(show){$("magicForm").classList.toggle("hidden",show);$("otpForm").classList.toggle("hidden",!show);if(show){const e=sessionStorage.getItem("trustrelay_verifier_email")||$("authEmail").value.trim();if(e)$("otpEmail").value=e;setTimeout(()=>$("otpCode").focus(),0)}clearMsg(els.authMessage)}
 function setAuthenticated(on){els.authView.classList.toggle("hidden",on);els.portalView.classList.toggle("hidden",!on);els.accountButton.classList.toggle("hidden",!on);els.notificationButton?.classList.toggle("hidden",!on)}
 const MFA_STEPUP_CODES=new Set(["MFA_ENROLLMENT_REQUIRED","MFA_CHALLENGE_REQUIRED","MFA_REAUTHENTICATION_REQUIRED"]);
 
@@ -580,17 +590,17 @@ function showDecision(result){
 }
 
 async function acceptPendingOrgInvite(){
-  const t=localStorage.getItem("trustrelay_pending_org_invite");if(!t)return;
-  try{const r=await rpc("trustrelay_accept_org_invite_v07",{p_token:t});localStorage.removeItem("trustrelay_pending_org_invite");toast("Organization invitation accepted.","success");state.orgId=r.organizationId}catch(e){toast("Organization invitation could not be accepted: "+String(e.code||e.message).replaceAll("_"," "),"error")}
+  const t=sessionStorage.getItem("trustrelay_pending_org_invite");if(!t)return;
+  try{const r=await rpc("trustrelay_accept_org_invite_v07",{p_token:t});sessionStorage.removeItem("trustrelay_pending_org_invite");toast("Organization invitation accepted.","success");state.orgId=r.organizationId}catch(e){toast("Organization invitation could not be accepted: "+String(e.code||e.message).replaceAll("_"," "),"error")}
 }
 
 function parseUrlInvite(){
-  const p=new URLSearchParams(location.search),t=p.get("org_invite");if(t){localStorage.setItem("trustrelay_pending_org_invite",t);history.replaceState({},"",location.pathname)}
+  const p=new URLSearchParams(location.search),t=p.get("org_invite");if(t){sessionStorage.setItem("trustrelay_pending_org_invite",t);history.replaceState({},"",location.pathname)}
 }
 
 function setup(){
   void mountTurnstile($("magicForm")).catch(()=>msg(els.authMessage,"Security check could not load. Refresh and try again.","error"));
-  $("magicForm").addEventListener("submit",async e=>{e.preventDefault();clearMsg(els.authMessage);const b=e.submitter;busy(b,true,"Sending secure link…");const email=$("authEmail").value.trim().toLowerCase(),name=$("authName").value.trim();try{const options={shouldCreateUser:true,emailRedirectTo:authRedirectUrl()};const captchaToken=captchaTokenForAuth();if(captchaToken)options.captchaToken=captchaToken;if(name)options.data={full_name:name};const {error}=await supabase.auth.signInWithOtp({email,options});if(error)throw error;localStorage.setItem("trustrelay_verifier_email",email);$("otpEmail").value=email;msg(els.authMessage,"Check your email for the TrustRelay magic link. If your email contains a six-digit code, use the code option below.","success")}catch(err){msg(els.authMessage,err.message||"Could not send sign-in email.","error")}finally{resetTurnstile();busy(b,false)}});
+  $("magicForm").addEventListener("submit",async e=>{e.preventDefault();clearMsg(els.authMessage);const b=e.submitter;busy(b,true,"Sending secure link…");const email=$("authEmail").value.trim().toLowerCase(),name=$("authName").value.trim();try{const options={shouldCreateUser:true,emailRedirectTo:authRedirectUrl()};const captchaToken=captchaTokenForAuth();if(captchaToken)options.captchaToken=captchaToken;if(name)options.data={full_name:name};const {error}=await supabase.auth.signInWithOtp({email,options});if(error)throw error;sessionStorage.setItem("trustrelay_verifier_email",email);$("otpEmail").value=email;msg(els.authMessage,"Check your email for the TrustRelay magic link. If your email contains a six-digit code, use the code option below.","success")}catch(err){msg(els.authMessage,err.message||"Could not send sign-in email.","error")}finally{resetTurnstile();busy(b,false)}});
   $("showOtp").onclick=()=>showOtp(true);$("backToMagic").onclick=()=>showOtp(false);
   $("otpForm").addEventListener("submit",async e=>{e.preventDefault();const b=e.submitter;busy(b,true,"Verifying…");try{const {data,error}=await supabase.auth.verifyOtp({email:$("otpEmail").value.trim().toLowerCase(),token:$("otpCode").value.trim(),type:"email"});if(error)throw error;state.session=data.session;state.user=data.user;await startPortal()}catch(err){msg(els.authMessage,err.message||"Invalid or expired code.","error")}finally{busy(b,false)}});
 
@@ -838,9 +848,9 @@ async function startPortal(){
 
 async function init(){
   setup();parseUrlInvite();
-  const remembered=localStorage.getItem("trustrelay_verifier_email");if(remembered){$("authEmail").value=remembered;$("otpEmail").value=remembered}
+  const remembered=sessionStorage.getItem("trustrelay_verifier_email");if(remembered){$("authEmail").value=remembered;$("otpEmail").value=remembered}
   const {data}=await supabase.auth.getSession();state.session=data.session;state.user=data.session?.user||null;
   supabase.auth.onAuthStateChange((event,session)=>{state.session=session;state.user=session?.user||null;if(event==="SIGNED_OUT"){setAuthenticated(false);return}if(session&&["SIGNED_IN","TOKEN_REFRESHED","USER_UPDATED"].includes(event))setTimeout(()=>startPortal(),0)});
-  if(state.session)await startPortal();else{setAuthenticated(false);if(localStorage.getItem("trustrelay_pending_org_invite"))msg(els.authMessage,"Sign in with the invited email address to join the organization.","warning")}
+  if(state.session)await startPortal();else{setAuthenticated(false);if(sessionStorage.getItem("trustrelay_pending_org_invite"))msg(els.authMessage,"Sign in with the invited email address to join the organization.","warning")}
 }
 init().catch(e=>{console.error(e);setAuthenticated(false);msg(els.authMessage,"Verifier Portal could not initialize. Refresh and try again.","error")});

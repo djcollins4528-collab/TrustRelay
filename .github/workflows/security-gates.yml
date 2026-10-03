@@ -131,6 +131,11 @@ jobs:
           grep -q 'insecureHTTPParser:false' server.mjs
           grep -q 'server.maxHeadersCount=64' server.mjs
           grep -q 'HPE_HEADER_OVERFLOW' server.mjs
+          printf '%s\n' "$headers" | grep -qi "^referrer-policy: no-referrer"
+          printf '%s\n' "$headers" | grep -qi "^permissions-policy:.*payment=()"
+          printf '%s\n' "$headers" | grep -qi "^content-security-policy:.*base-uri 'none'"
+          grep -q 'AMBIGUOUS_REQUEST_BODY' server.mjs
+          grep -q 'server.maxRequestsPerSocket=50' server.mjs
 
       - name: Verify unapproved production commit is rejected
         shell: bash
@@ -246,6 +251,20 @@ jobs:
               print("Browser dependency policy violations:")
               print("\n".join(sorted(set(failures))))
               sys.exit(1)
+
+      - name: Enforce ephemeral browser auth storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in web/app.js verifier/app.js reviewer/app.js; do
+            grep -q 'sessionStorage' "$file"
+            grep -q 'localStorage.removeItem(AUTH_STORAGE_KEY)' "$file"
+            if grep -qE 'localStorage\.(getItem|setItem)' "$file"; then
+              echo "$file persists application state in localStorage"
+              exit 1
+            fi
+            grep -q 'referrerPolicy = "no-referrer"' "$file"
+          done
 
       - name: Reject legacy Supabase key fallbacks
         shell: bash
@@ -390,6 +409,9 @@ jobs:
           grep -q "interval '30 seconds'" supabase/migrations/0045_v12_one_time_internal_capabilities.sql
           grep -q 'consumed_at is null' supabase/migrations/0045_v12_one_time_internal_capabilities.sql
           grep -q 'body_sha256=p_body_sha256' supabase/migrations/0045_v12_one_time_internal_capabilities.sql
+          grep -q 'force row level security' supabase/migrations/0058_v12_capability_defense_in_depth.sql
+          grep -q "expires_at=created_at+interval '30 seconds'" supabase/migrations/0058_v12_capability_defense_in_depth.sql
+          grep -q 'trustrelay_internal_capabilities_deny_clients_v12' supabase/migrations/0058_v12_capability_defense_in_depth.sql
 
       - name: Enforce pinned Supabase package imports
         shell: bash

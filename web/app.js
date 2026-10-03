@@ -22,7 +22,7 @@ function loadTurnstile() {
   if (!turnstileScriptPromise) {
     turnstileScriptPromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";\n      script.referrerPolicy = "no-referrer";
       script.async = true;
       script.defer = true;
       script.onload = () => {
@@ -73,11 +73,22 @@ function resetTurnstile() {
 }
 
 
+const AUTH_STORAGE_KEY = (() => {
+  try {
+    const projectRef = new URL(SUPABASE_URL).hostname.split(".")[0];
+    return projectRef ? `sb-${projectRef}-auth-token` : "";
+  } catch { return ""; }
+})();
+if (AUTH_STORAGE_KEY) {
+  try { window.localStorage.removeItem(AUTH_STORAGE_KEY); } catch {}
+}
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    storage: window.sessionStorage,
   },
 });
 
@@ -275,7 +286,7 @@ async function invokeRpc(name, args = {}) {
 
 function authRedirectUrl() {
   const url = new URL("/web/", window.location.origin);
-  const pendingInvite = localStorage.getItem("trustrelay_pending_invite");
+  const pendingInvite = sessionStorage.getItem("trustrelay_pending_invite");
   if (pendingInvite) url.searchParams.set("invite", pendingInvite);
   return url.toString();
 }
@@ -284,7 +295,7 @@ function showOtpEntry(show = true) {
   els.magicLinkForm.classList.toggle("hidden", show);
   els.otpForm.classList.toggle("hidden", !show);
   if (show) {
-    const rememberedEmail = localStorage.getItem("trustrelay_last_auth_email") || $("passwordlessEmail").value.trim();
+    const rememberedEmail = sessionStorage.getItem("trustrelay_last_auth_email") || $("passwordlessEmail").value.trim();
     if (rememberedEmail) $("otpEmail").value = rememberedEmail;
     setTimeout(() => $("otpCode").focus(), 0);
   }
@@ -423,7 +434,7 @@ async function refreshApp({ preserveView = true } = {}) {
 
     if (await enforceConsumerLegalGate()) return;
 
-    const pendingInvite = localStorage.getItem("trustrelay_pending_invite");
+    const pendingInvite = sessionStorage.getItem("trustrelay_pending_invite");
     if (pendingInvite) {
       $("inviteToken").value = pendingInvite;
       showWorkspaceView("accept-invite");
@@ -1133,7 +1144,7 @@ function setupInviteFromUrl() {
   const invite = params.get("invite");
   const verify = params.get("verify");
   if (invite) {
-    localStorage.setItem("trustrelay_pending_invite", invite);
+    sessionStorage.setItem("trustrelay_pending_invite", invite);
     $("inviteToken").value = invite;
   }
   if (verify) {
@@ -1167,7 +1178,7 @@ function setupHandlers() {
       const { error } = await supabase.auth.signInWithOtp({ email, options });
       if (error) throw error;
 
-      localStorage.setItem("trustrelay_last_auth_email", email);
+      sessionStorage.setItem("trustrelay_last_auth_email", email);
       $("otpEmail").value = email;
       setMessage(
         els.authMessage,
@@ -1204,7 +1215,7 @@ function setupHandlers() {
       if (error) throw error;
       if (!data.session) throw new Error("TrustRelay could not establish a session from that code.");
 
-      localStorage.setItem("trustrelay_last_auth_email", email);
+      sessionStorage.setItem("trustrelay_last_auth_email", email);
       state.session = data.session;
       state.user = data.user;
       await refreshApp({ preserveView: false });
@@ -1393,7 +1404,7 @@ function setupHandlers() {
             method: "POST",
             body: { token },
           });
-          localStorage.removeItem("trustrelay_pending_invite");
+          sessionStorage.removeItem("trustrelay_pending_invite");
           closeModal();
           const status = result?.grant?.status;
           setMessage(
@@ -1478,7 +1489,7 @@ async function initialize() {
   setDefaultGrantDates();
   renderCustomTags();
 
-  const rememberedEmail = localStorage.getItem("trustrelay_last_auth_email");
+  const rememberedEmail = sessionStorage.getItem("trustrelay_last_auth_email");
   if (rememberedEmail) {
     $("passwordlessEmail").value = rememberedEmail;
     $("otpEmail").value = rememberedEmail;
@@ -1512,7 +1523,7 @@ async function initialize() {
   if (state.session) {
     await refreshApp({ preserveView: false });
   } else {
-    const pendingInvite = localStorage.getItem("trustrelay_pending_invite");
+    const pendingInvite = sessionStorage.getItem("trustrelay_pending_invite");
     showAuth(
       pendingInvite
         ? "Use the invited email address below. TrustRelay will send a one-time sign-in link so you can review the authority invitation."

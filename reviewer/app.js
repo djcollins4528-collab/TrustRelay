@@ -23,7 +23,7 @@ function loadTurnstile() {
   if (!turnstileScriptPromise) {
     turnstileScriptPromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";\n      script.referrerPolicy = "no-referrer";
       script.async = true;
       script.defer = true;
       script.onload = () => {
@@ -74,8 +74,18 @@ function resetTurnstile() {
 }
 
 
+const AUTH_STORAGE_KEY = (() => {
+  try {
+    const projectRef = new URL(SUPABASE_URL).hostname.split(".")[0];
+    return projectRef ? `sb-${projectRef}-auth-token` : "";
+  } catch { return ""; }
+})();
+if (AUTH_STORAGE_KEY) {
+  try { window.localStorage.removeItem(AUTH_STORAGE_KEY); } catch {}
+}
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: window.sessionStorage }
 });
 
 const $ = (id) => document.getElementById(id);

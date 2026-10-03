@@ -71,7 +71,7 @@ const supabaseOrigin=supabaseUrlObject.origin;
 const supabaseWs=supabaseOrigin.replace(/^https:/,"wss:");
 const csp=[
   "default-src 'self'",
-  "base-uri 'self'",
+  "base-uri 'none'",
   "object-src 'none'",
   "frame-ancestors 'none'",
   "script-src 'self' https://cdn.jsdelivr.net https://challenges.cloudflare.com",
@@ -108,8 +108,8 @@ function headers(extra={}){
     "Strict-Transport-Security":"max-age=63072000; includeSubDomains; preload",
     "X-Content-Type-Options":"nosniff",
     "X-Frame-Options":"DENY",
-    "Referrer-Policy":"strict-origin-when-cross-origin",
-    "Permissions-Policy":"camera=(), microphone=(), geolocation=(), payment=(self)",
+    "Referrer-Policy":"no-referrer",
+    "Permissions-Policy":"accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), publickey-credentials-create=(self), publickey-credentials-get=(self), screen-wake-lock=(), usb=(), xr-spatial-tracking=()",
     "Cross-Origin-Opener-Policy":"same-origin",
     "Cross-Origin-Resource-Policy":"same-origin",
     "Origin-Agent-Cluster":"?1",
@@ -392,6 +392,9 @@ const server=http.createServer({
   insecureHTTPParser:false,
   joinDuplicateHeaders:false
 },async(req,res)=>{
+  const method=String(req.method||"GET").toUpperCase();
+  if(method==="TRACE"||method==="CONNECT")return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD, POST"});
+  if(req.headers["transfer-encoding"]&&req.headers["content-length"])return sendJson(res,400,{error:{code:"AMBIGUOUS_REQUEST_BODY"}});
   if((req.url||"").length>8192)return sendJson(res,414,{error:{code:"URI_TOO_LONG"}});
   let url;
   try{url=new URL(req.url||"/","http://localhost")}
@@ -458,7 +461,7 @@ server.requestTimeout=15000;
 server.headersTimeout=10000;
 server.keepAliveTimeout=5000;
 server.maxHeadersCount=64;
-server.maxRequestsPerSocket=100;
+server.maxRequestsPerSocket=50;
 server.on("clientError",(err,socket)=>{
   if(!socket.writable)return;
   const code=err?.code==="HPE_HEADER_OVERFLOW"?"431 Request Header Fields Too Large":"400 Bad Request";
