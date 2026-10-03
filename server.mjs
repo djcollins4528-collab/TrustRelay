@@ -335,6 +335,9 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==="/internal/webhook-egress"){
     return sendJson(res,410,{error:{code:"WEBHOOK_EGRESS_RETIRED",replacement:"trustrelay-webhook-egress-v10"}});
   }
+  if(ENVIRONMENT==="production"&&(url.pathname==="/reviewer"||url.pathname.startsWith("/reviewer/"))){
+    return sendJson(res,404,{error:{code:"NOT_FOUND"}});
+  }
   if(url.pathname==="/healthz"){
     return sendJson(res,200,{status:"ok"});
   }
