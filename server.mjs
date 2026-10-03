@@ -267,10 +267,8 @@ async function proxyPartner(req,res,url){
 
 
 async function proxyScim(req,res,url){
-  const suffix=url.pathname==="/oauth2/token"
-    ?"/oauth/token"
-    :url.pathname+url.search;
-  const target=SUPABASE_URL+"/functions/v1/trustrelay-scim-v14"+suffix;
+  const suffix=url.pathname.replace(/^\/scim\/v2\/?/,"/");
+  const target=SUPABASE_URL+"/functions/v1/trustrelay-scim-v14"+suffix+url.search;
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),REQUEST_TIMEOUT);
   try{
@@ -416,23 +414,15 @@ const server=http.createServer({
     if(!["GET","HEAD"].includes(method)&&!jsonContentType(req))return sendJson(res,415,{error:{code:"JSON_CONTENT_TYPE_REQUIRED"}});
     return proxyPartner(req,res,url);
   }
-  if(url.pathname==="/oauth2/token"||url.pathname==="/scim/v2"||url.pathname.startsWith("/scim/v2/")){
+  if(url.pathname==="/scim/v2"||url.pathname.startsWith("/scim/v2/")){
     if(looksLikeBrowserFetch(req))return sendJson(res,403,{error:{code:"BROWSER_SCIM_FORBIDDEN"}});
-    if(url.pathname==="/oauth2/token"){
-      if(method!=="POST")return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"POST"});
+    if(!["GET","POST","PUT","PATCH","DELETE"].includes(method)){
+      return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, POST, PUT, PATCH, DELETE"});
+    }
+    if(["POST","PUT","PATCH"].includes(method)){
       const ct=String(req.headers["content-type"]||"").toLowerCase();
-      if(ct&&!ct.startsWith("application/x-www-form-urlencoded")&&!ct.startsWith("application/json")){
-        return sendJson(res,415,{error:{code:"SCIM_TOKEN_CONTENT_TYPE_REQUIRED"}});
-      }
-    }else{
-      if(!["GET","POST","PUT","PATCH","DELETE"].includes(method)){
-        return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, POST, PUT, PATCH, DELETE"});
-      }
-      if(["POST","PUT","PATCH"].includes(method)){
-        const ct=String(req.headers["content-type"]||"").toLowerCase();
-        if(!ct.startsWith("application/scim+json")&&!ct.startsWith("application/json")){
-          return sendJson(res,415,{error:{code:"SCIM_CONTENT_TYPE_REQUIRED"}});
-        }
+      if(!ct.startsWith("application/scim+json")&&!ct.startsWith("application/json")){
+        return sendJson(res,415,{error:{code:"SCIM_CONTENT_TYPE_REQUIRED"}});
       }
     }
     return proxyScim(req,res,url);
