@@ -279,15 +279,20 @@ Deno.serve(async req=>{
     if(req.headers.get("origin"))
       throw{status:403,code:"BROWSER_SCIM_FORBIDDEN"};
 
+    const parts=pathParts(req.url);
+    const tenantKey=parts.shift()||"";
+    if(!/^scim_[A-Za-z0-9_-]{20,80}$/.test(tenantKey))
+      throw{status:401,code:"SCIM_UNAUTHORIZED"};
+
     const ctx=await authenticate(req);
     const orgId=String(ctx.organizationId||"");
-    if(!orgId)throw{status:401,code:"SCIM_UNAUTHORIZED"};
+    if(!orgId||String(ctx.tenantKey||"")!==tenantKey)
+      throw{status:401,code:"SCIM_UNAUTHORIZED"};
 
-    const parts=pathParts(req.url);
     const resource=parts[0]||"";
     const id=parts[1]||null;
     const method=req.method.toUpperCase();
-    const base=CANONICAL_APP_ORIGIN+"/scim/v2";
+    const base=CANONICAL_APP_ORIGIN+"/scim/v2/"+encodeURIComponent(tenantKey);
 
     if(method==="GET"&&resource==="ServiceProviderConfig")
       return scimResponse(providerConfig(base));
