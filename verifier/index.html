@@ -317,13 +317,13 @@
                     <small>SCIM can never grant Owner or Admin.</small>
                   </div>
                   <div class="scim-policy-copy">
-                    <strong>180-day credential lifetime</strong>
-                    <p>The bearer token is shown once, stored only as a SHA-256 hash, rate-limited per organization, and can be rotated at any time.</p>
+                    <strong>One-year credential lifetime</strong>
+                    <p>The bearer token is shown once, stored only as a SHA-256 hash, rate-limited per organization, and supports overlapping credentials for zero-downtime rotation.</p>
                   </div>
                 </div>
                 <div class="management-actions scim-actions">
                   <button id="enableScimButton" class="button primary" type="button">Enable SCIM</button>
-                  <button id="rotateScimTokenButton" class="button secondary hidden" type="button">Rotate token</button>
+                  <button id="rotateScimTokenButton" class="button secondary hidden" type="button">Add rotation token</button>
                   <button id="saveScimPolicyButton" class="button secondary hidden" type="button">Save default role</button>
                   <button id="disableScimButton" class="button danger hidden" type="button">Disable SCIM</button>
                   <button id="reenableScimButton" class="button primary hidden" type="button">Re-enable SCIM</button>
@@ -343,7 +343,7 @@
               </div>
             </div>
 
-            <div class="section-heading"><div><h3>SCIM credential status</h3><p>The secret token is shown only at enablement or rotation. TrustRelay stores only its SHA-256 hash.</p></div></div>
+            <div class="section-heading"><div><h3>SCIM credentials</h3><p>Secret tokens are shown only when created. TrustRelay stores only their SHA-256 hashes; revoke the old token after your identity provider has switched to the new one.</p></div></div>
             <div id="scimCredentialList" class="management-list"></div>
           </div>
         </section>
