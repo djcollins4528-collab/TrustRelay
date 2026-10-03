@@ -297,37 +297,53 @@
               <div>
                 <p class="eyebrow">AUTOMATED USER LIFECYCLE</p>
                 <h3>SCIM 2.0 provisioning.</h3>
-                <p>Let Microsoft Entra ID or Okta provision, update, and deprovision TrustRelay organization members automatically.</p>
+                <p>Let Microsoft Entra ID or Okta provision, update, suspend and deprovision TrustRelay organization members automatically.</p>
               </div>
               <span id="scimStatusChip" class="role-chip">NOT CONFIGURED</span>
             </div>
-            <div id="scimSummary" class="sso-summary"></div>
-            <div class="form-grid scim-policy-grid">
-              <div class="field">
-                <label for="scimDefaultRole">Default provisioned role</label>
-                <select id="scimDefaultRole">
-                  <option value="verifier">Verifier</option>
-                  <option value="auditor">Auditor</option>
-                  <option value="developer">Developer</option>
-                  <option value="compliance">Compliance</option>
-                </select>
+
+            <div class="portal-grid scim-grid">
+              <div>
+                <div id="scimSummary" class="sso-summary"></div>
+                <div class="form-grid scim-policy-grid">
+                  <div class="field">
+                    <label for="scimDefaultRole">Default provisioned role</label>
+                    <select id="scimDefaultRole">
+                      <option value="verifier">Verifier</option>
+                      <option value="auditor">Auditor</option>
+                      <option value="developer">Developer</option>
+                      <option value="compliance">Compliance</option>
+                    </select>
+                    <small>SCIM can never grant Owner or Admin.</small>
+                  </div>
+                  <div class="field">
+                    <label>Compatibility</label>
+                    <label class="scim-check"><input id="scimAllowBearer" type="checkbox" checked> Allow rotatable bearer token</label>
+                    <label class="scim-check"><input id="scimGroupSync" type="checkbox" checked> Synchronize SCIM groups</label>
+                  </div>
+                </div>
+                <div class="management-actions scim-actions">
+                  <button id="createScimCredentialButton" class="button primary" type="button">Generate SCIM credentials</button>
+                  <button id="rotateScimCredentialButton" class="button secondary hidden" type="button">Add rotation credential</button>
+                  <button id="saveScimPolicyButton" class="button secondary hidden" type="button">Save policy</button>
+                  <button id="disableScimButton" class="button danger hidden" type="button">Disable SCIM</button>
+                </div>
+                <div class="sso-safety">
+                  <strong>Safe deprovisioning</strong>
+                  <p>SCIM deactivation removes access to this organization without deleting the user's global TrustRelay identity. Owner and Admin memberships are protected from SCIM deactivation.</p>
+                </div>
               </div>
-              <div class="scim-policy-copy">
-                <strong>Immediate deprovisioning</strong>
-                <p>When the IdP sets <code>active=false</code> or deletes a SCIM user, TrustRelay disables that organization membership. Owner accounts require an ownership transfer first.</p>
+
+              <div>
+                <div class="card-heading"><div><h3>Identity-provider setup</h3><p>Use these values in your enterprise provisioning application.</p></div></div>
+                <div id="scimEndpointList" class="sso-summary"></div>
+                <div class="scim-provider-note"><strong>Microsoft Entra ID</strong><p>Use OAuth 2.0 client credentials. TrustRelay issues one-hour access tokens from the OAuth token endpoint.</p></div>
+                <div class="scim-provider-note"><strong>Okta</strong><p>Use OAuth client credentials or the generated secret directly as the SCIM bearer token while bearer compatibility is enabled.</p></div>
               </div>
             </div>
-            <div class="management-actions sso-actions">
-              <button id="enableScimButton" class="button primary" type="button">Enable SCIM</button>
-              <button id="saveScimPolicyButton" class="button secondary hidden" type="button">Save default role</button>
-              <button id="rotateScimTokenButton" class="button secondary hidden" type="button">Rotate token</button>
-              <button id="disableScimButton" class="button danger hidden" type="button">Disable SCIM</button>
-              <button id="reenableScimButton" class="button primary hidden" type="button">Re-enable SCIM</button>
-            </div>
-            <div class="sso-safety">
-              <strong>SCIM-aware JIT</strong>
-              <p>When SCIM is enabled, an unprovisioned user is not auto-added by domain JIT. Only an active SCIM assignment can create the first organization membership.</p>
-            </div>
+
+            <div class="section-heading"><div><h3>SCIM credentials</h3><p>Secrets are shown once. TrustRelay stores only SHA-256 hashes and supports overlapping credentials for zero-downtime rotation.</p></div></div>
+            <div id="scimCredentialList" class="management-list"></div>
           </div>
         </section>
 
