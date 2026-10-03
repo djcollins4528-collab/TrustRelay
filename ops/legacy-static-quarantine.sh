@@ -39,6 +39,7 @@ trustrelay_quarantine_legacy_static() {
 </body>
 </html>
 EOF
+  echo "Legacy static quarantine completed: publish root replaced with retirement page."
 }
 
 trap trustrelay_quarantine_legacy_static EXIT
