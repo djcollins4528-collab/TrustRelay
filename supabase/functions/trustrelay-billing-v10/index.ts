@@ -36,6 +36,19 @@ async function userFrom(req){
  const u=await r.json(); if(!u?.id)throw{status:401,code:"INVALID_SESSION"};
  return {user:u,authorization:auth}
 }
+function sessionIdFromAuthorization(authorization){
+ const token=String(authorization||"").replace(/^Bearer\s+/i,"");
+ const parts=token.split(".");
+ if(parts.length!==3)throw{status:401,code:"INVALID_SESSION"};
+ try{
+  let x=parts[1].replace(/-/g,"+").replace(/_/g,"/");
+  x+="=".repeat((4-x.length%4)%4);
+  const claims=JSON.parse(atob(x));
+  const sessionId=String(claims?.session_id||"");
+  if(!sessionId)throw new Error("missing session_id");
+  return sessionId;
+ }catch{throw{status:401,code:"INVALID_SESSION"}}
+}
 async function rpcUser(name,payload,authorization){
  const r=await fetch(URL+"/rest/v1/rpc/"+name,{method:"POST",headers:{apikey:publishableKey(),authorization,"content-type":"application/json",accept:"application/json"},body:JSON.stringify(payload||{})});
  const x=await parse(r); if(!x.ok)throw{status:x.status||500,code:x.data?.code||x.data?.message||"DATABASE_ERROR"};
@@ -125,7 +138,7 @@ Deno.serve(async req=>{
     return out({received:true,result:applied},200,req);
   }
 
-  const {authorization}=await userFrom(req);
+  const {user,authorization}=await userFrom(req);
   const input=await jsonBody(req);
   const action=String(input.action||"");
   const orgId=String(input.orgId||"").trim();
@@ -153,7 +166,10 @@ Deno.serve(async req=>{
   if(perms?.permissions?.["organization.manage"]!==true)throw{status:403,code:"ORGANIZATION_PERMISSION_DENIED"};
 
   if(action==="checkout"||action==="portal"){
-    await rpcUser("trustrelay_sensitive_action_guard_v11",{p_action:"billing."+action},authorization);
+    const sessionId=sessionIdFromAuthorization(authorization);
+    await rpcAdmin("trustrelay_sensitive_action_guard_admin_v11",{
+      p_uid:user.id,p_session_id:sessionId,p_action:"billing."+action
+    });
   }
 
   if(action==="select_plan"){
