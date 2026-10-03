@@ -59,7 +59,7 @@ jobs:
       - name: Verify production static-surface isolation
         shell: bash
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           export SUPABASE_URL="https://msfrbsnihylfynrtdgxe.supabase.co"
           export SUPABASE_PUBLISHABLE_KEY="sb_publishable_ci_only"
           export TRUSTRELAY_ENVIRONMENT="production"
@@ -171,6 +171,7 @@ jobs:
           grep -Fq '"Cross-Origin-Embedder-Policy":"credentialless"' server.mjs
           grep -Fq 'no-cache, no-store, must-revalidate, max-age=0' server.mjs
           grep -Fq 'id="complianceExportForm" class="focus-card" method="post" action="/verifier/"' verifier/index.html
+          grep -Fq '10202	IGNORE	(Anti-CSRF token not applicable: verifier forms are JS-intercepted and privileged requests require explicit bearer authorization, not ambient cookie authentication)' .zap/rules.tsv
           grep -q 'UNEXPECTED_REQUEST_BODY' server.mjs
           grep -q 'BROWSER_PARTNER_API_FORBIDDEN' server.mjs
           grep -q 'JSON_CONTENT_TYPE_REQUIRED' server.mjs
