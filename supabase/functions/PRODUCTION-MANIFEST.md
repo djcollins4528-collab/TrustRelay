@@ -84,3 +84,5 @@ The v1.0 egress resolves A/AAAA at delivery time, rejects private/reserved addre
 - OIDC client secrets are forwarded directly to Supabase Auth's server-only provider API and are never stored in TrustRelay tables.
 - SAML provisioning remains fail-closed unless `TRUSTRELAY_SAML_ENABLED=true`; current Supabase plan requirements must be satisfied first.
 - Reconfiguration resets enforcement to optional until the exact configured IdP successfully authenticates an owner/admin session. A non-SSO owner break-glass path is retained.
+
+- Enterprise SSO domains require DNS ownership verification at `_trustrelay.<domain>`; only challenge hashes are stored. Provider login remains disabled until verification succeeds.
