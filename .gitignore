@@ -1,0 +1,22 @@
+# TrustRelay local/runtime secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+
+# Local tooling/runtime artifacts
+.DS_Store
+Thumbs.db
+node_modules/
+coverage/
+.nyc_output/
+*.log
+tmp/
+.temp/
+.cache/
