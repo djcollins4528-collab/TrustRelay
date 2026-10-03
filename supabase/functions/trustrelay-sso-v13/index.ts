@@ -62,7 +62,7 @@ async function discoveryRateLimit(req){
 }
 function normalizeEmail(value){
   const email=String(value||"").trim().toLowerCase();
-  if(email.length<3||email.length>320||!^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw{status:400,code:"EMAIL_INVALID"};
+  if(email.length<3||email.length>320||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw{status:400,code:"EMAIL_INVALID"};
   return email
 }
 function normalizeDomains(input){
