@@ -5,6 +5,7 @@ function secret(){const x=envJson("SUPABASE_SECRET_KEYS");return x.default||Obje
 function headers(){const k=secret();const h={"apikey":k,"content-type":"application/json","accept":"application/json"};if(k&&!k.startsWith("sb_secret_"))h["authorization"]="Bearer "+k;return h}
 function sub(req){const a=req.headers.get("authorization")||"",t=a.replace(/^Bearer\s+/i,""),p=t.split(".")[1];if(!p)throw new Error("auth");const s=p.replaceAll("-","+").replaceAll("_","/")+"===".slice((p.length+3)%4);return JSON.parse(atob(s)).sub}
 async function rpc(name,body){const r=await fetch(URL+"/rest/v1/rpc/"+name,{method:"POST",headers:headers(),body:JSON.stringify(body||{})});const d=await r.json();if(!r.ok||d?.ok===false)throw{status:Number(d?.status)||r.status||400,code:d?.code||"REQUEST_REJECTED"};return d}
+async function jsonBody(req,max=16384){const raw=await req.text();if(raw.length>max)throw{status:413,code:"PAYLOAD_TOO_LARGE"};try{return raw?JSON.parse(raw):{}}catch{throw{status:400,code:"INVALID_JSON"}}}
 function id(p){return p+crypto.randomUUID().replaceAll("-","")}
 function b64(bytes){let s="";for(const b of bytes)s+=String.fromCharCode(b);return btoa(s).replaceAll("+","-").replaceAll("/","_").replace(/=+$/,"")}
 function b64text(t){return b64(new TextEncoder().encode(t))}
@@ -25,7 +26,7 @@ async function activeKey(){
 }
 Deno.serve(async req=>{
  try{
-  const uid=sub(req),v=await req.json(),grantId=String(v.grantId||"").trim();
+  const uid=sub(req),v=await jsonBody(req),grantId=String(v.grantId||"").trim();
   if(!grantId)throw{status:400,code:"GRANT_ID_REQUIRED"};
   await rpc("trustrelay_ensure_account_v06",{p_auth_user_id:uid,p_display_name:null});
   await rpc("trustrelay_get_grant_v06",{p_auth_user_id:uid,p_grant_id:grantId});

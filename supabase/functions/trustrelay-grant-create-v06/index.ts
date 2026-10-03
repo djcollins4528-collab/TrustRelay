@@ -9,10 +9,11 @@ function b64(bytes){let s="";for(const b of bytes)s+=String.fromCharCode(b);retu
 function rand(){const v=new Uint8Array(32);crypto.getRandomValues(v);return b64(v)}
 async function sha(t){return[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t)))].map(b=>b.toString(16).padStart(2,"0")).join("")}
 async function rpc(name,body){const r=await fetch(URL+"/rest/v1/rpc/"+name,{method:"POST",headers:headers(),body:JSON.stringify(body)});const d=await r.json();if(!r.ok||d?.ok===false)throw{status:Number(d?.status)||r.status||400,code:d?.code||"REQUEST_REJECTED"};return d}
+async function jsonBody(req,max=65536){const raw=await req.text();if(raw.length>max)throw{status:413,code:"PAYLOAD_TOO_LARGE"};try{return raw?JSON.parse(raw):{}}catch{throw{status:400,code:"INVALID_JSON"}}}
 Deno.serve(async req=>{
   try{
     const uid=sub(req);
-    const v=await req.json();
+    const v=await jsonBody(req);
     await rpc("trustrelay_ensure_account_v06",{p_auth_user_id:uid,p_display_name:null});
     const email=String(v.representativeEmail||"").trim().toLowerCase();
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))throw{status:400,code:"INVALID_REPRESENTATIVE_EMAIL"};

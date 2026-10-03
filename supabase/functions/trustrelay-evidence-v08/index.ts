@@ -125,11 +125,12 @@ function corsPreflight(req){
   if(!CANONICAL_APP_ORIGIN||origin!==CANONICAL_APP_ORIGIN)return Response.json({error:{code:"CORS_ORIGIN_DENIED"}},{status:403});
   return new Response(null,{status:204,headers:corsHeaders(req)});
 }
+async function jsonBody(req,max=65536){const raw=await req.text();if(raw.length>max)throw{status:413,code:"PAYLOAD_TOO_LARGE"};try{return raw?JSON.parse(raw):{}}catch{throw{status:400,code:"INVALID_JSON"}}}
 Deno.serve(async req=>{
  try{
   if(req.method==="OPTIONS")return corsPreflight(req);
   if(req.method!=="POST")return out({error:{code:"METHOD_NOT_ALLOWED"}},405,req);
-  const u=await user(req),v=await req.json(),action=String(v.action||"");
+  const u=await user(req),v=await jsonBody(req),action=String(v.action||"");
   if(action==="prepare"){
     const prepared=await rpc("trustrelay_prepare_document_v08",{
       p_uid:u.id,
