@@ -283,6 +283,52 @@ jobs:
           test "$code" = "503"
           grep -q 'RUNTIME_QUARANTINED' /tmp/quarantine-body
 
+      - name: Enforce Edge Function auth contracts
+        shell: python
+        run: |
+          import json, pathlib, sys
+
+          root = pathlib.Path("supabase/functions")
+          contract_path = root / "security-contract.json"
+          contract = json.loads(contract_path.read_text(encoding="utf-8"))
+          declared = contract.get("functions", {})
+          failures = []
+          jwt_disabled = set()
+
+          for config_path in root.glob("*/function.json"):
+              config = json.loads(config_path.read_text(encoding="utf-8"))
+              slug = config.get("slug") or config_path.parent.name
+              if config.get("verify_jwt") is False:
+                  jwt_disabled.add(slug)
+
+          declared_set = set(declared)
+          if jwt_disabled != declared_set:
+              for slug in sorted(jwt_disabled - declared_set):
+                  failures.append(f"{slug}: verify_jwt=false without reviewed security contract")
+              for slug in sorted(declared_set - jwt_disabled):
+                  failures.append(f"{slug}: security contract exists but function.json is not verify_jwt=false")
+
+          for slug, spec in declared.items():
+              source = root / slug / "index.ts"
+              config_path = root / slug / "function.json"
+              if not source.exists():
+                  failures.append(f"{slug}: missing index.ts")
+                  continue
+              if not config_path.exists():
+                  failures.append(f"{slug}: missing function.json")
+                  continue
+              text = source.read_text(encoding="utf-8")
+              for marker_text in spec.get("required", []):
+                  if marker_text not in text:
+                      failures.append(f"{slug}: missing independent-auth marker {marker_text!r}")
+              if not spec.get("mode"):
+                  failures.append(f"{slug}: auth mode not declared")
+
+          if failures:
+              print("Edge Function security-contract violations:")
+              print("\n".join(failures))
+              sys.exit(1)
+
       - name: Enforce pinned Supabase package imports
         shell: bash
         run: |
