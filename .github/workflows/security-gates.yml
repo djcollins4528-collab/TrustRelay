@@ -64,6 +64,7 @@ jobs:
           export SUPABASE_PUBLISHABLE_KEY="sb_publishable_ci_only"
           export TRUSTRELAY_ENVIRONMENT="production"
           export TRUSTRELAY_RATE_LIMIT_PER_MINUTE="120"
+          export TRUSTRELAY_ALLOWED_HOSTS="127.0.0.1"
           export PORT="18080"
           node server.mjs >/tmp/trustrelay-ci.log 2>&1 &
           pid=$!
@@ -98,6 +99,51 @@ jobs:
           assert_status 404 http://127.0.0.1:18080/reviewer/
           assert_status 200 http://127.0.0.1:18080/
           assert_status 200 http://127.0.0.1:18080/web/
+
+          bad_host="$(curl --silent --output /tmp/body --write-out '%{http_code}' -H 'Host: attacker.invalid' http://127.0.0.1:18080/)"
+          test "$bad_host" = "421"
+
+          headers="$(curl --silent --head http://127.0.0.1:18080/ | tr -d '\r')"
+          printf '%s\n' "$headers" | grep -qi "^content-security-policy:.*style-src 'self'"
+          printf '%s\n' "$headers" | grep -qi "style-src-attr 'none'"
+          if printf '%s\n' "$headers" | grep -qi "unsafe-inline"; then
+            echo "CSP unexpectedly permits unsafe-inline"
+            exit 1
+          fi
+          printf '%s\n' "$headers" | grep -qi "^x-content-type-options: nosniff"
+          printf '%s\n' "$headers" | grep -qi "^x-frame-options: DENY"
+
+      - name: Reject inline browser code and style
+        shell: python
+        run: |
+          import pathlib, re, sys
+
+          roots = [pathlib.Path("index.html"), pathlib.Path("web"), pathlib.Path("verifier"), pathlib.Path("reviewer"), pathlib.Path("legal"), pathlib.Path("pilot"), pathlib.Path("support")]
+          html_files = []
+          js_files = []
+          for root in roots:
+              if root.is_file():
+                  html_files.append(root)
+              elif root.exists():
+                  html_files.extend(root.rglob("*.html"))
+                  js_files.extend(root.rglob("*.js"))
+
+          failures = []
+          for path in html_files:
+              text = path.read_text(encoding="utf-8")
+              if re.search(r"<style(?:\\s|>)", text, re.I): failures.append(f"{path}: inline <style>")
+              if re.search(r"\\sstyle\\s*=", text, re.I): failures.append(f"{path}: style attribute")
+              for m in re.finditer(r"<script\\b([^>]*)>", text, re.I):
+                  if not re.search(r"\\bsrc\\s*=", m.group(1), re.I): failures.append(f"{path}: inline <script>")
+          for path in js_files:
+              text = path.read_text(encoding="utf-8")
+              if re.search(r"\\.style\\.[A-Za-z_$]", text): failures.append(f"{path}: runtime inline style assignment")
+              if re.search(r"\\beval\\s*\\(|new\\s+Function\\s*\\(", text): failures.append(f"{path}: dynamic code execution")
+
+          if failures:
+              print("Browser hardening invariant failed:")
+              print("\\n".join(failures))
+              sys.exit(1)
 
       - name: Enforce pinned Supabase package imports
         shell: bash
