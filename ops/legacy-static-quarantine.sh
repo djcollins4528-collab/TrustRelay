@@ -8,7 +8,7 @@ if [[ "${RENDER_SERVICE_ID:-}" != "srv-daul9tk9v7es73a0tsdg" ]]; then
 fi
 
 # Fail closed unless Render is executing from the expected TrustRelay checkout.
-if [[ ! -f "server.mjs" || ! -d ".git" ]]; then
+if [[ ! -f "server.mjs" || ! -d "supabase" || ! -d "web" ]]; then
   echo "Legacy static quarantine guard: expected TrustRelay checkout not found." >&2
   exit 1
 fi
