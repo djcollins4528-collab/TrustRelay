@@ -9,10 +9,14 @@ function jsonpart(v){return JSON.parse(new TextDecoder().decode(b64decode(v)))}
 function id(p){return p+crypto.randomUUID().replaceAll("-","")}
 async function hex(t){return[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t)))].map(b=>b.toString(16).padStart(2,"0")).join("")}
 
-Deno.serve(async ()=>{
+const PUBLIC_HEADERS={"cache-control":"public, max-age=300","x-content-type-options":"nosniff","access-control-allow-origin":"*","access-control-allow-methods":"GET, HEAD, OPTIONS","access-control-allow-headers":"content-type, apikey, authorization"};
+Deno.serve(async req=>{
  try{
+   if(req.method==="OPTIONS")return new Response(null,{status:204,headers:PUBLIC_HEADERS});
+   if(!["GET","HEAD"].includes(req.method))return Response.json({error:{code:"METHOD_NOT_ALLOWED"}},{status:405,headers:{...PUBLIC_HEADERS,Allow:"GET, HEAD"}});
    const d=await rpc("trustrelay_list_public_signing_keys_v06",{});
    const keys=(d.keys||[]).map(x=>({...x.publicJwk,kid:x.kid,alg:x.alg,use:"sig"}));
-   return Response.json({keys},{headers:{"cache-control":"public, max-age=300","x-content-type-options":"nosniff"}});
- }catch{return Response.json({error:{code:"KEY_REGISTRY_UNAVAILABLE"}},{status:503})}
+   if(req.method==="HEAD")return new Response(null,{status:200,headers:PUBLIC_HEADERS});
+   return Response.json({keys},{headers:PUBLIC_HEADERS});
+ }catch{return Response.json({error:{code:"KEY_REGISTRY_UNAVAILABLE"}},{status:503,headers:{"cache-control":"no-store","x-content-type-options":"nosniff","access-control-allow-origin":"*"}})}
 });
