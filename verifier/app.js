@@ -615,6 +615,16 @@ function renderDeveloper(){
   -H "X-TrustRelay-Key: YOUR_API_KEY"`;
 }
 
+function showSsoDomainChallenges(challenges){
+  const items=Array.isArray(challenges)?challenges:[];
+  if(!items.length){
+    toast("All configured SSO domains are already verified.","success");
+    return;
+  }
+  const rows=items.map(x=>'<div class="management-row"><div><strong>'+esc(x.domain)+'</strong><p>'+esc(x.recordType||"TXT")+' · '+esc(x.recordName)+'</p><div class="secret-once">'+esc(x.recordValue)+'</div></div></div>').join("");
+  openModal('<p class="eyebrow">DOMAIN OWNERSHIP</p><h2>Add these DNS TXT records.</h2><p>Publish each record with your DNS provider, then return to Enterprise SSO and click <strong>Verify domains</strong>. Reopening DNS verification records rotates pending challenges.</p><div class="management-list">'+rows+'</div>');
+}
+
 function renderSso(){
   const root=$("ssoConnectionSummary");
   if(!root)return;
@@ -622,7 +632,7 @@ function renderSso(){
   const c=state.sso||{};
   const configured=Boolean(c?.configured);
   const chip=$("ssoStatusChip");
-  chip.textContent=configured?(c.enforcementMode==="required"?"SSO REQUIRED":"ACTIVE"):"NOT CONFIGURED";
+  chip.textContent=configured?(c.status!=="active"?"VERIFY DOMAINS":c.enforcementMode==="required"?"SSO REQUIRED":"ACTIVE"):"NOT CONFIGURED";
   root.replaceChildren();
 
   if(!configured){
@@ -636,6 +646,7 @@ function renderSso(){
       ["Provider",brand],
       ["Protocol",String(c.protocol||"").toUpperCase()],
       ["Domains",(c.domains||[]).join(", ")],
+      ["Domain ownership",(()=>{const d=Array.isArray(c.domainVerification)?c.domainVerification:[];const n=d.filter(x=>x.verificationStatus==="verified").length;return d.length?n+"/"+d.length+" verified":"Not verified"})()],
       ["Enforcement",c.enforcementMode||"optional"],
       ["JIT membership",c.jitEnabled?"enabled · "+(c.defaultRole||"verifier"):"disabled"],
       ["Last verified",c.lastTestedAt?formatDate(c.lastTestedAt,true):"Not yet tested"],
@@ -654,7 +665,10 @@ function renderSso(){
     }
   }
 
-  $("testSsoButton").classList.toggle("hidden",!configured);
+  const pendingDomains=configured&&(Array.isArray(c.domainVerification)?c.domainVerification:[]).some(x=>x.verificationStatus!=="verified");
+  $("domainSsoRecordsButton").classList.toggle("hidden",!pendingDomains);
+  $("verifySsoDomainsButton").classList.toggle("hidden",!pendingDomains);
+  $("testSsoButton").classList.toggle("hidden",!configured||c.status!=="active");
   $("disableSsoButton").classList.toggle("hidden",!configured);
   $("requireSsoButton").classList.toggle("hidden",!configured||c.enforcementMode==="required"||c.session?.providerMatched!==true);
   $("makeSsoOptionalButton").classList.toggle("hidden",!configured||c.enforcementMode!=="required");
@@ -735,13 +749,34 @@ function setup(){
         issuerUrl:brand==="okta"?$("ssoOktaIssuer").value.trim():null,
         jitEnabled:$("ssoJitEnabled").checked,jitDefaultRole:$("ssoJitRole").value
       };
-      await ssoEdge(payload);
+      const x=await ssoEdge(payload);
       $("ssoClientSecret").value="";
-      toast("Enterprise OIDC configured. Test it before requiring SSO.","success");
+      toast("Enterprise OIDC configured. Verify your corporate domain before testing SSO.","success");
       state.sso=await rpc("trustrelay_sso_config_v13",{p_org_id:state.orgId});renderSso();
+      showSsoDomainChallenges(x.domainChallenges);
     }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
     finally{busy(b,false)}
   });
+  $("domainSsoRecordsButton").onclick=async()=>{
+    const b=$("domainSsoRecordsButton");busy(b,true,"Generating…");
+    try{
+      const x=await ssoEdge({action:"domain_challenges",orgId:state.orgId});
+      showSsoDomainChallenges(x.challenges);
+      state.sso=await rpc("trustrelay_sso_config_v13",{p_org_id:state.orgId});renderSso();
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
+    finally{busy(b,false)}
+  };
+  $("verifySsoDomainsButton").onclick=async()=>{
+    const b=$("verifySsoDomainsButton");busy(b,true,"Verifying…");
+    try{
+      const x=await ssoEdge({action:"verify_domains",orgId:state.orgId});
+      state.sso=x.config||await rpc("trustrelay_sso_config_v13",{p_org_id:state.orgId});
+      renderSso();
+      if(x.allVerified)toast("Corporate domain ownership verified. You can now test enterprise sign-in.","success");
+      else toast("DNS verification is still pending for: "+(x.pending||[]).map(v=>v.domain).join(", "),"warning");
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
+    finally{busy(b,false)}
+  };
   $("testSsoButton").onclick=async()=>{
     const c=state.sso;if(!c?.configured)return;
     const email=state.user?.email||sessionStorage.getItem("trustrelay_verifier_email")||"";
