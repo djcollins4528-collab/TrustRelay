@@ -36,7 +36,7 @@ async function ensureBucket(){
 Deno.serve(async req=>{
   try{
     if(SB_URL.includes("msfrbsnihylfynrtdgxe"))return Response.json({error:{code:"BACKUP_SINK_WRONG_ENVIRONMENT"}},{status:503});
-    if(req.method==="GET")return Response.json({ok:true,service:"trustrelay-backup-sink-v10",environment:"staging",signedRequests:true,encryption:"AES-256-GCM+RSA-OAEP-256"});
+    if(req.method==="GET")return Response.json({error:{code:"METHOD_NOT_ALLOWED"}},{status:405,headers:{"allow":"POST","cache-control":"no-store","x-content-type-options":"nosniff"}});
     if(req.method!=="POST")return Response.json({error:{code:"METHOD_NOT_ALLOWED"}},{status:405});
     const bodyText=await req.text();
     await verifySignedRequest(req,bodyText);
