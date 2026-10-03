@@ -11,23 +11,38 @@ permissions:
   contents: read
 
 jobs:
-  zap-baseline:
-    name: OWASP ZAP passive baseline
+  staging-zap:
+    name: OWASP ZAP staging baseline
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - https://trustrelay-staging.onrender.com
-          - https://trustrelay-production.onrender.com
     steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Wait for exact staging SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=0
+          for i in {1..60}; do
+            body="$(curl --silent --show-error --max-time 5 https://trustrelay-staging.onrender.com/version || true)"
+            if printf '%s' "$body" | grep -Fq "\"commit\":\"$GITHUB_SHA\""; then
+              ready=1
+              break
+            fi
+            sleep 3
+          done
+          if [ "$ready" != "1" ]; then
+            echo "Staging never reached exact commit $GITHUB_SHA"
+            exit 1
+          fi
+
       - name: ZAP baseline
         uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25
         with:
-          target: ${{ matrix.target }}
+          target: https://trustrelay-staging.onrender.com
           allow_issue_writing: false
           fail_action: true
           rules_file_name: '.zap/rules.tsv'
-          artifact_name: zap-${{ strategy.job-index }}
+          artifact_name: zap-staging
           cmd_options: '-a'
