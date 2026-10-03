@@ -1,26 +1,28 @@
 #!/usr/bin/env bash
 # Quarantine only the retired legacy Render static site.
 # This mutates the ephemeral Render build workspace, never the GitHub repository.
-set -euo pipefail
 
 if [[ "${RENDER_SERVICE_ID:-}" != "srv-daul9tk9v7es73a0tsdg" ]]; then
   return 0 2>/dev/null || exit 0
 fi
 
-ROOT="/opt/render/project/src"
-cd "$ROOT"
-
-# Fail closed unless this is the expected TrustRelay checkout.
-if [[ ! -f "server.mjs" || ! -d "supabase" || ! -d "web" ]]; then
-  echo "Legacy static quarantine guard: expected TrustRelay checkout not found at $ROOT." >&2
-  exit 1
+# BASH_ENV may be sourced by nested build shells. Register cleanup only once,
+# on the outer build shell, so Render's own builder can finish normally.
+if [[ "${TRUSTRELAY_STATIC_QUARANTINE_TRAP_SET:-}" == "1" ]]; then
+  return 0 2>/dev/null || exit 0
 fi
+export TRUSTRELAY_STATIC_QUARANTINE_TRAP_SET=1
 
-# Remove the repository tree from the publish directory, then leave a single
-# non-sensitive retirement page. This affects only the disposable build clone.
-find "$ROOT" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+trustrelay_quarantine_legacy_static() {
+  local root="/opt/render/project/src"
+  if [[ ! -f "$root/server.mjs" || ! -d "$root/supabase" || ! -d "$root/web" ]]; then
+    echo "Legacy static quarantine cleanup skipped: TrustRelay checkout not found at $root." >&2
+    return 1
+  fi
 
-cat > "$ROOT/index.html" <<'EOF'
+  find "$root" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+
+  cat > "$root/index.html" <<'EOF'
 <!doctype html>
 <html lang="en">
 <head>
@@ -37,3 +39,6 @@ cat > "$ROOT/index.html" <<'EOF'
 </body>
 </html>
 EOF
+}
+
+trap trustrelay_quarantine_legacy_static EXIT
