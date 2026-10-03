@@ -24,6 +24,7 @@ const WEBHOOK_TARGET_TIMEOUT=Math.max(1000,Math.min(30000,Number(process.env.TRU
 const WEBHOOK_RESPONSE_LIMIT=Math.max(4096,Math.min(262144,Number(process.env.TRUSTRELAY_WEBHOOK_RESPONSE_LIMIT_BYTES||65536)));
 const RATE_LIMIT_PER_MINUTE=Math.max(10,Math.min(5000,Number(process.env.TRUSTRELAY_RATE_LIMIT_PER_MINUTE||120)));
 const RATE_LIMIT_WINDOW_MS=60_000;
+const ALLOWED_HOSTS=new Set(String(process.env.TRUSTRELAY_ALLOWED_HOSTS||"").split(",").map(x=>x.trim().toLowerCase().replace(/\.$/,"")).filter(Boolean));
 const rateBuckets=new Map();
 let rateLimitSweepCounter=0;
 
@@ -89,7 +90,7 @@ const types={
 const PUBLIC_TOP_LEVEL_FILES=new Set(["index.html"]);
 const PUBLIC_DIRECTORIES=new Set(["web","verifier","reviewer","legal","pilot","support"]);
 const PUBLIC_EXTENSIONS=new Set([".html",".js",".css",".json",".svg",".png",".jpg",".jpeg",".webp",".ico",".txt"]);
-const ALLOWED_HOSTS=new Set(String(process.env.TRUSTRELAY_ALLOWED_HOSTS||"").split(",").map(x=>x.trim().toLowerCase().replace(/\.$/,"")).filter(Boolean));
+
 
 function headers(extra={}){
   return {
