@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
 const SB_URL=Deno.env.get("SUPABASE_URL")||"";
 function envJson(n){try{return JSON.parse(Deno.env.get(n)||"{}")}catch{return{}}}
-function sec(){const x=envJson("SUPABASE_SECRET_KEYS");return x.default||Object.values(x).find(v=>typeof v==="string"&&v)||Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||""}
+function sec(){const x=envJson("SUPABASE_SECRET_KEYS");return x.default||Object.values(x).find(v=>typeof v==="string"&&v)||""}
 const SERVICE_KEY=sec();
 const admin=createClient(SB_URL,SERVICE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
 function sh(){const h={apikey:SERVICE_KEY,"content-type":"application/json",accept:"application/json"};if(SERVICE_KEY&&!SERVICE_KEY.startsWith("sb_secret_"))h.authorization="Bearer "+SERVICE_KEY;return h}

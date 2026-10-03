@@ -2,8 +2,8 @@
 const URL=Deno.env.get("SUPABASE_URL")||"";
 const CANONICAL_APP_ORIGIN=URL.includes("msfrbsnihylfynrtdgxe")?"https://trustrelay-production.onrender.com":URL.includes("kdvroylluosshcjmfbfq")?"https://trustrelay-staging.onrender.com":"";
 function envJson(name){try{return JSON.parse(Deno.env.get(name)||"{}")}catch{return{}}}
-function secretKey(){const x=envJson("SUPABASE_SECRET_KEYS");return x.default||Object.values(x).find(v=>typeof v==="string"&&v)||Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||""}
-function publishableKey(){const x=envJson("SUPABASE_PUBLISHABLE_KEYS");return x.default||Deno.env.get("SUPABASE_ANON_KEY")||""}
+function secretKey(){const x=envJson("SUPABASE_SECRET_KEYS");return x.default||Object.values(x).find(v=>typeof v==="string"&&v)||""}
+function publishableKey(){const x=envJson("SUPABASE_PUBLISHABLE_KEYS");return x.default||""}
 const STRIPE_KEY=Deno.env.get("STRIPE_SECRET_KEY")||"";
 const STRIPE_WEBHOOK_SECRET=Deno.env.get("STRIPE_WEBHOOK_SECRET")||"";
 const PRICE_STARTER=Deno.env.get("STRIPE_PRICE_STARTER")||"";

@@ -1,7 +1,17 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+function envJson(name: string): Record<string,string> {
+  try {
+    const parsed = JSON.parse(Deno.env.get(name) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch { return {}; }
+}
+function secretKey() {
+  const keys = envJson("SUPABASE_SECRET_KEYS");
+  return keys.default || Object.values(keys).find(v => typeof v === "string" && v) || "";
+}
+const SERVICE_KEY = secretKey();
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 

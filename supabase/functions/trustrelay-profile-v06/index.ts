@@ -1,7 +1,7 @@
 
 const URL=Deno.env.get("SUPABASE_URL")||"";
 function envJson(n){try{return JSON.parse(Deno.env.get(n)||"{}")}catch{return{}}}
-function secret(){const x=envJson("SUPABASE_SECRET_KEYS");return x.default||Object.values(x).find(v=>typeof v==="string"&&v)||Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||""}
+function secret(){const x=envJson("SUPABASE_SECRET_KEYS");return x.default||Object.values(x).find(v=>typeof v==="string"&&v)||""}
 function headers(){const k=secret();const h={"apikey":k,"content-type":"application/json","accept":"application/json"};if(k&&!k.startsWith("sb_secret_"))h["authorization"]="Bearer "+k;return h}
 function sub(req){
   const a=req.headers.get("authorization")||"";

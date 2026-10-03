@@ -6,11 +6,11 @@ function envJson(name) {
 }
 function secretKey() {
   const keys = envJson("SUPABASE_SECRET_KEYS");
-  return keys.default || Object.values(keys).find(v => typeof v === "string" && v) || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  return keys.default || Object.values(keys).find(v => typeof v === "string" && v) || "";
 }
 function publishableKey() {
   const keys = envJson("SUPABASE_PUBLISHABLE_KEYS");
-  return keys.default || Deno.env.get("SUPABASE_ANON_KEY") || "";
+  return keys.default || "";
 }
 function serviceHeaders() {
   const key = secretKey();
