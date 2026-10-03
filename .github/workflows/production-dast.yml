@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  TARGET: ${{ vars.TRUSTRELAY_PRODUCTION_SCAN_URL || 'https://trustrelay-production.onrender.com' }}
+
 jobs:
   production-zap:
     name: OWASP ZAP production baseline
@@ -17,18 +20,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - name: Verify production is reachable
+      - name: Verify production application is actually reachable
         shell: bash
         run: |
           set -euo pipefail
-          code="$(curl --silent --show-error --output /tmp/health --write-out '%{http_code}' --max-time 10 https://trustrelay-production.onrender.com/healthz)"
-          test "$code" = "200"
+
+          health_code="$(curl --silent --show-error --output /tmp/health --write-out '%{http_code}' --max-time 10 "$TARGET/healthz")"
+          test "$health_code" = "200"
           grep -q '"status":"ok"' /tmp/health
+
+          root_code="$(curl --silent --show-error --location --output /tmp/root --write-out '%{http_code}' --max-time 10 "$TARGET/")"
+          if [ "$root_code" != "200" ]; then
+            echo "Refusing to report a clean DAST result: application root returned HTTP $root_code"
+            cat /tmp/root || true
+            exit 1
+          fi
+
+          if grep -qE 'HOST_NOT_ALLOWED|EDGE_ORIGIN_REQUIRED|RUNTIME_QUARANTINED' /tmp/root; then
+            echo "Refusing to scan a security-block response instead of the application."
+            exit 1
+          fi
 
       - name: ZAP baseline
         uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25
         with:
-          target: https://trustrelay-production.onrender.com
+          target: ${{ env.TARGET }}
           allow_issue_writing: false
           fail_action: true
           rules_file_name: '.zap/rules.tsv'
