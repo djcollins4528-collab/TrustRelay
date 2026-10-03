@@ -472,6 +472,7 @@ jobs:
           test -f supabase/migrations/0061_v13_single_sso_model_reconcile.sql
           test -f supabase/migrations/0062_v13_sso_disable_recovery.sql
           test -f supabase/migrations/0063_v13_sso_tenant_linking_hardening.sql
+          test -f supabase/migrations/0064_v13_sso_domain_verification.sql
           test -f supabase/functions/trustrelay-sso-v13/index.ts
           test -f supabase/functions/trustrelay-sso-v13/function.json
 
@@ -482,6 +483,10 @@ jobs:
           grep -q "enforcement_mode='optional'" supabase/migrations/0063_v13_sso_tenant_linking_hardening.sql
           grep -q 'jit_enabled=false' supabase/migrations/0063_v13_sso_tenant_linking_hardening.sql
           grep -q "'compliance','verifier','developer','auditor'" supabase/migrations/0063_v13_sso_tenant_linking_hardening.sql
+          grep -q "verification_status='verified'" supabase/migrations/0064_v13_sso_domain_verification.sql
+          grep -q 'SSO_DOMAIN_VERIFICATION_REQUIRED' supabase/migrations/0064_v13_sso_domain_verification.sql
+          grep -q 'trustrelay_set_sso_domain_challenge_v13' supabase/migrations/0064_v13_sso_domain_verification.sql
+          grep -q 'trustrelay_mark_sso_domain_verified_v13' supabase/migrations/0064_v13_sso_domain_verification.sql
 
           grep -q 'trustrelay_sso_bootstrap_v13' verifier/app.js
           grep -q 'trustrelay_sso_config_v13' verifier/app.js
@@ -491,6 +496,11 @@ jobs:
           grep -q '/auth/v1/user' supabase/functions/trustrelay-sso-v13/index.ts
           grep -q 'SAML_PLAN_UPGRADE_REQUIRED' supabase/functions/trustrelay-sso-v13/index.ts
           grep -q 'trustrelay_store_sso_provider_v13' supabase/functions/trustrelay-sso-v13/index.ts
+          grep -q 'cloudflare-dns.com/dns-query' supabase/functions/trustrelay-sso-v13/index.ts
+          grep -q 'action==="verify_domains"' supabase/functions/trustrelay-sso-v13/index.ts
+          grep -q 'trustrelay_set_sso_domain_challenge_v13' supabase/functions/trustrelay-sso-v13/index.ts
+          grep -q 'trustrelay_mark_sso_domain_verified_v13' supabase/functions/trustrelay-sso-v13/index.ts
+          grep -q 'enabled:false' supabase/functions/trustrelay-sso-v13/index.ts
 
           if grep -qE 'trustrelay_sso_status_v13|trustrelay_sso_session_bootstrap_v13|trustrelay_set_sso_enforcement_v13|trustrelay_register_sso_connection_v13' verifier/app.js; then
             echo "Verifier portal references superseded SSO RPCs."
