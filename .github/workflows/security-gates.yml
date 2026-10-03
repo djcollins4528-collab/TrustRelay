@@ -167,6 +167,9 @@ jobs:
           grep -Fq 'if(ENVIRONMENT!=="production"||String(process.env.RENDER||"")!=="true")return false' server.mjs
           grep -q 'trustedStagingRenderIdentity' server.mjs
           grep -Fq 'if(!REQUIRE_EDGE_ORIGIN||!EDGE_ORIGIN_SECRET)return false' server.mjs
+          grep -Fq '"Cross-Origin-Embedder-Policy":"credentialless"' server.mjs
+          grep -Fq 'no-cache, no-store, must-revalidate, max-age=0' server.mjs
+          grep -Fq 'id="complianceExportForm" class="focus-card" method="post" action="/verifier/"' verifier/index.html
           grep -q 'UNEXPECTED_REQUEST_BODY' server.mjs
           grep -q 'BROWSER_PARTNER_API_FORBIDDEN' server.mjs
           grep -q 'JSON_CONTENT_TYPE_REQUIRED' server.mjs
