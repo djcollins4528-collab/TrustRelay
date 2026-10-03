@@ -24,9 +24,12 @@ jobs:
         run: |
           set -euo pipefail
           ready=0
+          last_code="000"
+          last_body=""
           for i in {1..60}; do
-            body="$(curl --silent --show-error --max-time 5 https://trustrelay-staging.onrender.com/version || true)"
-            if printf '%s' "$body" | grep -Fq "\"commit\":\"$GITHUB_SHA\""; then
+            last_code="$(curl --silent --show-error --max-time 5 --output /tmp/staging-version --write-out '%{http_code}' https://trustrelay-staging.onrender.com/version || true)"
+            last_body="$(head -c 1024 /tmp/staging-version 2>/dev/null || true)"
+            if [ "$last_code" = "200" ] && printf '%s' "$last_body" | grep -Fq "\"commit\":\"$GITHUB_SHA\""; then
               ready=1
               break
             fi
@@ -34,6 +37,8 @@ jobs:
           done
           if [ "$ready" != "1" ]; then
             echo "Staging never reached exact commit $GITHUB_SHA"
+            echo "Final HTTP status: $last_code"
+            printf 'Final bounded response: %s\n' "$last_body"
             exit 1
           fi
 
