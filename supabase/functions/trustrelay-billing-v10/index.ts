@@ -152,6 +152,10 @@ Deno.serve(async req=>{
   const perms=await rpcUser("trustrelay_my_org_permissions_v09",{p_org_id:orgId},authorization);
   if(perms?.permissions?.["organization.manage"]!==true)throw{status:403,code:"ORGANIZATION_PERMISSION_DENIED"};
 
+  if(action==="checkout"||action==="portal"){
+    await rpcUser("trustrelay_sensitive_action_guard_v11",{p_action:"billing."+action},authorization);
+  }
+
   if(action==="select_plan"){
     const planCode=String(input.planCode||"").trim();
     if(!["starter","growth","enterprise"].includes(planCode))throw{status:400,code:"BILLING_PLAN_INVALID"};
