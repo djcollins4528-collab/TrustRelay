@@ -25,10 +25,21 @@ function secretEqual(a,b) {
   let diff=0;for(let i=0;i<aa.length;i++)diff|=aa[i]^bb[i];
   return diff===0;
 }
-function internalServiceAuthorized(req) {
+async function internalServiceAuthorized(req,path) {
   const expected=secretKey();
-  const supplied=(req.headers.get("x-trustrelay-internal-service")||"").trim();
-  return !!expected && secretEqual(supplied,expected);
+  const supplied=(req.headers.get("x-trustrelay-internal-sig")||"").trim().toLowerCase();
+  const timestamp=(req.headers.get("x-trustrelay-internal-ts")||"").trim();
+  const org=(req.headers.get("x-trustrelay-internal-org")||"").trim();
+  const user=(req.headers.get("x-trustrelay-internal-user")||"").trim();
+  if(!expected||!/^[0-9a-f]{64}$/.test(supplied)||!/^[0-9]{10,13}$/.test(timestamp)||!org||!user)return false;
+  const ts=Number(timestamp);
+  if(!Number.isFinite(ts)||Math.abs(Math.floor(Date.now()/1000)-ts)>60)return false;
+  const raw=req.method==="POST"?await req.clone().text():"";
+  if(new TextEncoder().encode(raw).byteLength>262144)return false;
+  const bodyHash=await sha256Hex(raw);
+  const canonical=["v1",timestamp,org,user,req.method,path,bodyHash].join("\n");
+  const calculated=await hmacHex(expected,canonical);
+  return secretEqual(supplied,calculated);
 }
 function json(data, status=200, extra={}) {
   return Response.json(data, { status, headers: { "cache-control":"no-store", "x-content-type-options":"nosniff", ...extra } });
@@ -191,7 +202,7 @@ Deno.serve(async req => {
       return json({status:"ok",service:"trustrelay-partner-v07",version:"1.0.0"});
     }
 
-    const internal=internalServiceAuthorized(req);
+    const internal=await internalServiceAuthorized(req,path);
     const internalOrgId=internal?(req.headers.get("x-trustrelay-internal-org")||"").trim():"";
     const internalUserId=internal?(req.headers.get("x-trustrelay-internal-user")||"").trim():"";
     if(internal){
