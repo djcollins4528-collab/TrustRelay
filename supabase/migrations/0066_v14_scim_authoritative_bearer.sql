@@ -2,6 +2,14 @@
 -- Reconciles the legacy single-token configuration with the rotatable credential
 -- model. SCIM runtime authentication is bearer-token only. OAuth token issuance
 -- is intentionally not exposed until a standards-complete flow is implemented.
+-- 0065 creates the first public v1.4 schema without the older staging-only
+-- tenant/token columns. Add those compatibility columns before retiring them so
+-- this migration is reproducible from a clean production database.
+
+alter table public.organization_scim_configs
+  add column if not exists tenant_key text,
+  add column if not exists token_hash text,
+  add column if not exists token_last_four text;
 
 alter table public.organization_scim_configs
   alter column tenant_key drop not null,
