@@ -59,7 +59,7 @@ jobs:
       - name: Verify production static-surface isolation
         shell: bash
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           export SUPABASE_URL="https://msfrbsnihylfynrtdgxe.supabase.co"
           export SUPABASE_PUBLISHABLE_KEY="sb_publishable_ci_only"
           export TRUSTRELAY_ENVIRONMENT="production"
