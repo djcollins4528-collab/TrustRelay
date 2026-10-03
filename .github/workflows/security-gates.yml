@@ -324,7 +324,7 @@ jobs:
         run: |
           import pathlib, re, sys
 
-          roots = [pathlib.Path("index.html"), pathlib.Path("web"), pathlib.Path("verifier"), pathlib.Path("reviewer"), pathlib.Path("legal"), pathlib.Path("pilot"), pathlib.Path("support")]
+          roots = [pathlib.Path("index.html"), pathlib.Path("web"), pathlib.Path("verifier"), pathlib.Path("reviewer"), pathlib.Path("legal"), pathlib.Path("pilot"), pathlib.Path("support"), pathlib.Path("developers")]
           html_files = []
           js_files = []
           for root in roots:

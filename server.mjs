@@ -101,7 +101,7 @@ const types={
 };
 
 const PUBLIC_TOP_LEVEL_FILES=new Set(["index.html"]);
-const PUBLIC_DIRECTORIES=new Set(["web","verifier","reviewer","legal","pilot","support"]);
+const PUBLIC_DIRECTORIES=new Set(["web","verifier","reviewer","legal","pilot","support","developers"]);
 const PUBLIC_EXTENSIONS=new Set([".html",".js",".css",".json",".svg",".png",".jpg",".jpeg",".webp",".ico",".txt"]);
 
 

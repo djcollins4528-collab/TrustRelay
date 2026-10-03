@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#06111d">
+  <meta name="robots" content="noindex">
+  <meta name="description" content="TrustRelay Developer Center — Partner API quick start, authentication, decision evaluation, webhooks, rate limits, errors, and OpenAPI documentation.">
+  <title>Developer Center — TrustRelay</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="../"><span class="brand-mark">✓</span><span><strong>TrustRelay</strong><small>Developer Center</small></span></a>
+      <nav class="topnav" aria-label="Developer navigation">
+        <a href="#quickstart">Quick start</a>
+        <a href="#api">API</a>
+        <a href="#webhooks">Webhooks</a>
+        <a href="../verifier/openapi.json">OpenAPI</a>
+        <a href="../legal/">Trust Center</a>
+      </nav>
+      <a class="button" href="../verifier/">Verifier Portal</a>
+    </div>
+  </header>
+
+  <div class="shell">
+    <aside class="sidebar" aria-label="Documentation sections">
+      <p class="sidebar-title">Partner API v1.0</p>
+      <a href="#overview">Overview</a>
+      <a href="#quickstart">Quick start</a>
+      <a href="#environments">Environments</a>
+      <a href="#authentication">Authentication</a>
+      <a href="#evaluate">Evaluate authority</a>
+      <a href="#decisions">Decision outcomes</a>
+      <a href="#retrieve">Retrieve decision</a>
+      <a href="#idempotency">Idempotency</a>
+      <a href="#webhooks">Webhooks</a>
+      <a href="#events">Event catalog</a>
+      <a href="#errors">Errors</a>
+      <a href="#rate-limits">Rate limits</a>
+      <a href="#security">Integration security</a>
+      <a href="#openapi">OpenAPI</a>
+    </aside>
+
+    <main class="docs">
+      <section id="overview" class="hero">
+        <p class="eyebrow">TrustRelay Partner API</p>
+        <h1>Verify delegated authority before you act.</h1>
+        <p class="lead">Ask one bounded question from your server: is this representative authorized to perform this exact action against this exact resource, under the grant's current rules, right now?</p>
+        <div class="hero-actions">
+          <a class="button primary" href="#quickstart">Start integrating</a>
+          <a class="button ghost" href="../verifier/openapi.json">View OpenAPI JSON</a>
+        </div>
+        <div class="status-grid">
+          <div><small>Contract</small><strong>v1.0</strong></div>
+          <div><small>Sandbox</small><strong class="good">Available</strong></div>
+          <div><small>Auth</small><strong>X-TrustRelay-Key</strong></div>
+          <div><small>Decisions</small><strong>ALLOW · DENY · ESCALATE</strong></div>
+        </div>
+        <div class="notice"><strong>Design-partner sandbox.</strong> The documented public endpoint is for sandbox integrations. Production partner access is issued only after TrustRelay's commercial activation gates are complete.</div>
+      </section>
+
+      <section id="quickstart">
+        <div class="section-heading"><p class="eyebrow">Quick start</p><h2>Your first authority decision.</h2><p>Use a server-side sandbox API key and a signed TrustRelay authority credential.</p></div>
+        <div class="steps">
+          <div class="step"><span>1</span><div><strong>Create a sandbox organization</strong><p>Open the Verifier Portal, create your organization, and complete the sandbox onboarding flow.</p></div></div>
+          <div class="step"><span>2</span><div><strong>Create an API key</strong><p>Owners, admins, and developers can create keys. Give the integration only the scopes it needs: <code>decisions:write</code> and/or <code>decisions:read</code>.</p></div></div>
+          <div class="step"><span>3</span><div><strong>Store the raw key once</strong><p>The raw partner key is shown once. Keep it in a server-side secret store. TrustRelay stores only its SHA-256 hash.</p></div></div>
+          <div class="step"><span>4</span><div><strong>Evaluate the action</strong><p>POST a unique request ID, signed credential, action, and resource to the decision endpoint.</p></div></div>
+        </div>
+
+        <div class="code-card">
+          <div class="code-title"><span>cURL</span><span>POST /v1/decisions/evaluate</span></div>
+          <pre><code>curl -X POST "https://trustrelay-staging.onrender.com/v1/decisions/evaluate" \
+  -H "Content-Type: application/json" \
+  -H "X-TrustRelay-Key: $TRUSTRELAY_API_KEY" \
+  -d '{
+    "requestId": "req_123",
+    "correlationId": "case_4501",
+    "credential": "eyJ...",
+    "action": "pay_bill",
+    "resource": "checking:1234",
+    "amount": 175,
+    "currency": "USD"
+  }'</code></pre>
+        </div>
+      </section>
+
+      <section id="environments">
+        <div class="section-heading"><p class="eyebrow">Environments</p><h2>Sandbox first. Production only after activation.</h2></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Environment</th><th>Base URL</th><th>Key prefix</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Design-partner sandbox</td><td><code>https://trustrelay-staging.onrender.com</code></td><td><code>tr_test_</code></td><td><span class="pill good">Available</span></td></tr>
+            <tr><td>Production</td><td>Assigned during activation</td><td>Production credential</td><td><span class="pill pending">Gated</span></td></tr>
+          </tbody>
+        </table></div>
+        <p class="callout">Do not hard-code the current sandbox hostname into a production integration. The production endpoint will move behind TrustRelay's production-owned domain and edge controls before commercial activation.</p>
+      </section>
+
+      <section id="authentication">
+        <div class="section-heading"><p class="eyebrow">Authentication</p><h2>Server-side keys only.</h2><p>Send the partner key in the <code>X-TrustRelay-Key</code> header. Never expose a partner key to browser JavaScript, mobile applications, source repositories, URLs, query strings, analytics, or application logs.</p></div>
+        <div class="two-col">
+          <div class="doc-card"><h3>Key scopes</h3><dl><dt><code>decisions:write</code></dt><dd>Evaluate delegated authority.</dd><dt><code>decisions:read</code></dt><dd>Retrieve an existing decision by request ID.</dd></dl></div>
+          <div class="doc-card"><h3>Key lifecycle</h3><p>Create and revoke partner keys from the Verifier Portal. The raw key is returned only at creation; TrustRelay persists its SHA-256 hash rather than the reusable secret.</p><a href="../verifier/">Manage keys in Verifier Portal →</a></div>
+        </div>
+      </section>
+
+      <section id="api">
+        <div class="section-heading"><p class="eyebrow">API reference</p><h2>Decision API.</h2></div>
+
+        <article id="evaluate" class="endpoint">
+          <div class="endpoint-head"><span class="method post">POST</span><code>/v1/decisions/evaluate</code><span class="scope">decisions:write</span></div>
+          <p>Verify the signed credential, check the live grant and revocation state, evaluate scope and policy, and persist an auditable decision.</p>
+          <h3>Request body</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>requestId</code></td><td>string</td><td>Yes</td><td>Your organization-scoped idempotency key, up to 160 characters.</td></tr>
+              <tr><td><code>credential</code></td><td>string</td><td>Yes</td><td>Signed TrustRelay authority credential.</td></tr>
+              <tr><td><code>action</code></td><td>string</td><td>Yes</td><td>The exact requested action.</td></tr>
+              <tr><td><code>resource</code></td><td>string</td><td>Yes</td><td>The resource or subject of the requested action.</td></tr>
+              <tr><td><code>correlationId</code></td><td>string | null</td><td>No</td><td>Your case, workflow, or trace identifier.</td></tr>
+              <tr><td><code>amount</code></td><td>number | null</td><td>No</td><td>Non-negative transaction amount when relevant.</td></tr>
+              <tr><td><code>currency</code></td><td>string | null</td><td>No</td><td>Three-letter uppercase currency code, for example <code>USD</code>.</td></tr>
+              <tr><td><code>evidence</code></td><td>object</td><td>No</td><td>Your non-secret contextual evidence metadata.</td></tr>
+              <tr><td><code>evidenceDocumentIds</code></td><td>string[]</td><td>No</td><td>Up to 25 unique TrustRelay document IDs. Only reviewer-approved documents linked to the grant count as verified evidence.</td></tr>
+            </tbody>
+          </table></div>
+
+          <h3>Example response</h3>
+          <div class="code-card"><pre><code>{
+  "requestId": "req_123",
+  "idempotent": false,
+  "decision": {
+    "id": "decision_...",
+    "requestId": "req_123",
+    "correlationId": "case_4501",
+    "decision": "ALLOW",
+    "reasonCode": "POLICY_SATISFIED",
+    "action": "pay_bill",
+    "resource": "checking:1234",
+    "grantId": "grant_...",
+    "credentialJti": "credential_...",
+    "decidedAt": "2026-10-03T18:00:00Z",
+    "evaluationHash": "sha256...",
+    "auditEventId": "audit_...",
+    "source": "api"
+  }
+}</code></pre></div>
+          <p class="muted">TrustRelay does not persist the raw credential token as decision evidence. The decision record retains a credential fingerprint/reference, verified credential identifier, policy snapshot, evaluation evidence, hashes, and audit linkage.</p>
+        </article>
+
+        <article id="decisions" class="endpoint">
+          <div class="endpoint-head"><span class="method neutral">OUTCOMES</span><code>ALLOW · DENY · ESCALATE</code></div>
+          <div class="decision-grid">
+            <div class="decision-card allow"><strong>ALLOW</strong><p>The credential is valid and the requested action, resource, and active rules are satisfied.</p><code>POLICY_SATISFIED</code></div>
+            <div class="decision-card deny"><strong>DENY</strong><p>The institution should not perform the requested operation.</p><code>CREDENTIAL_REVOKED</code><code>ACTION_PROHIBITED</code><code>RESOURCE_NOT_ALLOWED</code></div>
+            <div class="decision-card escalate"><strong>ESCALATE</strong><p>TrustRelay cannot safely auto-authorize the operation and it should enter a review or evidence workflow.</p><code>EVIDENCE_REQUIRED</code><code>POLICY_REVIEW_REQUIRED</code><code>MANUAL_REVIEW_REQUIRED</code></div>
+          </div>
+        </article>
+
+        <article id="retrieve" class="endpoint">
+          <div class="endpoint-head"><span class="method get">GET</span><code>/v1/decisions/{requestId}</code><span class="scope">decisions:read</span></div>
+          <p>Retrieve the persisted decision for your organization-scoped request ID.</p>
+          <div class="code-card"><pre><code>curl "https://trustrelay-staging.onrender.com/v1/decisions/req_123" \
+  -H "X-TrustRelay-Key: $TRUSTRELAY_API_KEY"</code></pre></div>
+        </article>
+
+        <article id="idempotency" class="endpoint">
+          <div class="endpoint-head"><span class="method neutral">IDEMPOTENCY</span><code>requestId</code></div>
+          <p>Within an organization, reusing the same <code>requestId</code> returns the previously persisted decision rather than creating a second decision. Generate a unique ID for each distinct institutional authorization attempt and retain it with your own workflow record.</p>
+        </article>
+      </section>
+
+      <section id="examples">
+        <div class="section-heading"><p class="eyebrow">Server examples</p><h2>Use any HTTP client.</h2></div>
+        <div class="code-card">
+          <div class="code-title"><span>Node.js</span><span>fetch</span></div>
+          <pre><code>const response = await fetch(
+  "https://trustrelay-staging.onrender.com/v1/decisions/evaluate",
+  {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-trustrelay-key": process.env.TRUSTRELAY_API_KEY
+    },
+    body: JSON.stringify({
+      requestId: "req_123",
+      credential: signedCredential,
+      action: "pay_bill",
+      resource: "checking:1234",
+      amount: 175,
+      currency: "USD"
+    })
+  }
+);
+
+if (!response.ok) {
+  throw new Error(`TrustRelay returned ${response.status}`);
+}
+
+const result = await response.json();</code></pre>
+        </div>
+        <div class="code-card">
+          <div class="code-title"><span>Python</span><span>requests</span></div>
+          <pre><code>import os
+import requests
+
+response = requests.post(
+    "https://trustrelay-staging.onrender.com/v1/decisions/evaluate",
+    headers={
+        "X-TrustRelay-Key": os.environ["TRUSTRELAY_API_KEY"],
+        "Content-Type": "application/json",
+    },
+    json={
+        "requestId": "req_123",
+        "credential": signed_credential,
+        "action": "pay_bill",
+        "resource": "checking:1234",
+        "amount": 175,
+        "currency": "USD",
+    },
+    timeout=10,
+)
+
+response.raise_for_status()
+decision = response.json()</code></pre>
+        </div>
+      </section>
+
+      <section id="webhooks">
+        <div class="section-heading"><p class="eyebrow">Webhooks</p><h2>Receive signed lifecycle events.</h2><p>Webhook endpoints must use HTTPS. TrustRelay signs each delivery with a secret that is shown once at creation or rotation and protected server-side afterward.</p></div>
+        <div class="header-list">
+          <div><code>X-TrustRelay-Event</code><span>Event type</span></div>
+          <div><code>X-TrustRelay-Delivery</code><span>Unique delivery identifier</span></div>
+          <div><code>X-TrustRelay-Timestamp</code><span>Signature timestamp</span></div>
+          <div><code>X-TrustRelay-Signature</code><span><code>v1=&lt;lowercase hex digest&gt;</code></span></div>
+        </div>
+        <h3>Signature input</h3>
+        <div class="formula"><code>&lt;timestamp&gt;.&lt;raw_request_body&gt;</code><span>HMAC-SHA256 with your webhook signing secret</span></div>
+        <div class="code-card">
+          <div class="code-title"><span>Node.js</span><span>Webhook verification</span></div>
+          <pre><code>import crypto from "node:crypto";
+
+function verifyTrustRelayWebhook({ rawBody, timestamp, signature, secret }) {
+  const expected =
+    "v1=" +
+    crypto.createHmac("sha256", secret)
+      .update(`${timestamp}.${rawBody}`)
+      .digest("hex");
+
+  const a = Buffer.from(expected);
+  const b = Buffer.from(signature);
+
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}</code></pre>
+        </div>
+        <p class="callout">Verify the signature against the exact raw request body before parsing JSON, use constant-time comparison, and reject timestamps outside your accepted replay window. Do not follow webhook redirects on your receiving-side assumptions.</p>
+        <a class="text-link" href="../verifier/">Manage endpoints, rotate secrets, inspect attempts, and send test events in the Verifier Portal →</a>
+      </section>
+
+      <section id="events">
+        <div class="section-heading"><p class="eyebrow">Event catalog</p><h2>Current webhook events.</h2></div>
+        <div class="event-grid">
+          <code>decision.created</code>
+          <code>grant.revoked</code>
+          <code>credential.revoked</code>
+          <code>evidence.requested</code>
+          <code>evidence.submitted</code>
+          <code>evidence.resolved</code>
+          <code>organization.member.joined</code>
+          <code>organization.member.role_changed</code>
+          <code>organization.member.disabled</code>
+          <code>compliance.export.ready</code>
+          <code>webhook.test</code>
+        </div>
+        <div class="code-card">
+          <div class="code-title"><span>Webhook envelope</span><span>JSON</span></div>
+          <pre><code>{
+  "id": "event_...",
+  "type": "decision.created",
+  "createdAt": "2026-10-03T18:00:00Z",
+  "organizationId": "org_...",
+  "data": {
+    "...": "event-specific fields"
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <section id="errors">
+        <div class="section-heading"><p class="eyebrow">Errors</p><h2>Predictable HTTP semantics.</h2></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Status</th><th>Meaning</th><th>Integration behavior</th></tr></thead>
+          <tbody>
+            <tr><td><code>400</code></td><td>Invalid request or malformed input.</td><td>Fix the request; do not blindly retry.</td></tr>
+            <tr><td><code>401</code></td><td>Missing or invalid partner API key.</td><td>Check secret injection and key lifecycle.</td></tr>
+            <tr><td><code>403</code></td><td>Authenticated but not permitted for the requested operation.</td><td>Check key scope, organization state, and activation/entitlement requirements.</td></tr>
+            <tr><td><code>404</code></td><td>Requested decision or resource not found.</td><td>Verify organization context and request ID.</td></tr>
+            <tr><td><code>415</code></td><td>Non-JSON content type on a request that requires JSON.</td><td>Send <code>Content-Type: application/json</code>.</td></tr>
+            <tr><td><code>429</code></td><td>Rate limit reached.</td><td>Honor <code>Retry-After</code> and use bounded exponential backoff.</td></tr>
+            <tr><td><code>5xx</code></td><td>Transient TrustRelay or upstream service condition.</td><td>Retry only idempotent operations with backoff and keep your <code>requestId</code> stable.</td></tr>
+          </tbody>
+        </table></div>
+        <div class="code-card"><pre><code>{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable detail when available."
+  }
+}</code></pre></div>
+      </section>
+
+      <section id="rate-limits">
+        <div class="section-heading"><p class="eyebrow">Rate limits</p><h2>Sandbox default: 120 requests per 60 seconds.</h2><p>Partner API rate state is scoped to the organization key. The TrustRelay gateway also applies runtime abuse protections. Treat a returned <code>429</code> and any <code>Retry-After</code> value as authoritative.</p></div>
+      </section>
+
+      <section id="security">
+        <div class="section-heading"><p class="eyebrow">Integration security</p><h2>Production-minded defaults.</h2></div>
+        <div class="security-checks">
+          <div><span>✓</span><p><strong>Keep API keys server-side.</strong> Never embed a partner key in a browser or distributed client.</p></div>
+          <div><span>✓</span><p><strong>Use least-privilege scopes.</strong> Separate read-only and write-capable integrations when practical.</p></div>
+          <div><span>✓</span><p><strong>Make request IDs durable.</strong> Persist your idempotency key with the business operation it protects.</p></div>
+          <div><span>✓</span><p><strong>Validate webhook signatures first.</strong> Authenticate the raw body before deserialization or business processing.</p></div>
+          <div><span>✓</span><p><strong>Rotate secrets deliberately.</strong> Revoke unused API keys and rotate webhook signing secrets through the Verifier Portal.</p></div>
+          <div><span>✓</span><p><strong>Log references, not secrets.</strong> Keep raw API keys, credentials, signing secrets, and sensitive evidence out of logs.</p></div>
+        </div>
+        <a class="text-link" href="../legal/security.html">Review TrustRelay's current Security Statement →</a>
+      </section>
+
+      <section id="openapi" class="openapi-card">
+        <div>
+          <p class="eyebrow">Machine-readable contract</p>
+          <h2>OpenAPI v1.0</h2>
+          <p>The canonical OpenAPI document is published with the Verifier Portal and now points to the TrustRelay design-partner gateway rather than a backend-provider hostname.</p>
+        </div>
+        <div class="openapi-actions">
+          <a class="button primary" href="../verifier/openapi.json">Open OpenAPI JSON</a>
+          <a class="button ghost" href="../support/">Integration support</a>
+        </div>
+      </section>
+
+      <footer class="docs-footer">
+        <span>TrustRelay Developer Center · Partner API v1.0</span>
+        <span>Production access remains gated pending commercial activation.</span>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

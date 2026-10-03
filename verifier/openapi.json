@@ -3,11 +3,12 @@
   "info": {
     "title": "TrustRelay Partner API",
     "version": "1.0.0",
-    "description": "TrustRelay v1.0 Partner API. Evaluates scoped delegated authority with live identity assurance/evidence, durable signed webhooks, plan entitlements, and fail-closed production runtime checks."
+    "description": "TrustRelay v1.0 Partner API. Integrate delegated-authority decisions through the TrustRelay gateway using scoped server-side API keys. Commercial production activation remains gated; the published server is the design-partner sandbox."
   },
   "servers": [
     {
-      "url": "https://awrradmcwgeepwwdrbzi.supabase.co/functions/v1/trustrelay-partner-v07"
+      "url": "https://trustrelay-staging.onrender.com",
+      "description": "TrustRelay design-partner sandbox gateway"
     }
   ],
   "components": {
@@ -247,7 +248,7 @@
     "/healthz": {
       "get": {
         "security": [],
-        "summary": "Partner API health",
+        "summary": "TrustRelay gateway health",
         "responses": {
           "200": {
             "description": "Healthy"
