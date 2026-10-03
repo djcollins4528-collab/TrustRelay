@@ -20,6 +20,10 @@ const REQUEST_TIMEOUT=Math.max(1000,Number(process.env.TRUSTRELAY_REQUEST_TIMEOU
 const WEBHOOK_EGRESS_SECRET=String(process.env.TRUSTRELAY_WEBHOOK_EGRESS_SECRET||"");
 const WEBHOOK_TARGET_TIMEOUT=Math.max(1000,Math.min(30000,Number(process.env.TRUSTRELAY_WEBHOOK_TARGET_TIMEOUT_MS||10000)));
 const WEBHOOK_RESPONSE_LIMIT=Math.max(4096,Math.min(262144,Number(process.env.TRUSTRELAY_WEBHOOK_RESPONSE_LIMIT_BYTES||65536)));
+const RATE_LIMIT_PER_MINUTE=Math.max(10,Math.min(5000,Number(process.env.TRUSTRELAY_RATE_LIMIT_PER_MINUTE||120)));
+const RATE_LIMIT_WINDOW_MS=60_000;
+const rateBuckets=new Map();
+let rateLimitSweepCounter=0;
 
 if(!SUPABASE_URL||!SUPABASE_PUBLISHABLE_KEY){
   console.error("SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY are required");
@@ -70,6 +74,7 @@ function headers(extra={}){
     "Cross-Origin-Resource-Policy":"same-origin",
     "Origin-Agent-Cluster":"?1",
     "X-Permitted-Cross-Domain-Policies":"none",
+    "X-DNS-Prefetch-Control":"off",
     ...extra
   };
 }
@@ -249,6 +254,51 @@ async function deliverPinnedWebhook(endpoint,body,inputHeaders){
     out.end(body);
   });
 }
+function clientIp(req){
+  const cf=String(req.headers["cf-connecting-ip"]||"").trim();
+  if(net.isIP(cf))return cf;
+  const forwarded=String(req.headers["x-forwarded-for"]||"");
+  if(forwarded){
+    const first=forwarded.split(",")[0].trim().replace(/^\[|\]$/g,"");
+    if(net.isIP(first))return first;
+  }
+  const remote=String(req.socket?.remoteAddress||"unknown").replace(/^::ffff:/,"");
+  return remote||"unknown";
+}
+function consumeRuntimeRateLimit(req){
+  const now=Date.now();
+  const key=clientIp(req);
+  let bucket=rateBuckets.get(key);
+  if(!bucket||now-bucket.startedAt>=RATE_LIMIT_WINDOW_MS){
+    bucket={startedAt:now,count:0};
+    rateBuckets.set(key,bucket);
+  }
+  bucket.count++;
+  if(++rateLimitSweepCounter%500===0){
+    for(const [k,v] of rateBuckets){
+      if(now-v.startedAt>=RATE_LIMIT_WINDOW_MS*2)rateBuckets.delete(k);
+    }
+  }
+  const remaining=Math.max(0,RATE_LIMIT_PER_MINUTE-bucket.count);
+  const resetSeconds=Math.max(1,Math.ceil((bucket.startedAt+RATE_LIMIT_WINDOW_MS-now)/1000));
+  return {allowed:bucket.count<=RATE_LIMIT_PER_MINUTE,remaining,resetSeconds};
+}
+function isRateLimitedPath(pathname){
+  return pathname==="/runtime-config.json"||pathname==="/version"||pathname.startsWith("/v1/")||pathname.startsWith("/internal/");
+}
+function applyRuntimeRateLimit(req,res,pathname){
+  if(!isRateLimitedPath(pathname))return true;
+  const r=consumeRuntimeRateLimit(req);
+  if(r.allowed)return true;
+  sendJson(res,429,{error:{code:"RATE_LIMITED"}},{
+    "Retry-After":String(r.resetSeconds),
+    "RateLimit-Limit":String(RATE_LIMIT_PER_MINUTE),
+    "RateLimit-Remaining":"0",
+    "RateLimit-Reset":String(r.resetSeconds)
+  });
+  return false;
+}
+
 async function proxyWebhookEgress(req,res){
   if(!WEBHOOK_EGRESS_SECRET)return sendJson(res,503,{error:{code:"WEBHOOK_EGRESS_NOT_CONFIGURED"}});
   const auth=String(req.headers.authorization||"");
@@ -281,13 +331,15 @@ const server=http.createServer(async(req,res)=>{
   let url;
   try{url=new URL(req.url||"/","http://localhost")}
   catch{return sendJson(res,400,{error:{code:"INVALID_URL"}})}
+  if(!applyRuntimeRateLimit(req,res,url.pathname))return;
   if(url.pathname==="/internal/webhook-egress"){
     return sendJson(res,410,{error:{code:"WEBHOOK_EGRESS_RETIRED",replacement:"trustrelay-webhook-egress-v10"}});
   }
   if(url.pathname==="/healthz"){
-    return sendJson(res,200,{status:"ok",service:"trustrelay-web",version:VERSION,environment:ENVIRONMENT,webhookEgressMode:"supabase-edge-pinned-tls-v10"});
+    return sendJson(res,200,{status:"ok"});
   }
   if(url.pathname==="/version"){
+    if(ENVIRONMENT==="production")return sendJson(res,404,{error:{code:"NOT_FOUND"}});
     return sendJson(res,200,{version:VERSION,environment:ENVIRONMENT});
   }
   if(url.pathname==="/runtime-config.json"){
@@ -307,7 +359,7 @@ const server=http.createServer(async(req,res)=>{
   }
 
   const file=safeFile(url.pathname);
-  if(!file)return sendJson(res,400,{error:{code:"INVALID_PATH"}});
+  if(!file)return sendJson(res,404,{error:{code:"NOT_FOUND"}});
   let st;
   try{st=fs.statSync(file)}catch{return sendJson(res,404,{error:{code:"NOT_FOUND"}})}
   let actual=file;
