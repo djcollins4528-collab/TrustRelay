@@ -481,12 +481,14 @@ const server=http.createServer({
     const ext=path.extname(actual).toLowerCase();
     const html=ext===".html";
     const relative=path.relative(ROOT,actual).split(path.sep).join("/");
-    const securitySensitive=html||/^(web|verifier|reviewer)\//.test(relative);
+    const authenticatedSurface=/^(web|verifier|reviewer)\//.test(relative);
+    const noStore=html||authenticatedSurface;
     res.writeHead(200,headers({
       "Content-Type":types[ext]||"application/octet-stream",
       "Content-Length":data.length,
-      "Cache-Control":securitySensitive?"no-store":"public, max-age=300",
-      ...(securitySensitive?{"Pragma":"no-cache","Expires":"0","X-Robots-Tag":"noindex, nofollow, noarchive"}:{})
+      "Cache-Control":noStore?"no-store":"public, max-age=300",
+      ...(noStore?{"Pragma":"no-cache","Expires":"0"}:{}),
+      ...(authenticatedSurface?{"X-Robots-Tag":"noindex, nofollow, noarchive"}:{})
     }));
     if(req.method==="HEAD")res.end();else res.end(data);
   }catch{
