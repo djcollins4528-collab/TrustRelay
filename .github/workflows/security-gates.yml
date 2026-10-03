@@ -160,6 +160,7 @@ jobs:
           grep -q 'server.maxRequestsPerSocket=50' server.mjs
           grep -q 'INVALID_REQUEST_TARGET' server.mjs
           grep -q 'DUPLICATE_CRITICAL_HEADER' server.mjs
+          grep -Fq '"x-trustrelay-edge-origin"' server.mjs
           grep -q 'UNEXPECTED_REQUEST_BODY' server.mjs
           grep -q 'BROWSER_PARTNER_API_FORBIDDEN' server.mjs
           grep -q 'JSON_CONTENT_TYPE_REQUIRED' server.mjs
