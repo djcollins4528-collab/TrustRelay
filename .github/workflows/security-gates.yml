@@ -329,6 +329,22 @@ jobs:
               print("\n".join(failures))
               sys.exit(1)
 
+      - name: Enforce one-time internal capability policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -R -n -E 'x-trustrelay-internal-(sig|ts|service)' supabase/functions/trustrelay-verifier-evaluate-v07 supabase/functions/trustrelay-partner-v07; then
+            echo "Reusable verifier-to-partner internal secret transport is forbidden."
+            exit 1
+          fi
+          grep -q 'x-trustrelay-internal-capability' supabase/functions/trustrelay-verifier-evaluate-v07/index.ts
+          grep -q 'trustrelay_mint_portal_capability_v12' supabase/functions/trustrelay-verifier-evaluate-v07/index.ts
+          grep -q 'x-trustrelay-internal-capability' supabase/functions/trustrelay-partner-v07/index.ts
+          grep -q 'trustrelay_consume_portal_capability_v12' supabase/functions/trustrelay-partner-v07/index.ts
+          grep -q "interval '30 seconds'" supabase/migrations/0045_v12_one_time_internal_capabilities.sql
+          grep -q 'consumed_at is null' supabase/migrations/0045_v12_one_time_internal_capabilities.sql
+          grep -q 'body_sha256=p_body_sha256' supabase/migrations/0045_v12_one_time_internal_capabilities.sql
+
       - name: Enforce pinned Supabase package imports
         shell: bash
         run: |
