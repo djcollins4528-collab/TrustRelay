@@ -15,6 +15,7 @@
 - trustrelay-verifier-evaluate-v07
 - trustrelay-compliance-export-v09
 - trustrelay-billing-v10
+- trustrelay-sso-v13
 - trustrelay-webhook-egress-v10
 
 Each directory contains the current staging `index.ts` plus `function.json` where applicable. `trustrelay-webhook-egress-v10` is intentionally `verify_jwt=false` because it is an internal transport endpoint authenticated with a high-entropy Vault-backed `X-TrustRelay-Egress-Key`; it does not trust caller-supplied destination validation and independently resolves/validates/pins the outbound target.
@@ -53,6 +54,12 @@ Supabase-managed environment:
 - SUPABASE_URL
 - SUPABASE_PUBLISHABLE_KEYS
 - SUPABASE_SECRET_KEYS
+
+TrustRelay enterprise SSO:
+- `trustrelay-sso-v13` uses Supabase-managed `SUPABASE_SECRET_KEYS` only on the server side for Auth provider administration.
+- OIDC custom providers are enabled by default and use PKCE.
+- `TRUSTRELAY_SAML_ENABLED` remains unset/false until the Supabase project plan supports SAML and the production SAML gate is intentionally approved.
+- Entra/Okta client secrets are never stored in TrustRelay application tables or browser storage.
 
 TrustRelay billing:
 - STRIPE_SECRET_KEY
