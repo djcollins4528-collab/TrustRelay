@@ -7,17 +7,20 @@ if [[ "${RENDER_SERVICE_ID:-}" != "srv-daul9tk9v7es73a0tsdg" ]]; then
   return 0 2>/dev/null || exit 0
 fi
 
-# Fail closed unless Render is executing from the expected TrustRelay checkout.
+ROOT="/opt/render/project/src"
+cd "$ROOT"
+
+# Fail closed unless this is the expected TrustRelay checkout.
 if [[ ! -f "server.mjs" || ! -d "supabase" || ! -d "web" ]]; then
-  echo "Legacy static quarantine guard: expected TrustRelay checkout not found." >&2
+  echo "Legacy static quarantine guard: expected TrustRelay checkout not found at $ROOT." >&2
   exit 1
 fi
 
 # Remove the repository tree from the publish directory, then leave a single
 # non-sensitive retirement page. This affects only the disposable build clone.
-find . -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+find "$ROOT" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
 
-cat > index.html <<'EOF'
+cat > "$ROOT/index.html" <<'EOF'
 <!doctype html>
 <html lang="en">
 <head>
