@@ -283,6 +283,24 @@ jobs:
           test "$code" = "503"
           grep -q 'RUNTIME_QUARANTINED' /tmp/quarantine-body
 
+      - name: Enforce unique migration versions
+        shell: python
+        run: |
+          import collections, pathlib, re, sys
+          versions = collections.defaultdict(list)
+          for path in sorted(pathlib.Path("supabase/migrations").glob("*.sql")):
+              match = re.match(r"^(\d+)_", path.name)
+              if not match:
+                  print(f"Migration filename missing numeric prefix: {path}")
+                  sys.exit(1)
+              versions[match.group(1)].append(str(path))
+          dupes = {k:v for k,v in versions.items() if len(v) > 1}
+          if dupes:
+              print("Duplicate migration versions detected:")
+              for version, paths in sorted(dupes.items()):
+                  print(version + ": " + ", ".join(paths))
+              sys.exit(1)
+
       - name: Enforce Edge Function auth contracts
         shell: python
         run: |
