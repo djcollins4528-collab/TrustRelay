@@ -9,6 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT=path.dirname(fileURLToPath(import.meta.url));
+const REAL_ROOT=fs.realpathSync(ROOT);
 const PORT=Number(process.env.PORT||10000);
 const SUPABASE_URL=String(process.env.SUPABASE_URL||"").replace(/\/$/,"");
 const SUPABASE_PUBLISHABLE_KEY=String(process.env.SUPABASE_PUBLISHABLE_KEY||"");
@@ -31,7 +32,31 @@ if(!SUPABASE_URL||!SUPABASE_PUBLISHABLE_KEY){
   process.exit(1);
 }
 
-const supabaseOrigin=new URL(SUPABASE_URL).origin;
+let supabaseUrlObject;
+try{supabaseUrlObject=new URL(SUPABASE_URL)}
+catch{
+  console.error("SUPABASE_URL must be a valid URL");
+  process.exit(1);
+}
+if(supabaseUrlObject.protocol!=="https:"){
+  console.error("SUPABASE_URL must use HTTPS");
+  process.exit(1);
+}
+
+const EXPECTED_PROD_SUPABASE_HOST="msfrbsnihylfynrtdgxe.supabase.co";
+if(ENVIRONMENT==="production"){
+  const failures=[];
+  if(process.env.NODE_ENV!=="production")failures.push("NODE_ENV");
+  if(!ALLOWED_HOSTS.size)failures.push("TRUSTRELAY_ALLOWED_HOSTS");
+  if(!TURNSTILE_SITE_KEY)failures.push("TRUSTRELAY_TURNSTILE_SITE_KEY");
+  if(supabaseUrlObject.hostname!==EXPECTED_PROD_SUPABASE_HOST)failures.push("SUPABASE_URL_PROJECT");
+  if(failures.length){
+    console.error("Production security configuration invalid:",failures.join(","));
+    process.exit(1);
+  }
+}
+
+const supabaseOrigin=supabaseUrlObject.origin;
 const supabaseWs=supabaseOrigin.replace(/^https:/,"wss:");
 const csp=[
   "default-src 'self'",
@@ -122,7 +147,10 @@ function safeFile(urlPath){
 
   const candidate=path.resolve(ROOT,rel);
   if(candidate!==ROOT&&!candidate.startsWith(ROOT+path.sep))return null;
-  return candidate;
+  let real;
+  try{real=fs.realpathSync(candidate)}catch{return null}
+  if(real!==REAL_ROOT&&!real.startsWith(REAL_ROOT+path.sep))return null;
+  return real;
 }
 async function readBody(req,limit=BODY_LIMIT){
   const chunks=[];let size=0;
@@ -354,6 +382,7 @@ const server=http.createServer(async(req,res)=>{
   catch{return sendJson(res,400,{error:{code:"INVALID_URL"}})}
   if(!hostAllowed(req))return sendJson(res,421,{error:{code:"HOST_NOT_ALLOWED"}});
   if(url.pathname==="/healthz"){
+    if(!["GET","HEAD"].includes(req.method||"GET"))return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD"});
     return sendJson(res,200,{status:RUNTIME_DISABLED?"quarantined":"ok"});
   }
   if(RUNTIME_DISABLED){
@@ -367,10 +396,12 @@ const server=http.createServer(async(req,res)=>{
     return sendJson(res,404,{error:{code:"NOT_FOUND"}});
   }
   if(url.pathname==="/version"){
+    if(!["GET","HEAD"].includes(req.method||"GET"))return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD"});
     if(ENVIRONMENT==="production")return sendJson(res,404,{error:{code:"NOT_FOUND"}});
     return sendJson(res,200,{version:VERSION,environment:ENVIRONMENT});
   }
   if(url.pathname==="/runtime-config.json"){
+    if(!["GET","HEAD"].includes(req.method||"GET"))return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD"});
     return sendJson(res,200,{
       supabaseUrl:SUPABASE_URL,
       supabasePublishableKey:SUPABASE_PUBLISHABLE_KEY,
