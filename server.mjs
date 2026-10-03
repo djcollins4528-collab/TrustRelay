@@ -255,13 +255,16 @@ async function deliverPinnedWebhook(endpoint,body,inputHeaders){
   });
 }
 function clientIp(req){
-  const cf=String(req.headers["cf-connecting-ip"]||"").trim();
-  if(net.isIP(cf))return cf;
+  // Render documents X-Forwarded-For as the source of the real client IP.
+  // Prefer it over Cloudflare-specific headers so callers cannot influence
+  // the limiter key with an injected CF-Connecting-IP value.
   const forwarded=String(req.headers["x-forwarded-for"]||"");
   if(forwarded){
     const first=forwarded.split(",")[0].trim().replace(/^\[|\]$/g,"");
     if(net.isIP(first))return first;
   }
+  const cf=String(req.headers["cf-connecting-ip"]||"").trim();
+  if(net.isIP(cf))return cf;
   const remote=String(req.socket?.remoteAddress||"unknown").replace(/^::ffff:/,"");
   return remote||"unknown";
 }
