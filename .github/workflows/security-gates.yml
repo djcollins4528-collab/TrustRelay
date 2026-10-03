@@ -113,6 +113,22 @@ jobs:
           post_config="$(curl --silent --request POST --output /tmp/body --write-out '%{http_code}' http://127.0.0.1:18080/runtime-config.json)"
           test "$post_config" = "405"
 
+          browser_api="$(curl --silent --output /tmp/body --write-out '%{http_code}' -H 'Origin: https://attacker.invalid' -H 'X-TrustRelay-Key: tr_test' http://127.0.0.1:18080/v1/decisions/test)"
+          test "$browser_api" = "403"
+
+          wrong_type="$(curl --silent --request POST --output /tmp/body --write-out '%{http_code}' -H 'Content-Type: text/plain' -H 'X-TrustRelay-Key: tr_test' --data '{}' http://127.0.0.1:18080/v1/decisions/evaluate)"
+          test "$wrong_type" = "415"
+
+          get_body="$(curl --silent --request GET --output /tmp/body --write-out '%{http_code}' -H 'Content-Type: application/json' --data '{}' http://127.0.0.1:18080/healthz)"
+          test "$get_body" = "400"
+
+          duplicate_auth="$(curl --silent --output /tmp/body --write-out '%{http_code}' -H 'Authorization: Bearer one' -H 'Authorization: Bearer two' http://127.0.0.1:18080/)"
+          test "$duplicate_auth" = "400"
+
+          sensitive_headers="$(curl --silent --head http://127.0.0.1:18080/web/app.js | tr -d '\r')"
+          printf '%s\n' "$sensitive_headers" | grep -qi '^cache-control: no-store'
+          printf '%s\n' "$sensitive_headers" | grep -qi '^x-robots-tag: noindex, nofollow, noarchive'
+
           bad_host="$(curl --silent --output /tmp/body --write-out '%{http_code}' -H 'Host: attacker.invalid' http://127.0.0.1:18080/)"
           test "$bad_host" = "421"
 
@@ -136,6 +152,12 @@ jobs:
           printf '%s\n' "$headers" | grep -qi "^content-security-policy:.*base-uri 'none'"
           grep -q 'AMBIGUOUS_REQUEST_BODY' server.mjs
           grep -q 'server.maxRequestsPerSocket=50' server.mjs
+          grep -q 'INVALID_REQUEST_TARGET' server.mjs
+          grep -q 'DUPLICATE_CRITICAL_HEADER' server.mjs
+          grep -q 'UNEXPECTED_REQUEST_BODY' server.mjs
+          grep -q 'BROWSER_PARTNER_API_FORBIDDEN' server.mjs
+          grep -q 'JSON_CONTENT_TYPE_REQUIRED' server.mjs
+          grep -q 'securitySensitive?' server.mjs
 
       - name: Verify optional edge-origin lock
         shell: bash

@@ -132,6 +132,27 @@ function hostAllowed(req){
   if(!ALLOWED_HOSTS.size)return true;
   return ALLOWED_HOSTS.has(normalizedHost(req));
 }
+function headerCount(req,name){
+  const target=String(name).toLowerCase();
+  let count=0;
+  const raw=Array.isArray(req.rawHeaders)?req.rawHeaders:[];
+  for(let i=0;i<raw.length;i+=2){
+    if(String(raw[i]||"").toLowerCase()===target)count++;
+  }
+  return count;
+}
+function hasFramedBody(req){
+  const length=String(req.headers["content-length"]||"").trim();
+  return Boolean(req.headers["transfer-encoding"])||(length!==""&&Number(length)>0);
+}
+function looksLikeBrowserFetch(req){
+  return ["sec-fetch-site","sec-fetch-mode","sec-fetch-dest","sec-fetch-user"].some(name=>req.headers[name]!==undefined)
+    || Boolean(req.headers.origin);
+}
+function jsonContentType(req){
+  const value=String(req.headers["content-type"]||"").toLowerCase();
+  return value==="application/json"||value.startsWith("application/json;");
+}
 
 function sendJson(res,status,obj,extra={}){
   const body=JSON.stringify(obj);
@@ -395,9 +416,15 @@ const server=http.createServer({
   joinDuplicateHeaders:false
 },async(req,res)=>{
   const method=String(req.method||"GET").toUpperCase();
+  const rawTarget=String(req.url||"");
   if(method==="TRACE"||method==="CONNECT")return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD, POST"});
+  if(!rawTarget.startsWith("/")||rawTarget.startsWith("//"))return sendJson(res,400,{error:{code:"INVALID_REQUEST_TARGET"}});
   if(req.headers["transfer-encoding"]&&req.headers["content-length"])return sendJson(res,400,{error:{code:"AMBIGUOUS_REQUEST_BODY"}});
-  if((req.url||"").length>8192)return sendJson(res,414,{error:{code:"URI_TOO_LONG"}});
+  for(const critical of ["host","authorization","x-trustrelay-key","content-length","transfer-encoding"]){
+    if(headerCount(req,critical)>1)return sendJson(res,400,{error:{code:"DUPLICATE_CRITICAL_HEADER"}});
+  }
+  if((method==="GET"||method==="HEAD")&&hasFramedBody(req))return sendJson(res,400,{error:{code:"UNEXPECTED_REQUEST_BODY"}});
+  if(rawTarget.length>8192)return sendJson(res,414,{error:{code:"URI_TOO_LONG"}});
   let url;
   try{url=new URL(req.url||"/","http://localhost")}
   catch{return sendJson(res,400,{error:{code:"INVALID_URL"}})}
@@ -435,6 +462,8 @@ const server=http.createServer({
     });
   }
   if(url.pathname.startsWith("/v1/decisions/")){
+    if(looksLikeBrowserFetch(req))return sendJson(res,403,{error:{code:"BROWSER_PARTNER_API_FORBIDDEN"}});
+    if(!["GET","HEAD"].includes(method)&&!jsonContentType(req))return sendJson(res,415,{error:{code:"JSON_CONTENT_TYPE_REQUIRED"}});
     return proxyPartner(req,res,url);
   }
   if(!["GET","HEAD"].includes(req.method||"GET")){
@@ -451,10 +480,13 @@ const server=http.createServer({
     const data=fs.readFileSync(actual);
     const ext=path.extname(actual).toLowerCase();
     const html=ext===".html";
+    const relative=path.relative(ROOT,actual).split(path.sep).join("/");
+    const securitySensitive=html||/^(web|verifier|reviewer)\//.test(relative);
     res.writeHead(200,headers({
       "Content-Type":types[ext]||"application/octet-stream",
       "Content-Length":data.length,
-      "Cache-Control":html?"no-store":"public, max-age=300"
+      "Cache-Control":securitySensitive?"no-store":"public, max-age=300",
+      ...(securitySensitive?{"Pragma":"no-cache","Expires":"0","X-Robots-Tag":"noindex, nofollow, noarchive"}:{})
     }));
     if(req.method==="HEAD")res.end();else res.end(data);
   }catch{
