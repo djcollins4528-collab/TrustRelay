@@ -137,6 +137,36 @@ jobs:
           grep -q 'AMBIGUOUS_REQUEST_BODY' server.mjs
           grep -q 'server.maxRequestsPerSocket=50' server.mjs
 
+      - name: Verify optional edge-origin lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SUPABASE_URL="https://msfrbsnihylfynrtdgxe.supabase.co"
+          export SUPABASE_PUBLISHABLE_KEY="sb_publishable_ci_only"
+          export TRUSTRELAY_ENVIRONMENT="staging"
+          export TRUSTRELAY_ALLOWED_HOSTS="127.0.0.1"
+          export TRUSTRELAY_EDGE_ORIGIN_SECRET="ci-origin-secret-0123456789abcdef0123456789abcdef"
+          export PORT="18083"
+          node server.mjs >/tmp/trustrelay-origin-lock.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+
+          for i in {1..20}; do
+            if curl --silent --fail http://127.0.0.1:18083/healthz >/tmp/origin-health.json; then break; fi
+            sleep 0.25
+          done
+          test "$(cat /tmp/origin-health.json)" = '{"status":"ok"}'
+
+          blocked="$(curl --silent --output /tmp/origin-blocked --write-out '%{http_code}' http://127.0.0.1:18083/)"
+          test "$blocked" = "403"
+          grep -q 'EDGE_ORIGIN_REQUIRED' /tmp/origin-blocked
+
+          allowed="$(curl --silent --output /tmp/origin-allowed --write-out '%{http_code}' -H 'x-trustrelay-edge-origin: ci-origin-secret-0123456789abcdef0123456789abcdef' http://127.0.0.1:18083/)"
+          test "$allowed" = "200"
+
+          grep -q 'TRUSTRELAY_EDGE_ORIGIN_SECRET_WEAK' server.mjs
+          grep -q 'x-trustrelay-edge-origin' server.mjs
+
       - name: Verify unapproved production commit is rejected
         shell: bash
         run: |
