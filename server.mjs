@@ -288,9 +288,10 @@ const server=http.createServer(async(req,res)=>{
     return sendJson(res,404,{error:{code:"NOT_FOUND"}});
   }
   if(url.pathname==="/healthz"){
-    return sendJson(res,200,{status:"ok",service:"trustrelay-web",version:VERSION,environment:ENVIRONMENT,webhookEgressMode:"supabase-edge-pinned-tls-v10"});
+    return sendJson(res,200,ENVIRONMENT==="production"?{status:"ok"}:{status:"ok",service:"trustrelay-web",version:VERSION,environment:ENVIRONMENT,webhookEgressMode:"supabase-edge-pinned-tls-v10"});
   }
   if(url.pathname==="/version"){
+    if(ENVIRONMENT==="production")return sendJson(res,404,{error:{code:"NOT_FOUND"}});
     return sendJson(res,200,{version:VERSION,environment:ENVIRONMENT});
   }
   if(url.pathname==="/runtime-config.json"){
