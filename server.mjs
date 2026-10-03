@@ -60,6 +60,8 @@ function headers(extra={}){
     "Referrer-Policy":"strict-origin-when-cross-origin",
     "Permissions-Policy":"camera=(), microphone=(), geolocation=(), payment=(self)",
     "Cross-Origin-Opener-Policy":"same-origin",
+    "Cross-Origin-Resource-Policy":"same-origin",
+    "X-Permitted-Cross-Domain-Policies":"none",
     ...extra
   };
 }
@@ -68,6 +70,18 @@ function sendJson(res,status,obj,extra={}){
   res.writeHead(status,headers({"Content-Type":"application/json; charset=utf-8","Content-Length":Buffer.byteLength(body),"Cache-Control":"no-store",...extra}));
   res.end(body);
 }
+const PUBLIC_ROOT_FILES=new Set(["index.html"]);
+const PUBLIC_DIRS=new Set([
+  "web","verifier","legal","pilot","support",
+  ...(ENVIRONMENT==="production"?[]:["reviewer"])
+]);
+function publicStaticPath(rel){
+  const normalized=rel.replaceAll("\\","/");
+  const parts=normalized.split("/").filter(Boolean);
+  if(parts.some(part=>part==="."||part===".."||part.startsWith(".")))return false;
+  if(parts.length===1&&PUBLIC_ROOT_FILES.has(parts[0]))return true;
+  return parts.length>=1&&PUBLIC_DIRS.has(parts[0]);
+}
 function safeFile(urlPath){
   let decoded;
   try{decoded=decodeURIComponent(urlPath)}catch{return null}
@@ -75,6 +89,7 @@ function safeFile(urlPath){
   let rel=decoded.replace(/^\/+/, "");
   if(!rel)rel="index.html";
   if(rel.endsWith("/"))rel+="index.html";
+  if(!publicStaticPath(rel))return null;
   const candidate=path.resolve(ROOT,rel);
   if(candidate!==ROOT&&!candidate.startsWith(ROOT+path.sep))return null;
   return candidate;
@@ -282,7 +297,7 @@ const server=http.createServer(async(req,res)=>{
   }
 
   const file=safeFile(url.pathname);
-  if(!file)return sendJson(res,400,{error:{code:"INVALID_PATH"}});
+  if(!file)return sendJson(res,404,{error:{code:"NOT_FOUND"}});
   let st;
   try{st=fs.statSync(file)}catch{return sendJson(res,404,{error:{code:"NOT_FOUND"}})}
   let actual=file;
