@@ -130,8 +130,12 @@ function normalizedHost(req){
   return raw.split(":")[0].replace(/\\.$/,"");
 }
 function hostAllowed(req){
-  if(!ALLOWED_HOSTS.size)return true;
-  return ALLOWED_HOSTS.has(normalizedHost(req));
+  const host=normalizedHost(req);
+  if(host)return !ALLOWED_HOSTS.size||ALLOWED_HOSTS.has(host);
+  if(String(process.env.RENDER||"")!=="true")return false;
+  if(ENVIRONMENT!=="production")return true;
+  if(!REQUIRE_EDGE_ORIGIN||!EDGE_ORIGIN_SECRET)return false;
+  return secretEqual(String(req.headers["x-trustrelay-edge-origin"]||""),EDGE_ORIGIN_SECRET);
 }
 function headerCount(req,name){
   const target=String(name).toLowerCase();
@@ -327,7 +331,7 @@ const server=http.createServer({
     if(!["GET","HEAD"].includes(req.method||"GET"))return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD"});
     return sendJson(res,200,{status:RUNTIME_DISABLED?"quarantined":"ok"});
   }
-  if(!hostAllowed(req))return sendJson(res,421,{error:{code:"HOST_NOT_ALLOWED",...(ENVIRONMENT==="production"?{}:{observedHost:normalizedHost(req),forwardedHost:String(req.headers["x-forwarded-host"]||"").slice(0,255)})}});
+  if(!hostAllowed(req))return sendJson(res,421,{error:{code:"HOST_NOT_ALLOWED"}});
   if(EDGE_ORIGIN_SECRET&&!secretEqual(String(req.headers["x-trustrelay-edge-origin"]||""),EDGE_ORIGIN_SECRET)){
     return sendJson(res,403,{error:{code:"EDGE_ORIGIN_REQUIRED"}});
   }
