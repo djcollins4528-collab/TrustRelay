@@ -22,6 +22,7 @@ const TURNSTILE_SITE_KEY=String(process.env.TRUSTRELAY_TURNSTILE_SITE_KEY||"");
 const BODY_LIMIT=Math.max(1024,Number(process.env.TRUSTRELAY_BODY_LIMIT_BYTES||262144));
 const REQUEST_TIMEOUT=Math.max(1000,Number(process.env.TRUSTRELAY_REQUEST_TIMEOUT_MS||8000));
 const WEBHOOK_EGRESS_SECRET=String(process.env.TRUSTRELAY_WEBHOOK_EGRESS_SECRET||"");
+const EDGE_ORIGIN_SECRET=String(process.env.TRUSTRELAY_EDGE_ORIGIN_SECRET||"");
 const WEBHOOK_TARGET_TIMEOUT=Math.max(1000,Math.min(30000,Number(process.env.TRUSTRELAY_WEBHOOK_TARGET_TIMEOUT_MS||10000)));
 const WEBHOOK_RESPONSE_LIMIT=Math.max(4096,Math.min(262144,Number(process.env.TRUSTRELAY_WEBHOOK_RESPONSE_LIMIT_BYTES||65536)));
 const RATE_LIMIT_PER_MINUTE=Math.max(10,Math.min(5000,Number(process.env.TRUSTRELAY_RATE_LIMIT_PER_MINUTE||120)));
@@ -61,6 +62,7 @@ if(ENVIRONMENT==="production"){
   if(!ALLOWED_HOSTS.size)failures.push("TRUSTRELAY_ALLOWED_HOSTS");
   if(!TURNSTILE_SITE_KEY)failures.push("TRUSTRELAY_TURNSTILE_SITE_KEY");
   if(supabaseUrlObject.hostname!==EXPECTED_PROD_SUPABASE_HOST)failures.push("SUPABASE_URL_PROJECT");
+  if(EDGE_ORIGIN_SECRET&&EDGE_ORIGIN_SECRET.length<32)failures.push("TRUSTRELAY_EDGE_ORIGIN_SECRET_WEAK");
   if(failures.length){
     console.error("Production security configuration invalid:",failures.join(","));
     process.exit(1);
@@ -404,6 +406,9 @@ const server=http.createServer({
     return sendJson(res,200,{status:RUNTIME_DISABLED?"quarantined":"ok"});
   }
   if(!hostAllowed(req))return sendJson(res,421,{error:{code:"HOST_NOT_ALLOWED"}});
+  if(EDGE_ORIGIN_SECRET&&!secretEqual(String(req.headers["x-trustrelay-edge-origin"]||""),EDGE_ORIGIN_SECRET)){
+    return sendJson(res,403,{error:{code:"EDGE_ORIGIN_REQUIRED"}});
+  }
   if(RUNTIME_DISABLED){
     return sendJson(res,503,{error:{code:"RUNTIME_QUARANTINED"}},{"Retry-After":"3600"});
   }
