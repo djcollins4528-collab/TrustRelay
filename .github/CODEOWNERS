@@ -1,0 +1,12 @@
+# TrustRelay security ownership
+* @djcollins4528-collab
+
+# High-risk surfaces
+/.github/workflows/ @djcollins4528-collab
+/server.mjs @djcollins4528-collab
+/render.yaml @djcollins4528-collab
+/supabase/ @djcollins4528-collab
+/verifier/ @djcollins4528-collab
+/web/ @djcollins4528-collab
+/reviewer/ @djcollins4528-collab
+/legal/ @djcollins4528-collab
