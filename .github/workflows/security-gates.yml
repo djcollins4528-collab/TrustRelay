@@ -131,14 +131,14 @@ jobs:
           failures = []
           for path in html_files:
               text = path.read_text(encoding="utf-8")
-              if re.search(r"<style(?:\\s|>)", text, re.I): failures.append(f"{path}: inline <style>")
-              if re.search(r"\\sstyle\\s*=", text, re.I): failures.append(f"{path}: style attribute")
-              for m in re.finditer(r"<script\\b([^>]*)>", text, re.I):
-                  if not re.search(r"\\bsrc\\s*=", m.group(1), re.I): failures.append(f"{path}: inline <script>")
+              if re.search(r"<style(?:\s|>)", text, re.I): failures.append(f"{path}: inline <style>")
+              if re.search(r"\sstyle\s*=", text, re.I): failures.append(f"{path}: style attribute")
+              for m in re.finditer(r"<script\b([^>]*)>", text, re.I):
+                  if not re.search(r"\bsrc\s*=", m.group(1), re.I): failures.append(f"{path}: inline <script>")
           for path in js_files:
               text = path.read_text(encoding="utf-8")
-              if re.search(r"\\.style\\.[A-Za-z_$]", text): failures.append(f"{path}: runtime inline style assignment")
-              if re.search(r"\\beval\\s*\\(|new\\s+Function\\s*\\(", text): failures.append(f"{path}: dynamic code execution")
+              if re.search(r"\.style\.[A-Za-z_$]", text): failures.append(f"{path}: runtime inline style assignment")
+              if re.search(r"\beval\s*\(|new\s+Function\s*\(", text): failures.append(f"{path}: dynamic code execution")
 
           if failures:
               print("Browser hardening invariant failed:")
