@@ -309,7 +309,7 @@ const server=http.createServer({
   if(method==="TRACE"||method==="CONNECT")return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD, POST"});
   if(!rawTarget.startsWith("/")||rawTarget.startsWith("//"))return sendJson(res,400,{error:{code:"INVALID_REQUEST_TARGET"}});
   if(req.headers["transfer-encoding"]&&req.headers["content-length"])return sendJson(res,400,{error:{code:"AMBIGUOUS_REQUEST_BODY"}});
-  for(const critical of ["host","authorization","x-trustrelay-key","content-length","transfer-encoding"]){
+  for(const critical of ["host","authorization","x-trustrelay-key","x-trustrelay-edge-origin","content-length","transfer-encoding"]){
     if(headerCount(req,critical)>1)return sendJson(res,400,{error:{code:"DUPLICATE_CRITICAL_HEADER"}});
   }
   if((method==="GET"||method==="HEAD")&&hasFramedBody(req))return sendJson(res,400,{error:{code:"UNEXPECTED_REQUEST_BODY"}});
