@@ -48,10 +48,18 @@
       <div class="auth-panel">
         <div class="auth-card">
           <div class="auth-intro">
-            <p class="eyebrow">PASSWORDLESS ACCESS</p>
+            <p class="eyebrow">SECURE INSTITUTIONAL ACCESS</p>
             <h2>Institutional sign in.</h2>
-            <p>Use your work email. TrustRelay sends a one-time magic link or email code—no portal password is required.</p>
+            <p>Use your organization's enterprise identity provider when configured, or continue with TrustRelay passwordless access.</p>
           </div>
+          <form id="ssoLoginForm" class="auth-form enterprise-login">
+            <div class="field">
+              <label for="ssoEmail">Work email</label>
+              <input id="ssoEmail" type="email" autocomplete="email" required placeholder="you@organization.com">
+            </div>
+            <button class="button secondary full" type="submit">Continue with enterprise SSO</button>
+          </form>
+          <div class="auth-divider"><span>or use passwordless email</span></div>
           <form id="magicForm" class="auth-form">
             <div class="field">
               <label for="authName">Full name <span class="optional-label">new accounts</span></label>
@@ -94,6 +102,7 @@
           <button class="nav-item" data-view="evidence" type="button"><span>▣</span><span>Evidence</span></button>
           <button class="nav-item" data-view="keys" type="button"><span>⌁</span><span>API keys</span></button>
           <button class="nav-item" data-view="team" type="button"><span>◎</span><span>Team</span></button>
+          <button class="nav-item" data-view="sso" type="button"><span>◇</span><span>Enterprise SSO</span></button>
           <button class="nav-item" data-view="webhooks" type="button"><span>↗</span><span>Webhooks</span></button>
           <button class="nav-item" data-view="compliance" type="button"><span>▤</span><span>Compliance</span></button>
           <button class="nav-item" data-view="launch" type="button"><span>↥</span><span>Launch</span></button>
@@ -198,6 +207,88 @@
           </div>
           <div id="teamList" class="management-list"></div>
           <div id="pendingInvites" class="portal-card compact-card"></div>
+        </section>
+
+        <section id="ssoView" class="portal-section hidden">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">ENTERPRISE IDENTITY</p>
+              <h2>Enterprise SSO.</h2>
+              <p>Connect Microsoft Entra ID or Okta at the organization level. Configure and test the identity provider before enforcing SSO for your team.</p>
+            </div>
+            <span id="ssoStatusChip" class="role-chip">NOT CONFIGURED</span>
+          </div>
+
+          <div class="portal-grid sso-grid">
+            <form id="ssoConfigForm" class="portal-card sso-config-card">
+              <div class="card-heading"><div><h3>Identity provider</h3><p>OIDC is available on the current Supabase plan. Secrets are sent directly to the protected SSO control plane and are never stored in TrustRelay tables.</p></div></div>
+
+              <div class="sso-provider-grid">
+                <label class="sso-provider-option">
+                  <input type="radio" name="ssoProviderBrand" value="microsoft_entra" checked>
+                  <span><strong>Microsoft Entra ID</strong><small>OpenID Connect · PKCE</small></span>
+                </label>
+                <label class="sso-provider-option">
+                  <input type="radio" name="ssoProviderBrand" value="okta">
+                  <span><strong>Okta</strong><small>OpenID Connect · PKCE</small></span>
+                </label>
+              </div>
+
+              <div class="sso-protocol-row">
+                <div><strong>OIDC</strong><span class="small-chip">AVAILABLE</span><p>Recommended now for Entra ID and Okta.</p></div>
+                <div class="sso-disabled-protocol"><strong>SAML 2.0</strong><span class="small-chip">PLAN GATED</span><p>Architecture is ready; activation requires Supabase Pro or higher.</p></div>
+              </div>
+
+              <div class="field">
+                <label>Supabase callback URL</label>
+                <div id="ssoCallbackUrl" class="secret-once"></div>
+                <small>Add this exact redirect URI to your Entra or Okta application.</small>
+              </div>
+
+              <div id="entraFields">
+                <div class="field"><label for="ssoTenantId">Microsoft Entra tenant ID</label><input id="ssoTenantId" autocomplete="off" placeholder="00000000-0000-0000-0000-000000000000"></div>
+              </div>
+              <div id="oktaFields" class="hidden">
+                <div class="field"><label for="ssoOktaIssuer">Okta issuer URL</label><input id="ssoOktaIssuer" type="url" autocomplete="off" placeholder="https://your-org.okta.com/oauth2/default"></div>
+              </div>
+
+              <div class="form-grid">
+                <div class="field"><label for="ssoClientId">Client ID</label><input id="ssoClientId" autocomplete="off" required></div>
+                <div class="field"><label for="ssoClientSecret">Client secret</label><input id="ssoClientSecret" type="password" autocomplete="new-password" required></div>
+              </div>
+              <div class="field">
+                <label for="ssoDomains">Authorized email domains</label>
+                <textarea id="ssoDomains" rows="3" required placeholder="company.com&#10;subsidiary.com"></textarea>
+                <small>Public email domains such as Gmail, Outlook, Yahoo and iCloud are rejected.</small>
+              </div>
+              <div class="sso-jit-row">
+                <label><input id="ssoJitEnabled" type="checkbox"> Enable just-in-time membership</label>
+                <select id="ssoJitRole" aria-label="Default JIT role">
+                  <option value="verifier">Verifier</option>
+                  <option value="auditor">Auditor</option>
+                  <option value="developer">Developer</option>
+                  <option value="compliance">Compliance</option>
+                </select>
+              </div>
+              <p class="fine-print">JIT is off by default. It can never grant Owner or Admin. TrustRelay still requires portal MFA after enterprise authentication.</p>
+              <button class="button primary full" type="submit">Configure OIDC provider</button>
+            </form>
+
+            <div class="portal-card sso-status-card">
+              <div class="card-heading"><div><h3>Organization SSO policy</h3><p>Test the configured provider successfully before requiring it.</p></div></div>
+              <div id="ssoConnectionSummary" class="sso-summary"></div>
+              <div class="management-actions sso-actions">
+                <button id="testSsoButton" class="button secondary hidden" type="button">Test enterprise sign-in</button>
+                <button id="requireSsoButton" class="button primary hidden" type="button">Require SSO</button>
+                <button id="makeSsoOptionalButton" class="button secondary hidden" type="button">Make SSO optional</button>
+                <button id="disableSsoButton" class="button danger hidden" type="button">Disable SSO</button>
+              </div>
+              <div class="sso-safety">
+                <strong>Lockout protection</strong>
+                <p>TrustRelay will not allow required SSO until this exact provider has completed a successful TrustRelay session and an active Owner retains a non-SSO break-glass identity.</p>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section id="webhooksView" class="portal-section hidden">
