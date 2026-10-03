@@ -47,7 +47,6 @@ async function mountTurnstile(form) {
   form.dataset.turnstileMounted = "1";
   const slot = document.createElement("div");
   slot.className = "turnstile-slot";
-  slot.style.margin = "12px 0";
   const submit = form.querySelector('button[type="submit"],input[type="submit"]');
   if (submit) form.insertBefore(slot, submit); else form.appendChild(slot);
   const turnstile = await loadTurnstile();
