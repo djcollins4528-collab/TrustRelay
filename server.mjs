@@ -1,8 +1,5 @@
 import http from "node:http";
-import https from "node:https";
-import dns from "node:dns";
 import net from "node:net";
-import tls from "node:tls";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -21,10 +18,8 @@ const VERSION=String(process.env.TRUSTRELAY_APP_VERSION||"1.0.0");
 const TURNSTILE_SITE_KEY=String(process.env.TRUSTRELAY_TURNSTILE_SITE_KEY||"");
 const BODY_LIMIT=Math.max(1024,Number(process.env.TRUSTRELAY_BODY_LIMIT_BYTES||262144));
 const REQUEST_TIMEOUT=Math.max(1000,Number(process.env.TRUSTRELAY_REQUEST_TIMEOUT_MS||8000));
-const WEBHOOK_EGRESS_SECRET=String(process.env.TRUSTRELAY_WEBHOOK_EGRESS_SECRET||"");
 const EDGE_ORIGIN_SECRET=String(process.env.TRUSTRELAY_EDGE_ORIGIN_SECRET||"");
-const WEBHOOK_TARGET_TIMEOUT=Math.max(1000,Math.min(30000,Number(process.env.TRUSTRELAY_WEBHOOK_TARGET_TIMEOUT_MS||10000)));
-const WEBHOOK_RESPONSE_LIMIT=Math.max(4096,Math.min(262144,Number(process.env.TRUSTRELAY_WEBHOOK_RESPONSE_LIMIT_BYTES||65536)));
+const PARTNER_RESPONSE_LIMIT=Math.max(4096,Math.min(4*1024*1024,Number(process.env.TRUSTRELAY_PARTNER_RESPONSE_LIMIT_BYTES||1048576)));
 const RATE_LIMIT_PER_MINUTE=Math.max(10,Math.min(5000,Number(process.env.TRUSTRELAY_RATE_LIMIT_PER_MINUTE||120)));
 const RATE_LIMIT_WINDOW_MS=60_000;
 const ALLOWED_HOSTS=new Set(String(process.env.TRUSTRELAY_ALLOWED_HOSTS||"").split(",").map(x=>x.trim().toLowerCase().replace(/\.$/,"")).filter(Boolean));
@@ -195,28 +190,57 @@ async function readBody(req,limit=BODY_LIMIT){
   }
   return Buffer.concat(chunks);
 }
+async function readLimitedResponse(response,limit=PARTNER_RESPONSE_LIMIT){
+  const declared=Number(response.headers.get("content-length")||0);
+  if(Number.isFinite(declared)&&declared>limit){
+    throw Object.assign(new Error("UPSTREAM_RESPONSE_TOO_LARGE"),{status:502});
+  }
+  if(!response.body)return Buffer.alloc(0);
+  const chunks=[];let size=0;
+  for await(const chunk of response.body){
+    const buf=Buffer.from(chunk);
+    size+=buf.length;
+    if(size>limit){
+      try{await response.body.cancel()}catch{}
+      throw Object.assign(new Error("UPSTREAM_RESPONSE_TOO_LARGE"),{status:502});
+    }
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks,size);
+}
 async function proxyPartner(req,res,url){
   const suffix=url.pathname.replace(/^\/v1\//,"/v1/");
   const target=SUPABASE_URL+"/functions/v1/trustrelay-partner-v07"+suffix+url.search;
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),REQUEST_TIMEOUT);
   try{
-    const h={"apikey":SUPABASE_PUBLISHABLE_KEY,"accept":req.headers.accept||"application/json"};
+    const h={"apikey":SUPABASE_PUBLISHABLE_KEY,"accept":"application/json"};
     if(req.headers["content-type"])h["content-type"]=req.headers["content-type"];
     if(req.headers["x-trustrelay-key"])h["x-trustrelay-key"]=req.headers["x-trustrelay-key"];
     if(req.headers.authorization)h.authorization=req.headers.authorization;
     const init={method:req.method,headers:h,signal:controller.signal};
     if(!["GET","HEAD"].includes(req.method||"GET"))init.body=await readBody(req);
     const upstream=await fetch(target,init);
-    const body=Buffer.from(await upstream.arrayBuffer());
+    const body=await readLimitedResponse(upstream);
+    const upstreamType=String(upstream.headers.get("content-type")||"application/json; charset=utf-8");
+    const safeType=/^application\/(?:json|problem\+json)(?:\s*;|$)/i.test(upstreamType)
+      ? upstreamType
+      : "application/octet-stream";
     res.writeHead(upstream.status,headers({
-      "Content-Type":upstream.headers.get("content-type")||"application/json; charset=utf-8",
+      "Content-Type":safeType,
       "Content-Length":body.length,
       "Cache-Control":"no-store"
     }));
     res.end(body);
   }catch(e){
-    sendJson(res,e?.status||503,{error:{code:e?.name==="AbortError"?"UPSTREAM_TIMEOUT":e?.message==="BODY_TOO_LARGE"?"BODY_TOO_LARGE":"UPSTREAM_UNAVAILABLE"}});
+    const code=e?.name==="AbortError"
+      ?"UPSTREAM_TIMEOUT"
+      :e?.message==="BODY_TOO_LARGE"
+        ?"BODY_TOO_LARGE"
+        :e?.message==="UPSTREAM_RESPONSE_TOO_LARGE"
+          ?"UPSTREAM_RESPONSE_TOO_LARGE"
+          :"UPSTREAM_UNAVAILABLE";
+    sendJson(res,e?.status||503,{error:{code}});
   }finally{clearTimeout(timer)}
 }
 
@@ -225,114 +249,6 @@ function secretEqual(a,b){
   if(!a||!b)return false;
   const aa=Buffer.from(String(a));const bb=Buffer.from(String(b));
   return aa.length===bb.length&&crypto.timingSafeEqual(aa,bb);
-}
-function ipv4Number(ip){
-  const p=ip.split(".").map(Number);
-  if(p.length!==4||p.some(x=>!Number.isInteger(x)||x<0||x>255))return null;
-  return (((p[0]<<24)>>>0)+(p[1]<<16)+(p[2]<<8)+p[3])>>>0;
-}
-function inV4(ip,base,bits){
-  const x=ipv4Number(ip),b=ipv4Number(base);if(x===null||b===null)return true;
-  const mask=bits===0?0:(0xffffffff<<(32-bits))>>>0;
-  return (x&mask)===(b&mask);
-}
-function isPublicIpv4(ip){
-  const blocked=[
-    ["0.0.0.0",8],["10.0.0.0",8],["100.64.0.0",10],["127.0.0.0",8],
-    ["169.254.0.0",16],["172.16.0.0",12],["192.0.0.0",24],["192.0.2.0",24],
-    ["192.88.99.0",24],["192.168.0.0",16],["198.18.0.0",15],["198.51.100.0",24],
-    ["203.0.113.0",24],["224.0.0.0",4],["240.0.0.0",4]
-  ];
-  return !blocked.some(([base,bits])=>inV4(ip,base,bits));
-}
-function isPublicIpv6(ip){
-  const x=ip.toLowerCase().split("%")[0];
-  const firstText=x.split(":")[0];
-  const first=Number.parseInt(firstText,16);
-  if(!Number.isFinite(first)||first<0x2000||first>0x3fff)return false;
-  if(/^2001:(?:0{0,3}0)(?::|$)/.test(x))return false; // Teredo
-  if(/^2001:(?:0{0,3}2)(?::|$)/.test(x))return false; // benchmarking
-  if(/^2001:(?:0{0,3}1[0-9a-f])(?::|$)/.test(x))return false; // ORCHID/reserved
-  if(/^2001:db8(?::|$)/.test(x))return false; // documentation
-  if(/^2002(?::|$)/.test(x))return false; // 6to4
-  return true;
-}
-function isPublicAddress(ip){
-  const kind=net.isIP(ip);
-  if(kind===4)return isPublicIpv4(ip);
-  if(kind===6)return isPublicIpv6(ip);
-  return false;
-}
-async function resolvePinnedTarget(hostname){
-  const raw=hostname.replace(/^\[/,"").replace(/\]$/,"").replace(/\.$/,"").toLowerCase();
-  if(!raw||raw==="localhost"||raw.endsWith(".localhost")||raw.endsWith(".local")||raw.endsWith(".internal")){
-    throw Object.assign(new Error("WEBHOOK_PRIVATE_TARGET"),{status:403});
-  }
-  if(net.isIP(raw)){
-    if(!isPublicAddress(raw))throw Object.assign(new Error("WEBHOOK_PRIVATE_TARGET"),{status:403});
-    return raw;
-  }
-  let answers;
-  try{answers=await dns.promises.lookup(raw,{all:true,verbatim:true})}
-  catch{throw Object.assign(new Error("WEBHOOK_DNS_RESOLUTION_FAILED"),{status:502})}
-  const addresses=[...new Set((answers||[]).map(x=>x.address).filter(Boolean))];
-  if(!addresses.length)throw Object.assign(new Error("WEBHOOK_DNS_RESOLUTION_FAILED"),{status:502});
-  if(addresses.some(ip=>!isPublicAddress(ip))){
-    throw Object.assign(new Error("WEBHOOK_PRIVATE_TARGET"),{status:403});
-  }
-  return addresses[0];
-}
-function webhookHeaders(input,hostHeader,body){
-  const allowed=new Map([
-    ["content-type","Content-Type"],["user-agent","User-Agent"],
-    ["x-trustrelay-event","X-TrustRelay-Event"],["x-trustrelay-delivery","X-TrustRelay-Delivery"],
-    ["x-trustrelay-timestamp","X-TrustRelay-Timestamp"],["x-trustrelay-signature","X-TrustRelay-Signature"]
-  ]);
-  const out={Host:hostHeader,"Content-Length":Buffer.byteLength(body)};
-  for(const [k,v] of Object.entries(input||{})){
-    const target=allowed.get(k.toLowerCase());
-    if(target&&typeof v==="string"&&v.length<=2048)out[target]=v;
-  }
-  if(!out["Content-Type"])out["Content-Type"]="application/json";
-  return out;
-}
-async function deliverPinnedWebhook(endpoint,body,inputHeaders){
-  let u;
-  try{u=new URL(endpoint)}catch{throw Object.assign(new Error("WEBHOOK_URL_INVALID"),{status:400})}
-  if(u.protocol!=="https:"||u.username||u.password||!u.hostname){
-    throw Object.assign(new Error("WEBHOOK_URL_INVALID"),{status:400});
-  }
-  if(u.port&&u.port!=="443")throw Object.assign(new Error("WEBHOOK_PORT_FORBIDDEN"),{status:400});
-  if((u.pathname+u.search).length>8192)throw Object.assign(new Error("WEBHOOK_URL_INVALID"),{status:400});
-  const originalHost=u.hostname.replace(/^\[/,"").replace(/\]$/,"").replace(/\.$/,"");
-  const pinned=await resolvePinnedTarget(originalHost);
-  const requestHeaders=webhookHeaders(inputHeaders,u.host,body);
-  return await new Promise((resolve,reject)=>{
-    const out=https.request({
-      protocol:"https:",hostname:pinned,port:443,method:"POST",path:u.pathname+u.search,
-      servername:originalHost,rejectUnauthorized:true,
-      checkServerIdentity:(_host,cert)=>tls.checkServerIdentity(originalHost,cert),
-      headers:requestHeaders
-    },up=>{
-      const chunks=[];let size=0;
-      up.on("data",chunk=>{
-        size+=chunk.length;
-        if(size>WEBHOOK_RESPONSE_LIMIT){
-          up.destroy(Object.assign(new Error("WEBHOOK_RESPONSE_TOO_LARGE"),{status:502}));
-          return;
-        }
-        chunks.push(chunk);
-      });
-      up.on("end",()=>resolve({
-        status:up.statusCode||502,
-        contentType:up.headers["content-type"]||"application/octet-stream",
-        body:Buffer.concat(chunks)
-      }));
-    });
-    out.setTimeout(WEBHOOK_TARGET_TIMEOUT,()=>out.destroy(Object.assign(new Error("WEBHOOK_TARGET_TIMEOUT"),{status:504})));
-    out.on("error",reject);
-    out.end(body);
-  });
 }
 function clientIp(req){
   // Render documents X-Forwarded-For as the source of the real client IP.
@@ -380,33 +296,6 @@ function applyRuntimeRateLimit(req,res,pathname){
     "RateLimit-Reset":String(r.resetSeconds)
   });
   return false;
-}
-
-async function proxyWebhookEgress(req,res){
-  if(!WEBHOOK_EGRESS_SECRET)return sendJson(res,503,{error:{code:"WEBHOOK_EGRESS_NOT_CONFIGURED"}});
-  const auth=String(req.headers.authorization||"");
-  const token=auth.startsWith("Bearer ")?auth.slice(7):"";
-  if(!secretEqual(token,WEBHOOK_EGRESS_SECRET))return sendJson(res,401,{error:{code:"WEBHOOK_EGRESS_UNAUTHORIZED"}});
-  if(req.method!=="POST")return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"POST"});
-  try{
-    const raw=await readBody(req,BODY_LIMIT+65536);
-    let input;try{input=JSON.parse(raw.toString("utf8"))}catch{throw Object.assign(new Error("WEBHOOK_RELAY_PAYLOAD_INVALID"),{status:400})}
-    if(typeof input?.endpointUrl!=="string"||typeof input?.body!=="string"||input.body.length>BODY_LIMIT){
-      throw Object.assign(new Error("WEBHOOK_RELAY_PAYLOAD_INVALID"),{status:400});
-    }
-    const delivered=await deliverPinnedWebhook(input.endpointUrl,input.body,input.headers||{});
-    res.writeHead(delivered.status,headers({
-      "Content-Type":delivered.contentType,
-      "Content-Length":delivered.body.length,
-      "Cache-Control":"no-store"
-    }));
-    res.end(delivered.body);
-  }catch(e){
-    const code=String(e?.message||"WEBHOOK_EGRESS_FAILED");
-    const status=Number(e?.status)||502;
-    console.warn("webhook-egress",code);
-    return sendJson(res,status,{error:{code}});
-  }
 }
 
 const server=http.createServer({

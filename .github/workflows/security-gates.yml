@@ -147,6 +147,12 @@ jobs:
           grep -q 'insecureHTTPParser:false' server.mjs
           grep -q 'server.maxHeadersCount=64' server.mjs
           grep -q 'HPE_HEADER_OVERFLOW' server.mjs
+          grep -q 'PARTNER_RESPONSE_LIMIT' server.mjs
+          grep -q 'UPSTREAM_RESPONSE_TOO_LARGE' server.mjs
+          if grep -qE 'node:(https|dns|tls)|deliverPinnedWebhook|proxyWebhookEgress|TRUSTRELAY_WEBHOOK_(EGRESS_SECRET|TARGET_TIMEOUT_MS|RESPONSE_LIMIT_BYTES)' server.mjs; then
+            echo "Retired outbound webhook relay code unexpectedly remains in the public web runtime."
+            exit 1
+          fi
           printf '%s\n' "$headers" | grep -qi "^referrer-policy: no-referrer"
           printf '%s\n' "$headers" | grep -qi "^permissions-policy:.*payment=()"
           printf '%s\n' "$headers" | grep -qi "^content-security-policy:.*base-uri 'none'"
