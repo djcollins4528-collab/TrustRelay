@@ -18,28 +18,20 @@ function serviceHeaders() {
   if (key && !key.startsWith("sb_secret_")) h.authorization = "Bearer " + key;
   return h;
 }
-function secretEqual(a,b) {
-  const aa=new TextEncoder().encode(String(a||""));
-  const bb=new TextEncoder().encode(String(b||""));
-  if(!aa.length||aa.length!==bb.length)return false;
-  let diff=0;for(let i=0;i<aa.length;i++)diff|=aa[i]^bb[i];
-  return diff===0;
-}
-async function internalServiceAuthorized(req,path) {
-  const expected=secretKey();
-  const supplied=(req.headers.get("x-trustrelay-internal-sig")||"").trim().toLowerCase();
-  const timestamp=(req.headers.get("x-trustrelay-internal-ts")||"").trim();
-  const org=(req.headers.get("x-trustrelay-internal-org")||"").trim();
-  const user=(req.headers.get("x-trustrelay-internal-user")||"").trim();
-  if(!expected||!/^[0-9a-f]{64}$/.test(supplied)||!/^[0-9]{10,13}$/.test(timestamp)||!org||!user)return false;
-  const ts=Number(timestamp);
-  if(!Number.isFinite(ts)||Math.abs(Math.floor(Date.now()/1000)-ts)>60)return false;
-  const raw=req.method==="POST"?await req.clone().text():"";
-  if(new TextEncoder().encode(raw).byteLength>262144)return false;
+async function internalCapability(req,path) {
+  const token=(req.headers.get("x-trustrelay-internal-capability")||"").trim();
+  if(!token)return null;
+  if(req.method!=="POST"||path!=="/v1/decisions/evaluate")throw {status:401,code:"INTERNAL_CAPABILITY_INVALID"};
+  if(!/^icap_[0-9a-f]{64}$/.test(token))throw {status:401,code:"INTERNAL_CAPABILITY_INVALID"};
+  const raw=await req.clone().text();
+  if(new TextEncoder().encode(raw).byteLength>262144)throw {status:413,code:"PAYLOAD_TOO_LARGE"};
   const bodyHash=await sha256Hex(raw);
-  const canonical=["v1",timestamp,org,user,req.method,path,bodyHash].join("\n");
-  const calculated=await hmacHex(expected,canonical);
-  return secretEqual(supplied,calculated);
+  const tokenHash=await sha256Hex(token);
+  const cap=await rpc("trustrelay_consume_portal_capability_v12",{
+    p_token_hash:tokenHash,p_body_sha256:bodyHash
+  });
+  if(!cap?.ok)throw {status:Number(cap?.status)||401,code:cap?.code||"INTERNAL_CAPABILITY_INVALID"};
+  return cap;
 }
 function json(data, status=200, extra={}) {
   return Response.json(data, { status, headers: { "cache-control":"no-store", "x-content-type-options":"nosniff", ...extra } });
@@ -166,14 +158,6 @@ async function verifyCredential(token) {
   if (!r.ok) throw {status:502,code:"CREDENTIAL_VERIFIER_UNAVAILABLE"};
   return d || {};
 }
-async function hmacHex(secret, text) {
-  const key = await crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(secret),
-    {name:"HMAC",hash:"SHA-256"}, false, ["sign"]
-  );
-  const sig = new Uint8Array(await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(text)));
-  return [...sig].map(b=>b.toString(16).padStart(2,"0")).join("");
-}
 async function dispatchWebhooks(orgId,eventType,eventId,payload){
   try{
     const queued=await rpc("trustrelay_queue_webhooks_v07",{
@@ -202,9 +186,10 @@ Deno.serve(async req => {
       return json({status:"ok",service:"trustrelay-partner-v07",version:"1.0.0"});
     }
 
-    const internal=await internalServiceAuthorized(req,path);
-    const internalOrgId=internal?(req.headers.get("x-trustrelay-internal-org")||"").trim():"";
-    const internalUserId=internal?(req.headers.get("x-trustrelay-internal-user")||"").trim():"";
+    const internalContext=await internalCapability(req,path);
+    const internal=!!internalContext;
+    const internalOrgId=internal?String(internalContext.organizationId||""):"";
+    const internalUserId=internal?String(internalContext.authUserId||""):"";
     if(internal){
       if(!internalOrgId||internalOrgId.length>160)throw {status:400,code:"INTERNAL_ORGANIZATION_INVALID"};
       if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(internalUserId)){
