@@ -624,6 +624,7 @@ function renderSso(){
   const chip=$("ssoStatusChip");
   chip.textContent=configured?(c.enforcementMode==="required"?"SSO REQUIRED":"ACTIVE"):"NOT CONFIGURED";
   root.replaceChildren();
+
   if(!configured){
     const empty=document.createElement("div");
     empty.className="empty-management";
@@ -644,14 +645,15 @@ function renderSso(){
     for(const [label,value] of rows){
       const row=document.createElement("div");
       row.className="sso-summary-row";
-      const key=document.createElement("span");
-      const val=document.createElement("span");
-      key.textContent=label;
-      val.textContent=String(value??"");
-      row.append(key,val);
+      const left=document.createElement("span");
+      const right=document.createElement("span");
+      left.textContent=label;
+      right.textContent=String(value??"");
+      row.append(left,right);
       root.appendChild(row);
     }
   }
+
   $("testSsoButton").classList.toggle("hidden",!configured);
   $("disableSsoButton").classList.toggle("hidden",!configured);
   $("requireSsoButton").classList.toggle("hidden",!configured||c.enforcementMode==="required"||c.session?.providerMatched!==true);
