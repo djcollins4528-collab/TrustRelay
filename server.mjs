@@ -19,6 +19,7 @@ const TURNSTILE_SITE_KEY=String(process.env.TRUSTRELAY_TURNSTILE_SITE_KEY||"");
 const BODY_LIMIT=Math.max(1024,Number(process.env.TRUSTRELAY_BODY_LIMIT_BYTES||262144));
 const REQUEST_TIMEOUT=Math.max(1000,Number(process.env.TRUSTRELAY_REQUEST_TIMEOUT_MS||8000));
 const EDGE_ORIGIN_SECRET=String(process.env.TRUSTRELAY_EDGE_ORIGIN_SECRET||"");
+const REQUIRE_EDGE_ORIGIN=/^(1|true|yes)$/i.test(String(process.env.TRUSTRELAY_REQUIRE_EDGE_ORIGIN||"false"));
 const PARTNER_RESPONSE_LIMIT=Math.max(4096,Math.min(4*1024*1024,Number(process.env.TRUSTRELAY_PARTNER_RESPONSE_LIMIT_BYTES||1048576)));
 const RATE_LIMIT_PER_MINUTE=Math.max(10,Math.min(5000,Number(process.env.TRUSTRELAY_RATE_LIMIT_PER_MINUTE||120)));
 const RATE_LIMIT_WINDOW_MS=60_000;
@@ -57,6 +58,7 @@ if(ENVIRONMENT==="production"){
   if(!ALLOWED_HOSTS.size)failures.push("TRUSTRELAY_ALLOWED_HOSTS");
   if(!TURNSTILE_SITE_KEY)failures.push("TRUSTRELAY_TURNSTILE_SITE_KEY");
   if(supabaseUrlObject.hostname!==EXPECTED_PROD_SUPABASE_HOST)failures.push("SUPABASE_URL_PROJECT");
+  if(REQUIRE_EDGE_ORIGIN&&!EDGE_ORIGIN_SECRET)failures.push("TRUSTRELAY_EDGE_ORIGIN_SECRET_REQUIRED");
   if(EDGE_ORIGIN_SECRET&&EDGE_ORIGIN_SECRET.length<32)failures.push("TRUSTRELAY_EDGE_ORIGIN_SECRET_WEAK");
   if(failures.length){
     console.error("Production security configuration invalid:",failures.join(","));
