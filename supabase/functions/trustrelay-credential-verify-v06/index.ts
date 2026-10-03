@@ -15,8 +15,10 @@ Deno.serve(async req=>{
  try{
    if(req.method==="OPTIONS")return new Response(null,{status:204,headers:PUBLIC_HEADERS});
    if(req.method!=="POST")return out({error:{code:"METHOD_NOT_ALLOWED"}},405,{Allow:"POST"});
+   const contentLength=Number(req.headers.get("content-length")||0);
+   if(Number.isFinite(contentLength)&&contentLength>32768)return out({error:{code:"PAYLOAD_TOO_LARGE"}},413);
    const raw=await req.text();
-   if(raw.length>32768)return out({error:{code:"PAYLOAD_TOO_LARGE"}},413);
+   if(new TextEncoder().encode(raw).byteLength>32768)return out({error:{code:"PAYLOAD_TOO_LARGE"}},413);
    let v;try{v=raw?JSON.parse(raw):{}}catch{return out({error:{code:"INVALID_JSON"}},400)}
    const token=typeof v.token==="string"?v.token.trim():"";
    if(token.length>16384)return out({error:{code:"TOKEN_TOO_LARGE"}},413);
