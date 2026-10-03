@@ -693,7 +693,7 @@ function renderSso(){
 }
 
 function scimBaseUrl(tenantKey){
-  return tenantKey?SUPABASE_URL+"/functions/v1/trustrelay-scim-v14/"+encodeURIComponent(tenantKey):"";
+  return tenantKey?location.origin+"/scim/v2/"+encodeURIComponent(tenantKey):"";
 }
 
 function showScimCredentials(x){
