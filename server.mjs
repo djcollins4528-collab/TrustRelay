@@ -449,7 +449,7 @@ const server=http.createServer({
   if(url.pathname==="/version"){
     if(!["GET","HEAD"].includes(req.method||"GET"))return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD"});
     if(ENVIRONMENT==="production")return sendJson(res,404,{error:{code:"NOT_FOUND"}});
-    return sendJson(res,200,{version:VERSION,environment:ENVIRONMENT});
+    return sendJson(res,200,{version:VERSION,environment:ENVIRONMENT,commit:RENDER_GIT_COMMIT||null});
   }
   if(url.pathname==="/runtime-config.json"){
     if(!["GET","HEAD"].includes(req.method||"GET"))return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD"});
