@@ -1,0 +1,49 @@
+name: Security checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate Node runtime entrypoint
+        run: node --check server.mjs
+      - name: Reject high-risk secret artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          forbidden_files="$(find . -type f \( -name '*.pem' -o -name '*.p12' -o -name '*.pfx' -o -name '*.key' -o -name '.env' -o -name '.env.*' \) -not -path './.git/*' -print)"
+          if [ -n "$forbidden_files" ]; then
+            echo "Forbidden secret-like files found:"
+            echo "$forbidden_files"
+            exit 1
+          fi
+          if git grep -n -I -E 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=|TURNSTILE_SECRET[[:space:]]*=|STRIPE_SECRET_KEY[[:space:]]*=|SMTP_PASS(WORD)?[[:space:]]*=' -- ':!.github/workflows/security.yml'; then
+            echo "Potential committed secret material detected."
+            exit 1
+          fi
+      - name: Verify production server does not expose repository internals
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'PUBLIC_TOP_LEVEL_FILES' server.mjs
+          grep -q 'PUBLIC_DIRECTORIES' server.mjs
+          if grep -q 'createReadStream(path.join(ROOT' server.mjs; then
+            echo "Unsafe repository-root static serving pattern detected."
+            exit 1
+          fi
