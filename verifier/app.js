@@ -88,7 +88,7 @@ const supabase=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
 });
 
 const state={
-  session:null,user:null,organizations:[],orgId:null,dashboard:null,currentView:"dashboard",notifications:null,launch:null,billing:null,platform:null,
+  session:null,user:null,organizations:[],orgId:null,dashboard:null,currentView:"dashboard",notifications:null,launch:null,billing:null,platform:null,sso:null,
   mfaGateActive:false,portalStarting:false,mfaStepUpPromise:null
 };
 
@@ -231,6 +231,40 @@ async function evaluate(body){return await edgePost("trustrelay-verifier-evaluat
 async function evidenceFile(body){return await edgePost("trustrelay-evidence-v08",body,"EVIDENCE_REQUEST_FAILED")}
 async function complianceEdge(body){return await edgePost("trustrelay-compliance-export-v09",body,"COMPLIANCE_REQUEST_FAILED")}
 async function billingEdge(body){return await edgePost("trustrelay-billing-v10",body,"BILLING_REQUEST_FAILED")}
+async function ssoEdge(body){return await edgePost("trustrelay-sso-v13",body,"SSO_REQUEST_FAILED")}
+
+async function discoverEnterpriseSso(email){
+  const normalized=String(email||"").trim().toLowerCase();
+  if(!normalized||!normalized.includes("@"))throw new Error("Enter a valid work email.");
+  const {data,error}=await supabase.rpc("trustrelay_sso_discover_v13",{p_email:normalized});
+  if(error)throw error;
+  if(data?.ok===false){const e=new Error(data.code||"SSO_DISCOVERY_FAILED");e.code=data.code;throw e}
+  return data;
+}
+async function startEnterpriseSso(email,known=null){
+  const info=known||await discoverEnterpriseSso(email);
+  if(!info?.ssoAvailable)throw new Error("No enterprise SSO configuration was found for this email domain.");
+  sessionStorage.setItem("trustrelay_verifier_email",String(email||"").trim().toLowerCase());
+  const redirectTo=authRedirectUrl();
+  if(info.protocol==="oidc"){
+    const {error}=await supabase.auth.signInWithOAuth({
+      provider:info.providerIdentifier,
+      options:{redirectTo}
+    });
+    if(error)throw error;
+    return;
+  }
+  if(info.protocol==="saml"){
+    const {data,error}=await supabase.auth.signInWithSSO({
+      providerId:info.providerIdentifier,
+      options:{redirectTo}
+    });
+    if(error)throw error;
+    if(data?.url)window.location.assign(data.url);
+    return;
+  }
+  throw new Error("Unsupported enterprise SSO protocol.");
+}
 
 function perms(){return state.dashboard?.membership?.permissions||{}}
 function hasPerm(name){return perms()[name]===true}
@@ -246,7 +280,7 @@ function currentOrg(){return state.organizations.find(x=>x.organization?.id===st
 function showView(name){
   state.currentView=name;
   qsa(".portal-section").forEach(x=>x.classList.add("hidden"));
-  const map={dashboard:"dashboardView",verify:"verifyView",evidence:"evidenceView",keys:"keysView",team:"teamView",webhooks:"webhooksView",compliance:"complianceView",launch:"launchView",audit:"auditView",developer:"developerView"};
+  const map={dashboard:"dashboardView",verify:"verifyView",evidence:"evidenceView",keys:"keysView",team:"teamView",sso:"ssoView",webhooks:"webhooksView",compliance:"complianceView",launch:"launchView",audit:"auditView",developer:"developerView"};
   $(map[name]||"dashboardView").classList.remove("hidden");
   qsa(".verifier-nav .nav-item").forEach(b=>b.classList.toggle("active",b.dataset.view===name));
   window.scrollTo({top:0,behavior:"smooth"});
@@ -275,13 +309,15 @@ async function loadDashboard(){
     rpc("trustrelay_notifications_v09",{p_limit:1,p_unread_only:true}).catch(()=>({unreadCount:0,notifications:[]})),
     rpc("trustrelay_org_onboarding_v10",{p_org_id:state.orgId}).catch(()=>null),
     billingEdge({action:"status",orgId:state.orgId}).catch(e=>({error:{code:e.code||e.message},providerConfigured:false})),
-    rpc("trustrelay_platform_readiness_v10",{p_org_id:state.orgId}).catch(()=>null)
+    rpc("trustrelay_platform_readiness_v10",{p_org_id:state.orgId}).catch(()=>null),
+    rpc("trustrelay_sso_status_v13",{p_org_id:state.orgId}).catch(e=>({ok:false,error:{code:e.code||e.message}}))
   ]);
   state.dashboard=results[0];
   state.notifications=results[1];
   state.launch=results[2];
   state.billing=results[3];
   state.platform=results[4];
+  state.sso=results[5];
   render();
 }
 
@@ -301,7 +337,7 @@ function render(){
     <dt>Ready exports</dt><dd>${m.readyExports??0}</dd>
     <dt>Your role</dt><dd>${esc(d.membership?.role||"—")}</dd>`;
   renderDecisions($("recentDecisions"),(d.recentDecisions||[]).slice(0,8),true);
-  renderKeys();renderTeam();renderWebhooks();renderEvidenceRequests();renderCompliance();renderLaunch();renderAudit();renderDeveloper();renderNotificationBadge();
+  renderKeys();renderTeam();renderSso();renderWebhooks();renderEvidenceRequests();renderCompliance();renderLaunch();renderAudit();renderDeveloper();renderNotificationBadge();
   $("createKeyButton").classList.toggle("hidden",!canManageKeys());
   $("createWebhookButton").classList.toggle("hidden",!canManageWebhooks());
   $("inviteMemberButton").classList.toggle("hidden",!canInvite());
@@ -311,6 +347,7 @@ function render(){
   qsa('.verifier-nav [data-view="evidence"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("evidence.read")));
   qsa('.verifier-nav [data-view="keys"]').forEach(x=>x.classList.toggle("hidden",!canManageKeys()));
   qsa('.verifier-nav [data-view="team"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("members.manage")));
+  qsa('.verifier-nav [data-view="sso"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("organization.manage")));
   qsa('.verifier-nav [data-view="webhooks"]').forEach(x=>x.classList.toggle("hidden",!canManageWebhooks()));
   qsa('.verifier-nav [data-view="compliance"]').forEach(x=>x.classList.toggle("hidden",!canExportAudit()));
   qsa('.verifier-nav [data-view="launch"]').forEach(x=>x.classList.toggle("hidden",!hasPerm("organization.manage")));
@@ -571,6 +608,47 @@ function renderDeveloper(){
   -H "X-TrustRelay-Key: YOUR_API_KEY"`;
 }
 
+function renderSso(){
+  const root=$("ssoConnectionSummary");
+  if(!root)return;
+  $("ssoCallbackUrl").textContent=SUPABASE_URL+"/auth/v1/callback";
+  const x=state.sso;
+  const configured=Boolean(x?.configured&&x?.connection);
+  const c=x?.connection||{};
+  const chip=$("ssoStatusChip");
+  chip.textContent=configured?String(c.status||"configured").toUpperCase():"NOT CONFIGURED";
+  if(!configured){
+    root.innerHTML='<div class="empty-management">No enterprise identity provider is configured for this organization.</div>';
+  }else{
+    const brand=c.providerBrand==="microsoft_entra"?"Microsoft Entra ID":"Okta";
+    root.innerHTML=
+      '<div class="sso-summary-row"><span>Provider</span><span>'+esc(brand)+'</span></div>'+
+      '<div class="sso-summary-row"><span>Protocol</span><span>'+esc(String(c.protocol||"").toUpperCase())+'</span></div>'+
+      '<div class="sso-summary-row"><span>Domains</span><span>'+esc((c.domains||[]).join(", "))+'</span></div>'+
+      '<div class="sso-summary-row"><span>Enforcement</span><span>'+esc(c.enforcementMode||"optional")+'</span></div>'+
+      '<div class="sso-summary-row"><span>JIT membership</span><span>'+esc(c.jitEnabled?"enabled · "+c.jitDefaultRole:"disabled")+'</span></div>'+
+      '<div class="sso-summary-row"><span>Last verified</span><span>'+esc(c.lastVerifiedAt?formatDate(c.lastVerifiedAt,true):"Not yet tested")+'</span></div>'+
+      '<div class="sso-summary-row"><span>Break-glass owner</span><span>'+esc(c.breakGlassConfigured?"configured":"not assigned")+'</span></div>';
+  }
+  $("testSsoButton").classList.toggle("hidden",!configured);
+  $("disableSsoButton").classList.toggle("hidden",!configured);
+  $("requireSsoButton").classList.toggle("hidden",!configured||c.status!=="verified"||c.enforcementMode==="required");
+  $("makeSsoOptionalButton").classList.toggle("hidden",!configured||c.enforcementMode!=="required");
+  if(configured){
+    const brandRadio=document.querySelector('input[name="ssoProviderBrand"][value="'+CSS.escape(c.providerBrand||"microsoft_entra")+'"]');
+    if(brandRadio)brandRadio.checked=true;
+    $("ssoDomains").value=(c.domains||[]).join("\n");
+    $("ssoJitEnabled").checked=Boolean(c.jitEnabled);
+    $("ssoJitRole").value=c.jitDefaultRole||"verifier";
+    if(c.providerBrand==="microsoft_entra"){
+      $("entraFields").classList.remove("hidden");$("oktaFields").classList.add("hidden");
+    }else{
+      $("entraFields").classList.add("hidden");$("oktaFields").classList.remove("hidden");
+      if(c.issuerUrl)$("ssoOktaIssuer").value=c.issuerUrl;
+    }
+  }
+}
+
 function showDecision(result){
   const d=result?.decision||{},root=$("decisionResult"),cls=String(d.decision||"").toLowerCase();
   root.className="decision-result "+(cls||"empty");
@@ -600,14 +678,78 @@ function parseUrlInvite(){
 
 function setup(){
   void mountTurnstile($("magicForm")).catch(()=>msg(els.authMessage,"Security check could not load. Refresh and try again.","error"));
+  $("ssoLoginForm").addEventListener("submit",async e=>{
+    e.preventDefault();clearMsg(els.authMessage);const b=e.submitter;busy(b,true,"Finding your organization…");
+    try{await startEnterpriseSso($("ssoEmail").value)}
+    catch(err){msg(els.authMessage,String(err.code||err.message).replaceAll("_"," "),"error");busy(b,false)}
+  });
   $("magicForm").addEventListener("submit",async e=>{e.preventDefault();clearMsg(els.authMessage);const b=e.submitter;busy(b,true,"Sending secure link…");const email=$("authEmail").value.trim().toLowerCase(),name=$("authName").value.trim();try{const options={shouldCreateUser:true,emailRedirectTo:authRedirectUrl()};const captchaToken=captchaTokenForAuth();if(captchaToken)options.captchaToken=captchaToken;if(name)options.data={full_name:name};const {error}=await supabase.auth.signInWithOtp({email,options});if(error)throw error;sessionStorage.setItem("trustrelay_verifier_email",email);$("otpEmail").value=email;msg(els.authMessage,"Check your email for the TrustRelay magic link. If your email contains a six-digit code, use the code option below.","success")}catch(err){msg(els.authMessage,err.message||"Could not send sign-in email.","error")}finally{resetTurnstile();busy(b,false)}});
   $("showOtp").onclick=()=>showOtp(true);$("backToMagic").onclick=()=>showOtp(false);
+  qsa('input[name="ssoProviderBrand"]').forEach(r=>r.onchange=()=>{
+    const entra=r.value==="microsoft_entra"&&r.checked;
+    if(r.checked){$("entraFields").classList.toggle("hidden",!entra);$("oktaFields").classList.toggle("hidden",entra)}
+  });
+  $("ssoJitEnabled").onchange=()=>{$("ssoJitRole").disabled=!$("ssoJitEnabled").checked};
+  $("ssoJitRole").disabled=!$("ssoJitEnabled").checked;
   $("otpForm").addEventListener("submit",async e=>{e.preventDefault();const b=e.submitter;busy(b,true,"Verifying…");try{const {data,error}=await supabase.auth.verifyOtp({email:$("otpEmail").value.trim().toLowerCase(),token:$("otpCode").value.trim(),type:"email"});if(error)throw error;state.session=data.session;state.user=data.user;await startPortal()}catch(err){msg(els.authMessage,err.message||"Invalid or expired code.","error")}finally{busy(b,false)}});
 
   qsa(".verifier-nav .nav-item").forEach(b=>b.onclick=()=>showView(b.dataset.view));qsa("[data-go]").forEach(b=>b.onclick=()=>showView(b.dataset.go));
   els.orgSelect.onchange=async()=>{state.orgId=els.orgSelect.value;state.launch=null;state.billing=null;state.platform=null;await loadDashboard();showView("dashboard")};
   $("newOrgButton").onclick=()=>{state.orgId=null;$("noOrgView").classList.remove("hidden");qsa(".portal-section").filter(x=>x.id!=="noOrgView").forEach(x=>x.classList.add("hidden"))};
   $("orgForm").addEventListener("submit",async e=>{e.preventDefault();const form=e.currentTarget,b=e.submitter;busy(b,true,"Creating…");try{const x=await rpc("trustrelay_create_organization_v07",{p_name:$("orgName").value.trim(),p_industry:$("orgIndustry").value.trim()||null,p_website:$("orgWebsite").value.trim()||null});state.orgId=x.organization.id;toast("Sandbox organization created.","success");form.reset();await loadOrganizations();showView("dashboard")}catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}});
+  $("ssoConfigForm").addEventListener("submit",async e=>{
+    e.preventDefault();const b=e.submitter;busy(b,true,"Configuring provider…");
+    try{
+      const brand=document.querySelector('input[name="ssoProviderBrand"]:checked')?.value||"microsoft_entra";
+      const domains=$("ssoDomains").value.split(/[\s,]+/).map(x=>x.trim().toLowerCase()).filter(Boolean);
+      const payload={
+        action:"configure_oidc",orgId:state.orgId,providerBrand:brand,domains,
+        clientId:$("ssoClientId").value.trim(),clientSecret:$("ssoClientSecret").value,
+        tenantId:brand==="microsoft_entra"?$("ssoTenantId").value.trim():null,
+        issuerUrl:brand==="okta"?$("ssoOktaIssuer").value.trim():null,
+        jitEnabled:$("ssoJitEnabled").checked,jitDefaultRole:$("ssoJitRole").value
+      };
+      await ssoEdge(payload);
+      $("ssoClientSecret").value="";
+      toast("Enterprise OIDC configured. Test it before requiring SSO.","success");
+      state.sso=await rpc("trustrelay_sso_status_v13",{p_org_id:state.orgId});renderSso();
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
+    finally{busy(b,false)}
+  });
+  $("testSsoButton").onclick=async()=>{
+    const c=state.sso?.connection;if(!c)return;
+    const email=state.user?.email||sessionStorage.getItem("trustrelay_verifier_email")||"";
+    if(!email){toast("Your account email is unavailable.","error");return}
+    const b=$("testSsoButton");busy(b,true,"Redirecting…");
+    try{
+      const info={ssoAvailable:true,protocol:c.protocol,providerIdentifier:c.providerIdentifier};
+      await supabase.auth.signOut();
+      await startEnterpriseSso(email,info);
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error");busy(b,false)}
+  };
+  $("requireSsoButton").onclick=async()=>{
+    const b=$("requireSsoButton");busy(b,true,"Enabling…");
+    try{
+      await rpc("trustrelay_set_sso_enforcement_v13",{p_org_id:state.orgId,p_required:true});
+      toast("Enterprise SSO is now required for this organization.","success");
+      state.sso=await rpc("trustrelay_sso_status_v13",{p_org_id:state.orgId});renderSso();
+    }catch(err){
+      const code=String(err.code||err.message);
+      const friendly=code==="SSO_CURRENT_SESSION_REQUIRED"?"Test and sign in through the configured enterprise provider before requiring SSO.":code;
+      toast(friendly.replaceAll("_"," "),"error");
+    }finally{busy(b,false)}
+  };
+  $("makeSsoOptionalButton").onclick=async()=>{
+    const b=$("makeSsoOptionalButton");busy(b,true,"Updating…");
+    try{await rpc("trustrelay_set_sso_enforcement_v13",{p_org_id:state.orgId,p_required:false});toast("Enterprise SSO is optional again.","success");state.sso=await rpc("trustrelay_sso_status_v13",{p_org_id:state.orgId});renderSso()}
+    catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}
+  };
+  $("disableSsoButton").onclick=async()=>{
+    if(!confirm("Disable enterprise SSO for this organization? Passwordless access will remain available."))return;
+    const b=$("disableSsoButton");busy(b,true,"Disabling…");
+    try{await ssoEdge({action:"disable",orgId:state.orgId});toast("Enterprise SSO disabled.","success");state.sso={ok:true,configured:false};renderSso()}
+    catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}
+  };
 
   $("decisionResult").addEventListener("click", (event) => {
     const button=event.target.closest("[data-request-evidence-grant]");
@@ -835,9 +977,13 @@ async function startPortal(){
     const {data}=await supabase.auth.getUser();state.user=data.user||state.session?.user;
     if(!state.user)throw new Error("AUTH_REQUIRED");
     els.accountButton.textContent=initials(state.user?.user_metadata?.full_name||state.user?.email);
-    await rpc("trustrelay_ensure_account_v06",{p_auth_user_id:state.user.id,p_display_name:state.user.user_metadata?.full_name||null}).catch(()=>{});
+    const accountResult=await rpc("trustrelay_ensure_account_v06",{p_auth_user_id:state.user.id,p_display_name:state.user.user_metadata?.full_name||null});
+    if(accountResult?.ok===false)throw new Error(accountResult.code||"ACCOUNT_BINDING_FAILED");
     const mfaReady=await ensureVerifierMfa();
     if(!mfaReady)return;
+    await rpc("trustrelay_sso_session_bootstrap_v13").catch(err=>{
+      if(String(err.code||err.message)!=="REQUEST_REJECTED")console.warn("SSO bootstrap",err.code||err.message);
+    });
     await acceptPendingOrgInvite();
     await loadOrganizations();
     if(state.orgId){await loadDashboard();showView("dashboard")}
@@ -848,7 +994,7 @@ async function startPortal(){
 
 async function init(){
   setup();parseUrlInvite();
-  const remembered=sessionStorage.getItem("trustrelay_verifier_email");if(remembered){$("authEmail").value=remembered;$("otpEmail").value=remembered}
+  const remembered=sessionStorage.getItem("trustrelay_verifier_email");if(remembered){$("authEmail").value=remembered;$("otpEmail").value=remembered;$("ssoEmail").value=remembered}
   const {data}=await supabase.auth.getSession();state.session=data.session;state.user=data.session?.user||null;
   supabase.auth.onAuthStateChange((event,session)=>{state.session=session;state.user=session?.user||null;if(event==="SIGNED_OUT"){setAuthenticated(false);return}if(session&&["SIGNED_IN","TOKEN_REFRESHED","USER_UPDATED"].includes(event))setTimeout(()=>startPortal(),0)});
   if(state.session)await startPortal();else{setAuthenticated(false);if(sessionStorage.getItem("trustrelay_pending_org_invite"))msg(els.authMessage,"Sign in with the invited email address to join the organization.","warning")}
