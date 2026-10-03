@@ -1,0 +1,32 @@
+name: External DAST
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 8 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  zap-baseline:
+    name: OWASP ZAP passive baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - https://trustrelay-staging.onrender.com
+          - https://trustrelay-production.onrender.com
+    steps:
+      - name: ZAP baseline
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25
+        with:
+          target: ${{ matrix.target }}
+          allow_issue_writing: false
+          fail_action: true
+          artifact_name: zap-${{ strategy.job-index }}
+          cmd_options: '-a'
