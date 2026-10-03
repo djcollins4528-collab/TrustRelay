@@ -88,7 +88,7 @@ const supabase=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
 });
 
 const state={
-  session:null,user:null,organizations:[],orgId:null,dashboard:null,currentView:"dashboard",notifications:null,launch:null,billing:null,platform:null,sso:null,
+  session:null,user:null,organizations:[],orgId:null,dashboard:null,currentView:"dashboard",notifications:null,launch:null,billing:null,platform:null,sso:null,scim:null,
   mfaGateActive:false,portalStarting:false,mfaStepUpPromise:null
 };
 
@@ -232,6 +232,7 @@ async function evidenceFile(body){return await edgePost("trustrelay-evidence-v08
 async function complianceEdge(body){return await edgePost("trustrelay-compliance-export-v09",body,"COMPLIANCE_REQUEST_FAILED")}
 async function billingEdge(body){return await edgePost("trustrelay-billing-v10",body,"BILLING_REQUEST_FAILED")}
 async function ssoEdge(body){return await edgePost("trustrelay-sso-v13",body,"SSO_REQUEST_FAILED")}
+async function scimAdminEdge(body){return await edgePost("trustrelay-scim-admin-v14",body,"SCIM_REQUEST_FAILED")}
 async function publicSsoEdge(body){
   const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-sso-v13",{
     method:"POST",
@@ -317,7 +318,8 @@ async function loadDashboard(){
     rpc("trustrelay_org_onboarding_v10",{p_org_id:state.orgId}).catch(()=>null),
     billingEdge({action:"status",orgId:state.orgId}).catch(e=>({error:{code:e.code||e.message},providerConfigured:false})),
     rpc("trustrelay_platform_readiness_v10",{p_org_id:state.orgId}).catch(()=>null),
-    rpc("trustrelay_sso_config_v13",{p_org_id:state.orgId}).catch(e=>({ok:false,error:{code:e.code||e.message}}))
+    rpc("trustrelay_sso_config_v13",{p_org_id:state.orgId}).catch(e=>({ok:false,error:{code:e.code||e.message}})),
+    scimAdminEdge({action:"status",orgId:state.orgId}).catch(e=>({configured:false,error:{code:e.code||e.message}}))
   ]);
   state.dashboard=results[0];
   state.notifications=results[1];
@@ -325,6 +327,7 @@ async function loadDashboard(){
   state.billing=results[3];
   state.platform=results[4];
   state.sso=results[5];
+  state.scim=results[6];
   render();
 }
 
@@ -344,7 +347,7 @@ function render(){
     <dt>Ready exports</dt><dd>${m.readyExports??0}</dd>
     <dt>Your role</dt><dd>${esc(d.membership?.role||"—")}</dd>`;
   renderDecisions($("recentDecisions"),(d.recentDecisions||[]).slice(0,8),true);
-  renderKeys();renderTeam();renderSso();renderWebhooks();renderEvidenceRequests();renderCompliance();renderLaunch();renderAudit();renderDeveloper();renderNotificationBadge();
+  renderKeys();renderTeam();renderSso();renderScim();renderWebhooks();renderEvidenceRequests();renderCompliance();renderLaunch();renderAudit();renderDeveloper();renderNotificationBadge();
   $("createKeyButton").classList.toggle("hidden",!canManageKeys());
   $("createWebhookButton").classList.toggle("hidden",!canManageWebhooks());
   $("inviteMemberButton").classList.toggle("hidden",!canInvite());
@@ -689,6 +692,56 @@ function renderSso(){
   }
 }
 
+function showScimCredentials(x){
+  openModal('<p class="eyebrow">SCIM CREDENTIALS</p><h2>Copy these values now.</h2><p class="warning-copy">The secret token is shown only once. TrustRelay stores only its SHA-256 hash.</p><div class="field"><label>Tenant URL</label><div class="secret-once" id="scimTenantUrlOnce">'+esc(x.endpoint||"")+'</div></div><div class="field"><label>Secret token</label><div class="secret-once" id="scimTokenOnce">'+esc(x.token||"")+'</div></div><p class="fine-print">Use the Tenant URL and Secret Token in Microsoft Entra ID Enterprise Application provisioning or in Okta SCIM 2.0 provisioning. Keep the token in your identity provider secret store.</p><div class="modal-actions"><button id="copyScimUrl" class="button secondary" type="button">Copy Tenant URL</button><button id="copyScimToken" class="button primary" type="button">Copy Secret Token</button></div>');
+  $("copyScimUrl").onclick=()=>copyText(x.endpoint||"","SCIM Tenant URL copied");
+  $("copyScimToken").onclick=()=>copyText(x.token||"","SCIM secret token copied");
+}
+
+function renderScim(){
+  const root=$("scimSummary");
+  if(!root)return;
+  const x=state.scim||{};
+  const configured=Boolean(x.configured);
+  const enabled=configured&&x.status==="enabled";
+  $("scimStatusChip").textContent=!configured?"NOT CONFIGURED":enabled?"ENABLED":"DISABLED";
+  $("scimDefaultRole").value=x.defaultRole||"verifier";
+  root.replaceChildren();
+
+  if(!configured){
+    const empty=document.createElement("div");
+    empty.className="empty-management";
+    const ssoReady=Boolean(state.sso?.configured&&state.sso?.status==="active");
+    empty.textContent=ssoReady
+      ?"SCIM is ready to enable for this organization."
+      :"Configure Enterprise SSO and verify at least one corporate domain before enabling SCIM.";
+    root.appendChild(empty);
+  }else{
+    const rows=[
+      ["Tenant URL",x.endpoint||"—"],
+      ["Token","••••"+String(x.tokenLastFour||"")],
+      ["Default role",x.defaultRole||"verifier"],
+      ["Provisioned users",String(x.activeUsers??0)+" active / "+String(x.totalUsers??0)+" total"],
+      ["Last used",x.lastUsedAt?formatDate(x.lastUsedAt,true):"Never"],
+      ["Last rotated",x.lastRotatedAt?formatDate(x.lastRotatedAt,true):"—"]
+    ];
+    for(const [label,value] of rows){
+      const row=document.createElement("div");
+      row.className="sso-summary-row";
+      const left=document.createElement("span"),right=document.createElement("span");
+      left.textContent=label;right.textContent=value;
+      row.append(left,right);root.appendChild(row);
+    }
+  }
+
+  $("enableScimButton").classList.toggle("hidden",configured);
+  $("saveScimPolicyButton").classList.toggle("hidden",!configured);
+  $("rotateScimTokenButton").classList.toggle("hidden",!configured||!enabled);
+  $("disableScimButton").classList.toggle("hidden",!configured||!enabled);
+  $("reenableScimButton").classList.toggle("hidden",!configured||enabled);
+  $("enableScimButton").disabled=!(state.sso?.configured&&state.sso?.status==="active");
+}
+
 function showDecision(result){
   const d=result?.decision||{},root=$("decisionResult"),cls=String(d.decision||"").toLowerCase();
   root.className="decision-result "+(cls||"empty");
@@ -811,6 +864,49 @@ function setup(){
     const b=$("disableSsoButton");busy(b,true,"Disabling…");
     try{await ssoEdge({action:"disable",orgId:state.orgId});toast("Enterprise SSO disabled.","success");state.sso={ok:true,configured:false};renderSso()}
     catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}
+  };
+
+  $("enableScimButton").onclick=async()=>{
+    const b=$("enableScimButton");busy(b,true,"Enabling…");
+    try{
+      const x=await scimAdminEdge({action:"enable",orgId:state.orgId,defaultRole:$("scimDefaultRole").value});
+      state.scim=x;renderScim();showScimCredentials(x);toast("SCIM provisioning enabled.","success");
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
+    finally{busy(b,false)}
+  };
+  $("rotateScimTokenButton").onclick=async()=>{
+    if(!confirm("Rotate the SCIM token? The current token will stop working immediately."))return;
+    const b=$("rotateScimTokenButton");busy(b,true,"Rotating…");
+    try{
+      const x=await scimAdminEdge({action:"rotate",orgId:state.orgId});
+      state.scim={...(state.scim||{}),...x};renderScim();showScimCredentials(x);toast("SCIM token rotated.","success");
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
+    finally{busy(b,false)}
+  };
+  $("saveScimPolicyButton").onclick=async()=>{
+    const b=$("saveScimPolicyButton");busy(b,true,"Saving…");
+    try{
+      const x=await scimAdminEdge({action:"policy",orgId:state.orgId,status:state.scim?.status||"enabled",defaultRole:$("scimDefaultRole").value});
+      state.scim={...(state.scim||{}),...x};renderScim();toast("SCIM default role updated.","success");
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
+    finally{busy(b,false)}
+  };
+  $("disableScimButton").onclick=async()=>{
+    if(!confirm("Disable SCIM provisioning? Existing memberships remain unchanged, but new provisioning and deprovisioning requests will be rejected."))return;
+    const b=$("disableScimButton");busy(b,true,"Disabling…");
+    try{
+      const x=await scimAdminEdge({action:"policy",orgId:state.orgId,status:"disabled",defaultRole:$("scimDefaultRole").value});
+      state.scim={...(state.scim||{}),...x,status:"disabled"};renderScim();toast("SCIM provisioning disabled.","success");
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
+    finally{busy(b,false)}
+  };
+  $("reenableScimButton").onclick=async()=>{
+    const b=$("reenableScimButton");busy(b,true,"Enabling…");
+    try{
+      const x=await scimAdminEdge({action:"policy",orgId:state.orgId,status:"enabled",defaultRole:$("scimDefaultRole").value});
+      state.scim={...(state.scim||{}),...x,status:"enabled"};renderScim();toast("SCIM provisioning re-enabled.","success");
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
+    finally{busy(b,false)}
   };
 
   $("decisionResult").addEventListener("click", (event) => {
