@@ -215,6 +215,14 @@ async function pinnedHttpsPost(target: URL, pinnedIp: string, headers: Record<st
   }
 }
 
+async function jsonBody(req: Request,max=393216){
+  const contentLength=Number(req.headers.get("content-length")||0);
+  if(Number.isFinite(contentLength)&&contentLength>max)throw Object.assign(new Error("EGRESS_PAYLOAD_TOO_LARGE"),{status:413});
+  const raw=await req.text();
+  if(encoder.encode(raw).byteLength>max)throw Object.assign(new Error("EGRESS_PAYLOAD_TOO_LARGE"),{status:413});
+  try{return raw?JSON.parse(raw):{}}catch{throw Object.assign(new Error("EGRESS_JSON_INVALID"),{status:400})}
+}
+
 Deno.serve(async (req: Request) => {
   try {
     if (req.method !== "POST") return json({error:{code:"METHOD_NOT_ALLOWED"}},405);
@@ -222,7 +230,7 @@ Deno.serve(async (req: Request) => {
     const expected=await expectedInternalSecret();
     if(!timingSafeEqual(supplied,expected)) return json({error:{code:"EGRESS_AUTH_INVALID"}},401);
 
-    const input=await req.json();
+    const input=await jsonBody(req);
     const endpointUrl=String(input?.endpointUrl||"");
     const payloadJson=String(input?.payloadJson||"");
     const eventType=String(input?.eventType||"");
@@ -254,10 +262,11 @@ Deno.serve(async (req: Request) => {
     return new Response(result.excerpt,{status:result.status,headers:outHeaders});
   } catch(error) {
     const code=error instanceof Error?error.message:"EGRESS_INTERNAL_ERROR";
-    const status=code==="WEBHOOK_TARGET_PRIVATE_NETWORK"?403
+    const status=Number((error as any)?.status)||(
+      code==="WEBHOOK_TARGET_PRIVATE_NETWORK"?403
       : code.includes("TIMEOUT")?504
-      : code==="WEBHOOK_URL_INVALID"||code==="WEBHOOK_PORT_INVALID"?400
-      : 502;
+      : code==="WEBHOOK_URL_INVALID"||code==="WEBHOOK_PORT_INVALID"||code==="EGRESS_JSON_INVALID"?400
+      : 502);
     return json({error:{code:code||"EGRESS_INTERNAL_ERROR"}},status);
   }
 });
