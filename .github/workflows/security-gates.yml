@@ -241,6 +241,48 @@ jobs:
               print("\n".join(sorted(set(failures))))
               sys.exit(1)
 
+      - name: Reject legacy Supabase key fallbacks
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -R -n -E 'SUPABASE_(SERVICE_ROLE_KEY|ANON_KEY)' supabase/functions; then
+            echo "Legacy Supabase JWT key fallback found in Edge Function source."
+            exit 1
+          fi
+
+      - name: Enforce institutional MFA invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'ensureVerifierMfa' verifier/app.js
+          grep -q 'auth.mfa.enroll' verifier/app.js
+          grep -q 'auth.mfa.challenge' verifier/app.js
+          grep -q 'MFA_ENROLLMENT_REQUIRED' supabase/migrations/0040_v12_institutional_totp_mfa.sql
+          grep -q "requiredAal','aal2" supabase/migrations/0040_v12_institutional_totp_mfa.sql
+          grep -q 'trustrelay_rotate_signing_key_v12' supabase/migrations/0041_v12_signing_key_rotation.sql
+
+      - name: Verify runtime quarantine kill switch
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SUPABASE_URL="https://msfrbsnihylfynrtdgxe.supabase.co"
+          export SUPABASE_PUBLISHABLE_KEY="sb_publishable_ci_only"
+          export TRUSTRELAY_ENVIRONMENT="staging"
+          export TRUSTRELAY_ALLOWED_HOSTS="127.0.0.1"
+          export TRUSTRELAY_RUNTIME_DISABLED="true"
+          export PORT="18082"
+          node server.mjs >/tmp/trustrelay-quarantine.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for i in {1..20}; do
+            if curl --silent --fail http://127.0.0.1:18082/healthz >/tmp/quarantine-health.json; then break; fi
+            sleep 0.25
+          done
+          test "$(cat /tmp/quarantine-health.json)" = '{"status":"quarantined"}'
+          code="$(curl --silent --output /tmp/quarantine-body --write-out '%{http_code}' http://127.0.0.1:18082/)"
+          test "$code" = "503"
+          grep -q 'RUNTIME_QUARANTINED' /tmp/quarantine-body
+
       - name: Enforce pinned Supabase package imports
         shell: bash
         run: |
