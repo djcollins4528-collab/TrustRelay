@@ -13,6 +13,7 @@ const PORT=Number(process.env.PORT||10000);
 const SUPABASE_URL=String(process.env.SUPABASE_URL||"").replace(/\/$/,"");
 const SUPABASE_PUBLISHABLE_KEY=String(process.env.SUPABASE_PUBLISHABLE_KEY||"");
 const ENVIRONMENT=String(process.env.TRUSTRELAY_ENVIRONMENT||"staging");
+const RUNTIME_DISABLED=/^(1|true|yes)$/i.test(String(process.env.TRUSTRELAY_RUNTIME_DISABLED||"false"));
 const VERSION=String(process.env.TRUSTRELAY_APP_VERSION||"1.0.0");
 const TURNSTILE_SITE_KEY=String(process.env.TRUSTRELAY_TURNSTILE_SITE_KEY||"");
 const BODY_LIMIT=Math.max(1024,Number(process.env.TRUSTRELAY_BODY_LIMIT_BYTES||262144));
@@ -352,15 +353,18 @@ const server=http.createServer(async(req,res)=>{
   try{url=new URL(req.url||"/","http://localhost")}
   catch{return sendJson(res,400,{error:{code:"INVALID_URL"}})}
   if(!hostAllowed(req))return sendJson(res,421,{error:{code:"HOST_NOT_ALLOWED"}});
+  if(url.pathname==="/healthz"){
+    return sendJson(res,200,{status:RUNTIME_DISABLED?"quarantined":"ok"});
+  }
+  if(RUNTIME_DISABLED){
+    return sendJson(res,503,{error:{code:"RUNTIME_QUARANTINED"}},{"Retry-After":"3600"});
+  }
   if(!applyRuntimeRateLimit(req,res,url.pathname))return;
   if(url.pathname==="/internal/webhook-egress"){
     return sendJson(res,410,{error:{code:"WEBHOOK_EGRESS_RETIRED",replacement:"trustrelay-webhook-egress-v10"}});
   }
   if(ENVIRONMENT==="production"&&(url.pathname==="/reviewer"||url.pathname.startsWith("/reviewer/"))){
     return sendJson(res,404,{error:{code:"NOT_FOUND"}});
-  }
-  if(url.pathname==="/healthz"){
-    return sendJson(res,200,{status:"ok"});
   }
   if(url.pathname==="/version"){
     if(ENVIRONMENT==="production")return sendJson(res,404,{error:{code:"NOT_FOUND"}});
