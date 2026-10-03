@@ -24,6 +24,8 @@ const PARTNER_RESPONSE_LIMIT=Math.max(4096,Math.min(4*1024*1024,Number(process.e
 const RATE_LIMIT_PER_MINUTE=Math.max(10,Math.min(5000,Number(process.env.TRUSTRELAY_RATE_LIMIT_PER_MINUTE||120)));
 const RATE_LIMIT_WINDOW_MS=60_000;
 const ALLOWED_HOSTS=new Set(String(process.env.TRUSTRELAY_ALLOWED_HOSTS||"").split(",").map(x=>x.trim().toLowerCase().replace(/\.$/,"")).filter(Boolean));
+const RENDER_EXTERNAL_HOSTNAME=String(process.env.RENDER_EXTERNAL_HOSTNAME||"").trim().toLowerCase().replace(/\.$/,"");
+if(ENVIRONMENT!=="production"&&RENDER_EXTERNAL_HOSTNAME)ALLOWED_HOSTS.add(RENDER_EXTERNAL_HOSTNAME);
 const rateBuckets=new Map();
 let rateLimitSweepCounter=0;
 
