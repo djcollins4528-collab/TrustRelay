@@ -103,7 +103,6 @@
           <button class="nav-item" data-view="keys" type="button"><span>⌁</span><span>API keys</span></button>
           <button class="nav-item" data-view="team" type="button"><span>◎</span><span>Team</span></button>
           <button class="nav-item" data-view="sso" type="button"><span>◇</span><span>Enterprise SSO</span></button>
-          <button class="nav-item" data-view="provisioning" type="button"><span>⇄</span><span>Provisioning</span></button>
           <button class="nav-item" data-view="webhooks" type="button"><span>↗</span><span>Webhooks</span></button>
           <button class="nav-item" data-view="compliance" type="button"><span>▤</span><span>Compliance</span></button>
           <button class="nav-item" data-view="launch" type="button"><span>↥</span><span>Launch</span></button>
@@ -330,71 +329,6 @@
               <p>When SCIM is enabled, an unprovisioned user is not auto-added by domain JIT. Only an active SCIM assignment can create the first organization membership.</p>
             </div>
           </div>
-        </section>
-
-        <section id="provisioningView" class="portal-section hidden">
-          <div class="page-heading">
-            <div>
-              <p class="eyebrow">IDENTITY LIFECYCLE</p>
-              <h2>SCIM provisioning.</h2>
-              <p>Automatically provision, update, suspend and deprovision institutional users from Microsoft Entra ID, Okta or another SCIM 2.0 identity provider.</p>
-            </div>
-            <span id="scimStatusChip" class="role-chip">NOT CONFIGURED</span>
-          </div>
-
-          <div class="portal-grid scim-grid">
-            <div class="portal-card">
-              <div class="card-heading"><div><h3>Provisioning service</h3><p>TrustRelay supports SCIM 2.0 Users and Groups with OAuth 2.0 client credentials and rotatable bearer compatibility.</p></div></div>
-              <div id="scimSummary" class="sso-summary"></div>
-
-              <div class="form-grid scim-policy-grid">
-                <div class="field">
-                  <label for="scimDefaultRole">Default TrustRelay role</label>
-                  <select id="scimDefaultRole">
-                    <option value="verifier">Verifier</option>
-                    <option value="auditor">Auditor</option>
-                    <option value="developer">Developer</option>
-                    <option value="compliance">Compliance</option>
-                  </select>
-                  <small>SCIM can never grant Owner or Admin.</small>
-                </div>
-                <div class="field">
-                  <label>Compatibility</label>
-                  <label class="scim-check"><input id="scimAllowBearer" type="checkbox" checked> Allow rotatable bearer token</label>
-                  <label class="scim-check"><input id="scimGroupSync" type="checkbox" checked> Synchronize SCIM groups</label>
-                </div>
-              </div>
-
-              <div class="management-actions scim-actions">
-                <button id="createScimCredentialButton" class="button primary" type="button">Generate SCIM credentials</button>
-                <button id="rotateScimCredentialButton" class="button secondary hidden" type="button">Add rotation credential</button>
-                <button id="saveScimPolicyButton" class="button secondary hidden" type="button">Save policy</button>
-                <button id="disableScimButton" class="button danger hidden" type="button">Disable SCIM</button>
-              </div>
-
-              <div class="sso-safety">
-                <strong>Safe deprovisioning</strong>
-                <p>SCIM deactivation removes access to this organization without deleting the user's global TrustRelay identity. Owner and Admin memberships are protected from SCIM deactivation.</p>
-              </div>
-            </div>
-
-            <aside class="portal-card">
-              <div class="card-heading"><div><h3>Identity-provider setup</h3><p>Use these values in your enterprise provisioning application.</p></div></div>
-              <div id="scimEndpointList" class="sso-summary"></div>
-              <div class="scim-provider-note">
-                <strong>Microsoft Entra ID</strong>
-                <p>Use OAuth 2.0 client credentials. TrustRelay issues one-hour access tokens from the OAuth token endpoint.</p>
-              </div>
-              <div class="scim-provider-note">
-                <strong>Okta</strong>
-                <p>Use OAuth client credentials or the generated secret directly as the SCIM bearer token for private integrations.</p>
-              </div>
-              <p class="fine-print">For customer-facing rollout, use the TrustRelay custom domain after the Cloudflare cutover. Existing Render URLs remain suitable for staging validation.</p>
-            </aside>
-          </div>
-
-          <div class="section-heading"><div><h3>SCIM credentials</h3><p>Secrets are shown once. TrustRelay stores only SHA-256 hashes and supports overlapping credentials for zero-downtime rotation.</p></div></div>
-          <div id="scimCredentialList" class="management-list"></div>
         </section>
 
         <section id="webhooksView" class="portal-section hidden">
