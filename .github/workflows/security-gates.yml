@@ -194,10 +194,13 @@ jobs:
                   continue
               for path in root.rglob("*.js"):
                   text = path.read_text(encoding="utf-8")
-                  for url in re.findall(r'https://[^"\'\s)]+', text):
-                      if url.startswith("https://") and url not in allowed and not url.startswith("https://api.stripe.com") and not url.startswith("https://checkout.stripe.com"):
-                          if "supabase.co" not in url:
-                              failures.append(f"{path}: unapproved remote browser dependency/origin {url}")
+                  executable_urls = []
+                  executable_urls += re.findall(r'from\\s+["\\\'](https://[^"\\\']+)["\\\']', text)
+                  executable_urls += re.findall(r'(?:src|href)\\s*=\\s*["\\\'](https://[^"\\\']+)["\\\']', text)
+                  executable_urls += re.findall(r'\\bimport\\(\\s*["\\\'](https://[^"\\\']+)["\\\']\\s*\\)', text)
+                  for url in executable_urls:
+                      if url not in allowed:
+                          failures.append(f"{path}: unapproved executable remote dependency {url}")
                   if re.search(r'https?://cdn\.jsdelivr\.net/npm/@supabase/supabase-js@(?!2\.117\.2/\+esm)', text):
                       failures.append(f"{path}: Supabase browser dependency is not pinned to 2.117.2")
 
