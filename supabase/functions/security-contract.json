@@ -39,12 +39,13 @@
       ]
     },
     "trustrelay-verifier-evaluate-v07": {
-      "mode": "validated-bearer-user-plus-service-session-bridge-plus-hmac-internal-edge",
+      "mode": "validated-bearer-user-plus-service-only-aal2-session-bridge-and-hmac-internal-edge",
       "required": [
         "/auth/v1/user",
         "authorization",
         "CANONICAL_APP_ORIGIN",
         "trustrelay_portal_session_context_v12",
+        "p_session_id",
         "x-trustrelay-internal-sig",
         "x-trustrelay-internal-ts",
         "bodyHash",
