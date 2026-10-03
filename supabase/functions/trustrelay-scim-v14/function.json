@@ -1,0 +1,5 @@
+{
+  "slug": "trustrelay-scim-v14",
+  "verify_jwt": false,
+  "staging_version": 1
+}
