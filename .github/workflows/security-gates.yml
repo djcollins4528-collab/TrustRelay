@@ -164,7 +164,8 @@ jobs:
           grep -Fq '"x-trustrelay-edge-origin"' server.mjs
           grep -Fq 'ENVIRONMENT!=="production"&&RENDER_EXTERNAL_HOSTNAME' server.mjs
           grep -Fq 'if(ENVIRONMENT!=="production")ALLOWED_HOSTS.add("trustrelay-staging.onrender.com")' server.mjs
-          grep -Fq 'if(String(process.env.RENDER||"")!=="true")return false' server.mjs
+          grep -Fq 'if(ENVIRONMENT!=="production"||String(process.env.RENDER||"")!=="true")return false' server.mjs
+          grep -q 'trustedStagingRenderIdentity' server.mjs
           grep -Fq 'if(!REQUIRE_EDGE_ORIGIN||!EDGE_ORIGIN_SECRET)return false' server.mjs
           grep -q 'UNEXPECTED_REQUEST_BODY' server.mjs
           grep -q 'BROWSER_PARTNER_API_FORBIDDEN' server.mjs
