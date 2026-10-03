@@ -297,10 +297,19 @@ jobs:
           done
 
           code="$(curl --silent --output /tmp/public-render-body --write-out '%{http_code}' -H 'Host: trustrelay-production.onrender.com' http://127.0.0.1:18087/)"
-          test "$code" = "200"
+          if [ "$code" != "200" ]; then
+            echo "Expected canonical pre-edge Render host to return HTTP 200, got $code"
+            cat /tmp/public-render-body || true
+            cat /tmp/trustrelay-public-render-host.log || true
+            exit 1
+          fi
 
           rejected="$(curl --silent --output /tmp/public-render-rejected --write-out '%{http_code}' -H 'Host: attacker.invalid' http://127.0.0.1:18087/)"
-          test "$rejected" = "421"
+          if [ "$rejected" != "421" ]; then
+            echo "Expected untrusted host to return HTTP 421, got $rejected"
+            cat /tmp/public-render-rejected || true
+            exit 1
+          fi
           grep -q 'HOST_NOT_ALLOWED' /tmp/public-render-rejected
 
       - name: Verify strict edge mode rejects public Render hostname
