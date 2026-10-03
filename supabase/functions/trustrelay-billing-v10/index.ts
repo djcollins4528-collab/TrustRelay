@@ -60,6 +60,17 @@ function corsHeaders(req){
  };
 }
 function out(data,status=200,req=null){return Response.json(data,{status,headers:{"cache-control":"no-store","x-content-type-options":"nosniff",...corsHeaders(req)}})}
+async function readTextBounded(req,maxBytes){
+ const declared=Number(req.headers.get("content-length")||0);
+ if(Number.isFinite(declared)&&declared>maxBytes)throw{status:413,code:"REQUEST_TOO_LARGE"};
+ const raw=await req.text();
+ if(new TextEncoder().encode(raw).length>maxBytes)throw{status:413,code:"REQUEST_TOO_LARGE"};
+ return raw
+}
+async function readJsonBounded(req,maxBytes=65536){
+ const raw=await readTextBounded(req,maxBytes);
+ try{return raw?JSON.parse(raw):{}}catch{throw{status:400,code:"JSON_INVALID"}}
+}
 function safeOrigin(req){
  const configured=APP_ORIGIN;
  const origin=req.headers.get("origin")||"";
@@ -109,15 +120,8 @@ Deno.serve(async req=>{
         try{await assertStripeAccount();stripeAccountOk=true}
         catch(e){stripeAccountError=e?.code||"STRIPE_ACCOUNT_CHECK_FAILED"}
       }
-      return out({
-        ok:secretsConfigured&&stripeAccountOk,
-        environment:URL.includes("msfrbsnihylfynrtdgxe")?"production":URL.includes("kdvroylluosshcjmfbfq")?"staging":"unknown",
-        providerSecretsConfigured:secretsConfigured,
-        stripeAccountOk,
-        stripeAccountError,
-        checkoutPlans:{starter:Boolean(PRICE_STARTER),growth:Boolean(PRICE_GROWTH)},
-        appOriginConfigured:Boolean(APP_ORIGIN)
-      },secretsConfigured&&stripeAccountOk?200:503,req);
+      const healthy=secretsConfigured&&stripeAccountOk;
+      return out({ok:healthy,service:"trustrelay-billing-v10"},healthy?200:503,req);
     }
     return out({error:{code:"METHOD_NOT_ALLOWED"}},405,req);
   }
@@ -130,7 +134,7 @@ Deno.serve(async req=>{
 
   const stripeSig=req.headers.get("stripe-signature");
   if(stripeSig){
-    const raw=await req.text();
+    const raw=await readTextBounded(req,1048576);
     await verifyStripeSignature(raw,stripeSig);
     let event;try{event=JSON.parse(raw)}catch{throw{status:400,code:"STRIPE_PAYLOAD_INVALID"}}
     if(!event?.id||!event?.type)throw{status:400,code:"STRIPE_EVENT_INVALID"};
@@ -142,7 +146,7 @@ Deno.serve(async req=>{
   }
 
   const {authorization}=await userFrom(req);
-  const input=await req.json();
+  const input=await readJsonBounded(req,65536);
   const action=String(input.action||"");
   const orgId=String(input.orgId||"").trim();
   if(!orgId)throw{status:400,code:"ORGANIZATION_ID_REQUIRED"};
