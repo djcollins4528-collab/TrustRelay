@@ -704,11 +704,11 @@ function showScimCredentials(x){
   openModal(
     '<p class="eyebrow">SCIM SECRET TOKEN</p>'+
     '<h2>Copy this token now.</h2>'+
-    '<p class="warning-copy">This bearer token is shown only once. TrustRelay stores only its SHA-256 hash.</p>'+
+    '<p class="warning-copy">This secret is shown only once. TrustRelay stores only its SHA-256 hash.</p>'+
     '<div class="field"><label>SCIM Base URL</label><div class="secret-once" id="scimBaseOnce">'+esc(base)+'</div></div>'+
     '<div class="field"><label>Secret Token</label><div class="secret-once" id="scimSecretOnce">'+esc(raw)+'</div></div>'+
     '<div class="field"><label>Expires</label><div class="secret-once">'+esc(expires)+'</div></div>'+
-    '<p class="fine-print">Microsoft Entra ID: use the Base URL as Tenant URL and paste the token into Secret Token. Okta: use SCIM 2.0 with HTTP Authorization Header and use this token as the bearer credential.</p>'+
+    '<p class="fine-print">Microsoft Entra ID: use the Base URL as Tenant URL and paste the token into Secret Token. Okta: use SCIM 2.0 with HTTP Authorization Header and paste this token as the bearer credential.</p>'+
     '<div class="modal-actions"><button id="copyScimBase" class="button secondary" type="button">Copy Base URL</button><button id="copyScimSecret" class="button primary" type="button">Copy Secret Token</button></div>'
   );
   $("copyScimBase").onclick=()=>copyText(base,"SCIM Base URL copied");
@@ -719,7 +719,7 @@ function renderScim(){
   const root=$("scimSummary"),endpointRoot=$("scimEndpointList"),credRoot=$("scimCredentialList");
   if(!root||!endpointRoot||!credRoot)return;
 
-  const x=state.scim||{},cfg=x.config||{};
+  const x=state.scim||{},cfg=x.config||{},counts=x.counts||{};
   const configured=Boolean(x.configured);
   const enabled=configured&&cfg.status==="active";
   const ssoReady=Boolean(state.sso?.configured&&state.sso?.status==="active");
@@ -732,19 +732,17 @@ function renderScim(){
   if(!configured){
     const empty=document.createElement("div");empty.className="empty-management";
     empty.textContent=ssoReady
-      ?"Enterprise SSO is ready. Enable SCIM to generate the first one-time bearer token."
+      ?"Enterprise SSO is ready. Generate a SCIM credential to activate automated provisioning."
       :"SCIM remains locked until Enterprise SSO is active and at least one corporate domain is verified.";
     root.appendChild(empty);
   }else{
-    const counts=x.counts||{};
     const rows=[
       ["Provider",String(cfg.providerKind||"enterprise").replaceAll("_"," ")],
       ["Service",cfg.status||"unknown"],
       ["Default role",cfg.defaultRole||"verifier"],
       ["Users",String(counts.activeUsers??0)+" active / "+String(counts.users??0)+" total"],
-      ["Authentication","Rotatable bearer token"],
-      ["Last sync",cfg.lastSyncAt?formatDate(cfg.lastSyncAt,true):"Never"],
-      ["Rate limit",String(cfg.rateLimitPerMinute||300)+" requests/minute"]
+      ["Active credentials",String((x.credentials||[]).filter(c=>c.status==="active").length)],
+      ["Last sync",cfg.lastSyncAt?formatDate(cfg.lastSyncAt,true):"Never"]
     ];
     for(const [label,value] of rows){
       const row=document.createElement("div");row.className="sso-summary-row";
@@ -756,9 +754,9 @@ function renderScim(){
   endpointRoot.replaceChildren();
   const endpoints=[
     ["SCIM Base URL",base],
-    ["ServiceProviderConfig",(x.serviceProviderConfigUrl||base+"/ServiceProviderConfig")],
+    ["ServiceProviderConfig",base+"/ServiceProviderConfig"],
     ["Users",base+"/Users"],
-    ["Authentication","Bearer <Secret Token>"]
+    ["Authentication","Bearer secret token"]
   ];
   for(const [label,value] of endpoints){
     const row=document.createElement("div");row.className="sso-summary-row";
@@ -770,26 +768,23 @@ function renderScim(){
   const creds=Array.isArray(x.credentials)?x.credentials:[];
   if(!creds.length){
     const empty=document.createElement("div");empty.className="empty-management";
-    empty.textContent=configured
-      ?"No active SCIM credential remains. Generate a new credential to re-enable provisioning."
-      :"No SCIM credential has been issued.";
+    empty.textContent="No SCIM credentials have been created.";
     credRoot.appendChild(empty);
   }else{
-    for(const cred of creds){
+    for(const c of creds){
       const row=document.createElement("div");row.className="management-row";
       const details=document.createElement("div");
-      const title=document.createElement("strong");title.textContent=cred.label||"SCIM credential";
+      const title=document.createElement("strong");title.textContent=c.label||"SCIM credential";
       const meta=document.createElement("p");
-      meta.textContent="expires "+(cred.expiresAt?formatDate(cred.expiresAt,true):"—");
+      meta.textContent=String(c.clientId||"")+" · expires "+formatDate(c.expiresAt,true);
       const chips=document.createElement("div");chips.className="row-meta";
-      const status=document.createElement("span");status.className="small-chip";status.textContent=cred.status||"unknown";
-      const used=document.createElement("span");used.className="small-chip";used.textContent="last used "+(cred.lastUsedAt?formatDate(cred.lastUsedAt,true):"never");
-      chips.append(status,used);details.append(title,meta,chips);
-      row.append(details);
-      if(cred.status==="active"){
+      const status=document.createElement("span");status.className="small-chip";status.textContent=c.status||"unknown";
+      const used=document.createElement("span");used.className="small-chip";used.textContent="last used "+(c.lastUsedAt?formatDate(c.lastUsedAt,true):"never");
+      chips.append(status,used);details.append(title,meta,chips);row.appendChild(details);
+      if(c.status==="active"){
         const actions=document.createElement("div");actions.className="management-actions";
-        const revoke=document.createElement("button");revoke.type="button";revoke.className="button danger small";
-        revoke.textContent="Revoke";revoke.dataset.revokeScimCredential=cred.id;
+        const revoke=document.createElement("button");revoke.className="button danger small";revoke.type="button";
+        revoke.dataset.revokeScimCredential=c.id;revoke.textContent="Revoke";
         actions.appendChild(revoke);row.appendChild(actions);
       }
       credRoot.appendChild(row);
@@ -929,7 +924,7 @@ function setup(){
   };
 
   $("enableScimButton").onclick=async()=>{
-    const b=$("enableScimButton");busy(b,true,"Enabling…");
+    const b=$("enableScimButton");busy(b,true,"Generating…");
     try{
       const x=await scimAdminEdge({
         action:"create_credential",orgId:state.orgId,
@@ -943,7 +938,7 @@ function setup(){
   };
 
   $("rotateScimTokenButton").onclick=async()=>{
-    const b=$("rotateScimTokenButton");busy(b,true,"Generating…");
+    const b=$("rotateScimTokenButton");busy(b,true,"Generating rotation…");
     try{
       const x=await scimAdminEdge({
         action:"rotate_credential",orgId:state.orgId,
@@ -951,7 +946,7 @@ function setup(){
       });
       showScimCredentials(x);
       state.scim=await scimStatus();renderScim();
-      toast("Rotation token created. Update the identity provider, then revoke the old credential.","success");
+      toast("Rotation credential created. Update your identity provider, then revoke the old credential.","success");
     }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
     finally{busy(b,false)}
   };
@@ -969,12 +964,12 @@ function setup(){
   };
 
   $("disableScimButton").onclick=async()=>{
-    if(!confirm("Disable SCIM provisioning? All SCIM bearer credentials will be revoked immediately. Existing organization memberships remain unchanged."))return;
+    if(!confirm("Disable SCIM provisioning? All SCIM credentials will be revoked immediately. Existing organization memberships remain unchanged."))return;
     const b=$("disableScimButton");busy(b,true,"Disabling…");
     try{
       await scimAdminEdge({action:"disable",orgId:state.orgId});
       state.scim=await scimStatus();renderScim();
-      toast("SCIM provisioning disabled and all SCIM credentials revoked.","success");
+      toast("SCIM provisioning disabled and credentials revoked.","success");
     }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
     finally{busy(b,false)}
   };
@@ -995,7 +990,7 @@ function setup(){
 
   $("scimCredentialList").addEventListener("click",async e=>{
     const b=e.target.closest("[data-revoke-scim-credential]");if(!b)return;
-    if(!confirm("Revoke this SCIM credential? Requests using it will fail immediately."))return;
+    if(!confirm("Revoke this SCIM credential? Provisioning requests using it will fail immediately."))return;
     busy(b,true,"Revoking…");
     try{
       await scimAdminEdge({
@@ -1006,7 +1001,7 @@ function setup(){
       toast("SCIM credential revoked.","success");
     }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
     finally{busy(b,false)}
-  });
+  };
 
   $("decisionResult").addEventListener("click", (event) => {
     const button=event.target.closest("[data-request-evidence-grant]");
