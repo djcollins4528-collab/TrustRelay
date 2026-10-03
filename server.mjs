@@ -26,6 +26,7 @@ const RATE_LIMIT_WINDOW_MS=60_000;
 const ALLOWED_HOSTS=new Set(String(process.env.TRUSTRELAY_ALLOWED_HOSTS||"").split(",").map(x=>x.trim().toLowerCase().replace(/\.$/,"")).filter(Boolean));
 const RENDER_EXTERNAL_HOSTNAME=String(process.env.RENDER_EXTERNAL_HOSTNAME||"").trim().toLowerCase().replace(/\.$/,"");
 if(ENVIRONMENT!=="production"&&RENDER_EXTERNAL_HOSTNAME)ALLOWED_HOSTS.add(RENDER_EXTERNAL_HOSTNAME);
+if(ENVIRONMENT!=="production")ALLOWED_HOSTS.add("trustrelay-staging.onrender.com");
 const rateBuckets=new Map();
 let rateLimitSweepCounter=0;
 
