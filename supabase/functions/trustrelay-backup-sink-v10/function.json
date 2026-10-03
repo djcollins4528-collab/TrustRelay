@@ -1,0 +1,7 @@
+{
+  "slug": "trustrelay-backup-sink-v10",
+  "verify_jwt": false,
+  "staging_version": 5,
+  "production_deployed": false,
+  "auth_mode": "signed-backup-source"
+}
