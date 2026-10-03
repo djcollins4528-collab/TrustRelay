@@ -255,20 +255,7 @@ async function authenticate(req){
     throw{status:401,code:"SCIM_UNAUTHORIZED"};
 
   const hash=await sha256Hex(m[1]);
-  const ctx=await rpc("trustrelay_scim_resolve_bearer_v14",{p_token_hash:hash});
-  const limit=Math.max(30,Math.min(3000,Number(ctx.rateLimitPerMinute||300)||300));
-
-  const rl=await rpc("consume_rate_limit_v05",{
-    p_bucket_key:"scim:"+String(ctx.organizationId||""),
-    p_limit:limit,
-    p_window_seconds:60
-  });
-  const row=Array.isArray(rl)?rl[0]:rl;
-  if(row?.allowed===false)throw{
-    status:429,code:"SCIM_RATE_LIMITED",
-    details:{retryAfter:Number(row?.retry_after_seconds||row?.retryAfter||60)||60}
-  };
-  return ctx;
+  return await rpc("trustrelay_scim_resolve_bearer_v14",{p_token_hash:hash});
 }
 function mapDbError(e){
   const c=String(e?.code||"");
