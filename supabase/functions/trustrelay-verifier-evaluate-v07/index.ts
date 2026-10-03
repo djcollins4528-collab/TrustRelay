@@ -5,6 +5,8 @@ const APP_ORIGIN=(Deno.env.get("TRUSTRELAY_APP_ORIGIN")||CANONICAL_APP_ORIGIN).r
 function envJson(n){try{return JSON.parse(Deno.env.get(n)||"{}")}catch{return{}}}
 function pub(){const x=envJson("SUPABASE_PUBLISHABLE_KEYS");return x.default||""}
 function sec(){const x=envJson("SUPABASE_SECRET_KEYS");return x.default||Object.values(x).find(v=>typeof v==="string"&&v)||""}
+async function sha256Hex(text){const d=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(text)));return [...d].map(b=>b.toString(16).padStart(2,"0")).join("")}
+async function hmacHex(secret,text){const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);const sig=new Uint8Array(await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(text)));return [...sig].map(b=>b.toString(16).padStart(2,"0")).join("")}
 async function parse(r){const t=await r.text();let d=null;try{d=t?JSON.parse(t):null}catch{}return{ok:r.ok,status:r.status,data:d}}
 async function rpcUser(name,payload,authorization){
   const r=await fetch(URL+"/rest/v1/rpc/"+name,{
@@ -66,18 +68,24 @@ Deno.serve(async req=>{
 
     const partnerBody={...body};
     delete partnerBody.orgId;
+    const partnerRaw=JSON.stringify(partnerBody);
+    const timestamp=String(Math.floor(Date.now()/1000));
+    const bodyHash=await sha256Hex(partnerRaw);
+    const canonical=["v1",timestamp,orgId,u.id,"POST","/v1/decisions/evaluate",bodyHash].join("\n");
+    const internalSignature=await hmacHex(serviceKey,canonical);
 
     const partner=await fetch(URL+"/functions/v1/trustrelay-partner-v07/v1/decisions/evaluate",{
       method:"POST",
       headers:{
         apikey:pub(),
-        "x-trustrelay-internal-service":serviceKey,
         "x-trustrelay-internal-org":orgId,
         "x-trustrelay-internal-user":u.id,
+        "x-trustrelay-internal-ts":timestamp,
+        "x-trustrelay-internal-sig":internalSignature,
         "content-type":"application/json",
         accept:"application/json"
       },
-      body:JSON.stringify(partnerBody)
+      body:partnerRaw
     });
     const result=await parse(partner);
     if(!result.ok)return out(result.data||{error:{code:"PARTNER_API_ERROR"}},result.status,req);
