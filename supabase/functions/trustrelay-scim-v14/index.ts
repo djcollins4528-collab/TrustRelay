@@ -101,6 +101,7 @@ function currentModel(row){
     givenName:row?.givenName||"",
     familyName:row?.familyName||"",
     displayName:row?.displayName||"",
+    title:row?.title||"",
     active:row?.active!==false
   }
 }
@@ -109,6 +110,7 @@ function applyObject(target,value){
   if("externalId" in value)target.externalId=value.externalId==null?null:String(value.externalId);
   if("userName" in value)target.userName=String(value.userName||"");
   if("displayName" in value)target.displayName=String(value.displayName||"");
+  if("title" in value)target.title=String(value.title||"");
   if("active" in value)target.active=scimBoolean(value.active,target.active);
   if(value.name&&typeof value.name==="object"){
     if("givenName" in value.name)target.givenName=String(value.name.givenName||"");
@@ -131,6 +133,7 @@ function applyPatch(target,operation){
   if(p==="username"){target.userName=remove?"":String(value||"");return target}
   if(p==="externalid"){target.externalId=remove?null:String(value||"");return target}
   if(p==="displayname"){target.displayName=remove?"":String(value||"");return target}
+  if(p==="title"){target.title=remove?"":String(value||"");return target}
   if(p==="name.givenname"){target.givenName=remove?"":String(value||"");return target}
   if(p==="name.familyname"){target.familyName=remove?"":String(value||"");return target}
   if(
@@ -173,6 +176,7 @@ function userResource(row,base){
   if(row.externalId)u.externalId=row.externalId;
   if(row.givenName)u.name.givenName=row.givenName;
   if(row.familyName)u.name.familyName=row.familyName;
+  if(row.title)u.title=row.title;
   u.meta={
     resourceType:"User",created:row.createdAt,lastModified:row.updatedAt,
     version:versionFor(row),
@@ -189,7 +193,7 @@ function providerConfig(base){
     filter:{supported:true,maxResults:100},
     changePassword:{supported:false},
     sort:{supported:false},
-    etag:{supported:false},
+    etag:{supported:true},
     authenticationSchemes:[{
       type:"oauthbearertoken",
       name:"Bearer Token",
@@ -232,15 +236,22 @@ function userSchema(base){
     meta:{resourceType:"Schema",location:base+"/Schemas/"+encodeURIComponent(USER_SCHEMA)}
   }
 }
-async function authenticate(req,tenantKey){
-  if(!tenantKey||!/^scim_[A-Za-z0-9_-]{20,80}$/.test(tenantKey))
-    throw{status:401,code:"SCIM_UNAUTHORIZED"};
+async function authenticate(req){
   const auth=req.headers.get("authorization")||"",m=auth.match(/^Bearer\s+(\S+)$/i);
-  if(!m||!/^tr_scim_[0-9a-f]{64}$/i.test(m[1]))
+  if(!m||!/^tr_scim_secret_[A-Za-z0-9_-]{30,120}$/.test(m[1]))
     throw{status:401,code:"SCIM_UNAUTHORIZED"};
-  return await rpc("trustrelay_scim_auth_v14",{
-    p_tenant_key:tenantKey,p_token_hash:await sha256Hex(m[1])
+  const ctx=await rpc("trustrelay_scim_resolve_bearer_v14",{
+    p_token_hash:await sha256Hex(m[1])
   });
+  const ip=(req.headers.get("x-forwarded-for")||req.headers.get("cf-connecting-ip")||"unknown").split(",")[0].trim();
+  const limit=Math.max(30,Math.min(3000,Number(ctx.rateLimitPerMinute||300)||300));
+  const rl=await rpc("consume_rate_limit_v05",{
+    p_bucket_key:"scim:"+String(ctx.organizationId||"unknown")+":"+(await sha256Hex(ip)).slice(0,20),
+    p_limit:limit,p_window_seconds:60
+  }).catch(()=>null);
+  const row=Array.isArray(rl)?rl[0]:rl;
+  if(row?.allowed===false)throw{status:429,code:"SCIM_RATE_LIMITED"};
+  return ctx;
 }
 function mapDbError(e){
   const c=String(e?.code||"");
@@ -250,7 +261,7 @@ function mapDbError(e){
   if(c==="SCIM_PRIVILEGED_MEMBER_PROTECTED"||c==="SCIM_OWNER_DEPROVISION_REQUIRES_TRANSFER")
     return{status:409,type:"mutability"};
   if(c==="SCIM_EMAIL_DOMAIN_NOT_VERIFIED")return{status:400,type:"invalidValue"};
-  if(c==="SCIM_DISABLED"||c==="SCIM_UNAUTHORIZED")return{status:401,type:null};
+  if(c==="SCIM_DISABLED"||c==="SCIM_NOT_ACTIVE"||c==="SCIM_UNAUTHORIZED"||c==="INVALID_BEARER_TOKEN")return{status:401,type:null};
   if(c==="SCIM_RATE_LIMITED")return{status:429,type:null,retryAfter:Number(e?.details?.retryAfter)||60};
   return{status:Number(e?.status)||400,type:e?.scimType||null}
 }
@@ -260,10 +271,10 @@ Deno.serve(async req=>{
     if(!URL||!secretKey()||!CANONICAL_APP_ORIGIN)
       throw{status:503,code:"SCIM_SERVICE_NOT_CONFIGURED"};
 
-    const parts=pathParts(req.url),tenantKey=parts.shift()||"";
-    const ctx=await authenticate(req,tenantKey);
+    const parts=pathParts(req.url);
+    const ctx=await authenticate(req);
     const orgId=String(ctx.organizationId||"");
-    const base=CANONICAL_APP_ORIGIN+"/scim/v2/"+encodeURIComponent(tenantKey);
+    const base=CANONICAL_APP_ORIGIN+"/scim/v2";
     const resource=parts[0]||"",id=parts[1]||null,method=req.method.toUpperCase();
 
     if(method==="GET"&&resource==="ServiceProviderConfig")
@@ -312,14 +323,15 @@ Deno.serve(async req=>{
 
     if(method==="POST"&&!id){
       const input=await jsonBody(req);
-      const x=await rpc("trustrelay_scim_write_user_v14",{
-        p_org_id:orgId,p_mode:"create",p_scim_id:null,
+      const x=await rpc("trustrelay_scim_upsert_user_v14",{
+        p_org_id:orgId,p_scim_id:null,
         p_external_id:input.externalId??null,
         p_user_name:String(input.userName||""),
         p_email:primaryEmail(input),
+        p_display_name:String(input.displayName||input.name?.formatted||""),
         p_given_name:String(input.name?.givenName||""),
         p_family_name:String(input.name?.familyName||""),
-        p_display_name:String(input.displayName||input.name?.formatted||""),
+        p_title:String(input.title||""),
         p_active:scimBoolean(input.active,true)
       });
       const u=userResource(x.user,base);
@@ -328,14 +340,15 @@ Deno.serve(async req=>{
 
     if(method==="PUT"&&id){
       const input=await jsonBody(req);
-      const x=await rpc("trustrelay_scim_write_user_v14",{
-        p_org_id:orgId,p_mode:"replace",p_scim_id:id,
+      const x=await rpc("trustrelay_scim_upsert_user_v14",{
+        p_org_id:orgId,p_scim_id:id,
         p_external_id:input.externalId??null,
         p_user_name:String(input.userName||""),
         p_email:primaryEmail(input),
+        p_display_name:String(input.displayName||input.name?.formatted||""),
         p_given_name:String(input.name?.givenName||""),
         p_family_name:String(input.name?.familyName||""),
-        p_display_name:String(input.displayName||input.name?.formatted||""),
+        p_title:String(input.title||""),
         p_active:scimBoolean(input.active,true)
       });
       const u=userResource(x.user,base);
@@ -353,18 +366,18 @@ Deno.serve(async req=>{
       });
       let model=currentModel(existing.user);
       for(const op of input.Operations)model=applyPatch(model,op);
-      const x=await rpc("trustrelay_scim_write_user_v14",{
-        p_org_id:orgId,p_mode:"replace",p_scim_id:id,
+      const x=await rpc("trustrelay_scim_upsert_user_v14",{
+        p_org_id:orgId,p_scim_id:id,
         p_external_id:model.externalId,p_user_name:model.userName,p_email:model.email,
-        p_given_name:model.givenName,p_family_name:model.familyName,
-        p_display_name:model.displayName,p_active:model.active
+        p_display_name:model.displayName,p_given_name:model.givenName,
+        p_family_name:model.familyName,p_title:model.title,p_active:model.active
       });
       const u=userResource(x.user,base);
       return scimResponse(u,200,{location:u.meta.location,etag:u.meta.version});
     }
 
     if(method==="DELETE"&&id){
-      await rpc("trustrelay_scim_deactivate_user_v14",{
+      await rpc("trustrelay_scim_delete_user_v14",{
         p_org_id:orgId,p_scim_id:id
       });
       return new Response(null,{status:204,headers:{
