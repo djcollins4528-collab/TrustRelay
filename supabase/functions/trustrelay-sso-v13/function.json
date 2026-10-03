@@ -1,5 +1,5 @@
 {
   "slug": "trustrelay-sso-v13",
-  "verify_jwt": true,
-  "staging_version": 1
+  "verify_jwt": false,
+  "staging_version": 2
 }
