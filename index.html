@@ -1,1 +1,249 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="description" content="TrustRelay provides scoped, verifiable delegated authority infrastructure."><title>TrustRelay — Verifiable Scoped Authority</title><link rel="stylesheet" href="./legal/legal.css"></head><body><header><div class="bar"><a class="brand" href="./">TrustRelay</a><nav class="nav"><a href="./web/">Consumer app</a><a href="./verifier/">Verifier Portal</a><a href="./legal/">Legal & Trust</a><a href="./pilot/">Design Partner Pilot</a><a href="./support/">Support</a></nav></div></header><main><p class="eyebrow">TRUSTRELAY v1.0 · PRODUCTION CANDIDATE</p><h1>Scoped authority that can be verified.</h1><p>TrustRelay lets a principal delegate precise, time-bound authority to a representative, then lets institutions verify the signed authority against live identity assurance, evidence requirements, limits and revocation state.</p><p><a class="btn" href="./pilot/">Explore the 60-Day Pilot</a><a class="btn alt" href="./verifier/">Institutional Verifier Portal</a></p><div class="grid"><div class="card"><h3>Signed authority</h3><p>ES256 credentials bind a representative to a scoped grant with live revocation and assurance checks.</p></div><div class="card"><h3>High-assurance evidence</h3><p>Private evidence workflows, reviewer controls and institution-specific sharing boundaries.</p></div><div class="card"><h3>Institutional API</h3><p>ALLOW / DENY / ESCALATE decisions with rate limiting, HMAC-signed webhooks and audit evidence.</p></div><div class="card"><h3>Compliance operations</h3><p>Organization RBAC, hash-chained activity, bounded exports, notifications and production activation gates.</p></div></div><div class="draft"><strong>Launch status:</strong> hardened v1.0 production candidate. Design-partner pilots are available now. Paid commercial activation remains fail-closed until the final custom-domain, legal-entity, counsel-review, legal-publication, and retention-approval gates are complete.</div><p><a href="./legal/security.html">Security Statement</a> · <a href="./legal/privacy.html">Privacy Notice draft</a> · <a href="./legal/business-terms.html">Business Terms draft</a> · <a href="./support/">Support</a></p></main><footer><div class="footer-inner">TrustRelay · v1.0 production candidate</div></footer></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07111f">
+  <meta name="robots" content="noindex">
+  <meta name="description" content="TrustRelay is verifiable delegated-authority infrastructure for people, representatives, and the institutions that need to know exactly what someone is authorized to do.">
+  <title>TrustRelay — Verifiable Delegated Authority</title>
+  <link rel="stylesheet" href="./web/marketing.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap navbar">
+      <a class="brand" href="./" aria-label="TrustRelay home">
+        <span class="brand-mark" aria-hidden="true">✓</span>
+        <span class="brand-copy"><strong>TrustRelay</strong><small>Verifiable authority</small></span>
+      </a>
+      <nav class="nav-links" aria-label="Primary navigation">
+        <a href="#product">Product</a>
+        <a href="#institutions">Institutions</a>
+        <a href="#security">Security</a>
+        <a href="./legal/">Trust Center</a>
+        <a href="./support/">Support</a>
+      </nav>
+      <div class="nav-actions">
+        <a class="btn secondary" href="./verifier/">Verifier portal</a>
+        <a class="btn primary" href="./pilot/">Request a pilot</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div>
+          <p class="eyebrow">Delegated authority infrastructure</p>
+          <h1>Know exactly who is authorized to do what.</h1>
+          <p class="lede">TrustRelay turns delegated authority into a precise, verifiable digital record. Principals define the scope. Representatives carry proof. Institutions verify the authority, limits, evidence, identity assurance, and revocation state before acting.</p>
+          <div class="hero-actions">
+            <a class="btn primary" href="./pilot/">Explore the design-partner pilot</a>
+            <a class="btn secondary" href="./web/">Open TrustRelay</a>
+          </div>
+          <div class="micro-proof" aria-label="Product highlights">
+            <span>Scoped and time-bound</span>
+            <span>Cryptographically signed</span>
+            <span>Live revocation checks</span>
+          </div>
+        </div>
+
+        <div class="product-frame" aria-label="TrustRelay authority verification example">
+          <div class="product-window">
+            <div class="window-bar"><i></i><i></i><i></i><span class="window-title">Authority verification</span></div>
+            <div class="mock-body">
+              <div class="mock-head">
+                <div><small>Representative</small><strong>Delegated authority credential</strong></div>
+                <span class="decision">ALLOW</span>
+              </div>
+              <div class="scope-grid">
+                <div class="scope-item"><small>Action</small><strong>Manage approved account matter</strong></div>
+                <div class="scope-item"><small>Maximum amount</small><strong>Within grant limit</strong></div>
+                <div class="scope-item"><small>Identity assurance</small><strong>Requirements satisfied</strong></div>
+                <div class="scope-item"><small>Credential state</small><strong>Active · not revoked</strong></div>
+              </div>
+              <div class="verify-strip"><span>Signed credential verified</span><strong>Live policy checked</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="trust-strip">
+      <div class="wrap">
+        <span><strong>One grant.</strong> Exact scope.</span>
+        <span><strong>One verification.</strong> Current state.</span>
+        <span><strong>One audit trail.</strong> Defensible record.</span>
+      </div>
+    </div>
+
+    <section id="product">
+      <div class="wrap">
+        <div class="section-heading">
+          <p class="eyebrow">The product</p>
+          <h2>Delegation without the ambiguity.</h2>
+          <p>Traditional authority documents can be broad, static, difficult to validate, and disconnected from the transaction taking place. TrustRelay adds a digital control layer around delegated authority so every participant can understand the same boundaries.</p>
+        </div>
+        <div class="three-grid">
+          <article class="card">
+            <span class="num">01</span>
+            <h3>Grant precise authority</h3>
+            <p>A principal can define what a representative may do without handing over unlimited control.</p>
+            <ul>
+              <li>Allowed and prohibited actions</li>
+              <li>Resource and transaction limits</li>
+              <li>Effective and expiration dates</li>
+              <li>Identity and evidence requirements</li>
+            </ul>
+          </article>
+          <article class="card">
+            <span class="num">02</span>
+            <h3>Carry verifiable proof</h3>
+            <p>Accepted grants produce signed authority credentials that preserve the granted scope and assurance state.</p>
+            <ul>
+              <li>ES256 signed credentials</li>
+              <li>Principal and representative binding</li>
+              <li>Assurance-at-issuance snapshot</li>
+              <li>Immediate revocation support</li>
+            </ul>
+          </article>
+          <article class="card">
+            <span class="num">03</span>
+            <h3>Verify before acting</h3>
+            <p>Institutions can evaluate a requested action against the live grant instead of relying on a document alone.</p>
+            <ul>
+              <li>ALLOW / DENY / ESCALATE decisions</li>
+              <li>Current revocation and expiration state</li>
+              <li>Evidence sharing by explicit consent</li>
+              <li>Auditable decision records</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="dark-section" id="institutions">
+      <div class="wrap split">
+        <div>
+          <div class="section-heading">
+            <p class="eyebrow">For institutions</p>
+            <h2>A verification layer your workflow can call.</h2>
+            <p>TrustRelay gives operations, compliance, and product teams a consistent way to evaluate delegated authority through a portal or API—without exposing internal platform credentials to the browser.</p>
+          </div>
+          <div class="workflow">
+            <div class="workflow-item"><span>1</span><div><strong>Receive a request</strong><p>A representative presents a TrustRelay credential or an institution identifies the active grant.</p></div></div>
+            <div class="workflow-item"><span>2</span><div><strong>Evaluate the action</strong><p>TrustRelay checks scope, limits, assurance, evidence requirements, status, and policy rules.</p></div></div>
+            <div class="workflow-item"><span>3</span><div><strong>Get a bounded decision</strong><p>Receive ALLOW, DENY, or ESCALATE with an auditable request and decision record.</p></div></div>
+            <div class="workflow-item"><span>4</span><div><strong>Stay synchronized</strong><p>Signed webhooks, revocation events, notifications, and audit exports keep institutional systems current.</p></div></div>
+          </div>
+        </div>
+        <aside class="usecase-panel">
+          <p class="eyebrow">Example decision</p>
+          <blockquote>“Can this representative perform this specific action, for this resource, right now?”</blockquote>
+          <div class="example">
+            <div><small>Grant</small><strong>Active</strong></div>
+            <div><small>Scope</small><strong>Matches request</strong></div>
+            <div><small>Assurance</small><strong>Threshold met</strong></div>
+            <div><small>Evidence</small><strong>Required items verified</strong></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="section-heading">
+          <p class="eyebrow">Built for real workflows</p>
+          <h2>One authority model. Multiple operating environments.</h2>
+          <p>TrustRelay is designed for organizations where someone routinely needs to act on behalf of another person and the receiving institution needs a defensible answer before it proceeds.</p>
+        </div>
+        <div class="three-grid">
+          <article class="card"><span class="num">A</span><h3>Care and family coordination</h3><p>Bound the actions a trusted person may take while preserving the principal's visibility and control.</p></article>
+          <article class="card"><span class="num">B</span><h3>Financial and benefit workflows</h3><p>Evaluate authority against transaction limits, approved actions, evidence, and current revocation state.</p></article>
+          <article class="card"><span class="num">C</span><h3>Estate and administrative services</h3><p>Create a consistent institution-facing record for scoped representation and supporting evidence.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="dark-section" id="security">
+      <div class="wrap">
+        <div class="section-heading">
+          <p class="eyebrow">Security by design</p>
+          <h2>Authority infrastructure should fail closed.</h2>
+          <p>TrustRelay is engineered around least privilege, explicit authorization, short-lived internal capabilities, server-enforced role controls, private evidence boundaries, and auditable operations.</p>
+        </div>
+        <div class="security-grid">
+          <div class="security-list">
+            <div class="security-item"><strong>Passwordless account access</strong><p>User-facing authentication avoids reusable account passwords.</p></div>
+            <div class="security-item"><strong>Institutional MFA controls</strong><p>Sensitive institutional operations are bound to higher-assurance sessions.</p></div>
+            <div class="security-item"><strong>One-time internal capabilities</strong><p>Internal privileged calls use short-lived, request-bound, single-consumption capabilities.</p></div>
+            <div class="security-item"><strong>Private evidence storage</strong><p>Evidence stays private and is shared with institutions through explicit workflow boundaries.</p></div>
+            <div class="security-item"><strong>Server-enforced RBAC</strong><p>Owner, admin, compliance, verifier, developer, and auditor permissions are enforced server-side.</p></div>
+            <div class="security-item"><strong>Hash-linked audit evidence</strong><p>Administrative activity and compliance exports include integrity controls for later review.</p></div>
+            <div class="security-item"><strong>Signed webhook delivery</strong><p>Webhook lifecycle controls include signing, retry history, dead-letter handling, and secret rotation.</p></div>
+            <div class="security-item"><strong>Fail-closed production gates</strong><p>Production activation and approved-code deployment are intentionally blocked when required controls are missing.</p></div>
+          </div>
+          <aside class="security-callout">
+            <p class="eyebrow">Trust Center</p>
+            <h3>Security and legal diligence, in one place.</h3>
+            <p>Review the current security statement, privacy notice, subprocessor list, retention notice, business terms, and data-processing materials.</p>
+            <div class="status-row">
+              <div class="status-line"><span>Security architecture</span><span>Published</span></div>
+              <div class="status-line"><span>Legal package</span><span class="status-pending">Counsel review pending</span></div>
+              <div class="status-line"><span>Independent penetration test</span><span class="status-pending">Pending</span></div>
+            </div>
+            <a class="btn secondary" href="./legal/">Open Trust Center</a>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="section-heading">
+          <p class="eyebrow">Integration</p>
+          <h2>Designed for technical and operational teams.</h2>
+          <p>Institutions can start with a human verifier workflow and move into API-driven automation without changing the underlying authority model.</p>
+        </div>
+        <div class="tech-grid">
+          <div class="tech-card"><strong>Verifier portal</strong><p>Organization onboarding, scoped evaluations, team roles, evidence requests, audit history, and production readiness.</p></div>
+          <div class="tech-card"><strong>Partner API</strong><p>Scoped API keys, deterministic decision responses, rate limits, and an OpenAPI contract for integration teams.</p></div>
+          <div class="tech-card"><strong>Event delivery</strong><p>Signed webhooks for decisions, revocation, evidence, organization activity, and compliance events.</p></div>
+          <div class="tech-card"><strong>Compliance exports</strong><p>Private JSON or CSV exports with content hashes, bounded availability, and organization audit-chain state.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta">
+      <div class="wrap cta-box">
+        <div>
+          <p class="eyebrow">Design-partner program</p>
+          <h2>Bring us a real delegated-authority workflow.</h2>
+          <p>TrustRelay is opening structured design-partner pilots for organizations that need a clearer, verifiable way to handle representatives acting on behalf of other people. The pilot is built around your existing process, risk controls, and integration needs.</p>
+        </div>
+        <div class="cta-actions">
+          <a class="btn primary" href="./pilot/">Request a pilot</a>
+          <a class="btn secondary" href="./verifier/">Explore verifier portal</a>
+          <a class="btn secondary mobile-login" href="./web/">Open consumer app</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a class="brand" href="./"><span class="brand-mark" aria-hidden="true">✓</span><span class="brand-copy"><strong>TrustRelay</strong><small>Verifiable authority</small></span></a>
+          <p>Infrastructure for precise, verifiable delegated authority between principals, representatives, and institutions.</p>
+        </div>
+        <div class="footer-col"><strong>Product</strong><a href="./web/">Consumer app</a><a href="./verifier/">Verifier portal</a><a href="./pilot/">Design-partner pilot</a></div>
+        <div class="footer-col"><strong>Trust</strong><a href="./legal/security.html">Security</a><a href="./legal/privacy.html">Privacy</a><a href="./legal/subprocessors.html">Subprocessors</a><a href="./legal/dpa.html">DPA</a></div>
+        <div class="footer-col"><strong>Company</strong><a href="./legal/">Legal & Trust</a><a href="./support/">Support</a><a href="./legal/retention.html">Data retention</a></div>
+      </div>
+      <div class="launch-note">TrustRelay is currently a hardened production candidate and design-partner platform. Binding commercial activation remains fail-closed until the remaining custom-domain, legal-entity, qualified legal review, binding legal-publication, and final retention-policy approval gates are complete.</div>
+      <div class="footer-bottom"><span>© TrustRelay. All rights reserved.</span><span>Scoped authority · live verification · auditable decisions</span></div>
+    </div>
+  </footer>
+</body>
+</html>
