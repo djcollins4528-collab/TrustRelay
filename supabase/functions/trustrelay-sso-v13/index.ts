@@ -157,8 +157,8 @@ async function samlProviderUpsert(existingId,metadataUrl,domains,resourceId){
     email:{names:["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress","mail","email"]},
     name:{names:["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name","displayName","name"]}
   }};
-  if(existingId)return await authAdmin("sso/providers/"+encodeURIComponent(existingId),"PUT",{metadata_url:metadataUrl,domains,attribute_mapping,disabled:false});
-  return await authAdmin("sso/providers","POST",{type:"saml",metadata_url:metadataUrl,domains,resource_id:resourceId,attribute_mapping})
+  if(existingId)return await authAdmin("sso/providers/"+encodeURIComponent(existingId),"PUT",{metadata_url:metadataUrl,domains,attribute_mapping,disabled:true});
+  return await authAdmin("sso/providers","POST",{type:"saml",metadata_url:metadataUrl,domains,resource_id:resourceId,attribute_mapping,disabled:true})
 }
 async function samlProviderDisable(id){
   if(!id)return;
@@ -265,6 +265,13 @@ Deno.serve(async req=>{
       if(!current?.configured)throw{status:404,code:"SSO_NOT_CONFIGURED"};
       const result=await verifyDomains(orgId,actorAccountId);
       const config=await rpcUser("trustrelay_sso_config_v13",{p_org_id:orgId},authorization);
+      if(result.allVerified){
+        if(config.protocol==="oidc"&&config.providerIdentifier){
+          await authAdmin("custom-providers/"+encodeURIComponent(config.providerIdentifier),"PUT",{enabled:true})
+        }else if(config.protocol==="saml"&&config.ssoProviderId&&SAML_ENABLED){
+          await authAdmin("sso/providers/"+encodeURIComponent(config.ssoProviderId),"PUT",{disabled:false})
+        }
+      }
       return out({...result,config},200,req)
     }
 
@@ -280,13 +287,14 @@ Deno.serve(async req=>{
       const identifier=providerIdentifier(orgId,brand);
       const provider=await customProviderUpsert(identifier,{
         name:"TrustRelay - "+displayName(brand),client_id:clientId,client_secret:clientSecret,
-        issuer,scopes:["openid","profile","email"],pkce_enabled:true,email_optional:false,enabled:true
+        issuer,scopes:["openid","profile","email"],pkce_enabled:true,email_optional:false,enabled:false
       });
       let saved;
       try{
         saved=await saveProvider({orgId,authorization,actorAccountId,protocol:"oidc",brand,identifier,samlProviderId:null,issuer,metadataUrl:null,clientId,domains,jitEnabled:input.jitEnabled,jitDefaultRole:input.jitDefaultRole})
       }catch(e){await customProviderDisable(identifier).catch(()=>{});throw e}
       if(current?.configured&&current?.protocol==="oidc"&&current?.providerIdentifier&&current.providerIdentifier!==identifier)await customProviderDisable(current.providerIdentifier).catch(()=>{});
+      if((saved?.challenges||[]).length===0)await authAdmin("custom-providers/"+encodeURIComponent(identifier),"PUT",{enabled:true});
       return out({configured:true,protocol:"oidc",providerBrand:brand,providerIdentifier:identifier,callbackUrl:URL+"/auth/v1/callback",issuer,domains,domainChallenges:saved?.challenges||[],providerCreated:Boolean(provider)},201,req)
     }
 
@@ -301,6 +309,7 @@ Deno.serve(async req=>{
       const providerId=String(provider?.id||existingId||"");
       if(!providerId)throw{status:502,code:"SAML_PROVIDER_ID_MISSING"};
       const saved=await saveProvider({orgId,authorization,actorAccountId,protocol:"saml",brand,identifier:null,samlProviderId:providerId,issuer:null,metadataUrl,clientId:null,domains,jitEnabled:input.jitEnabled,jitDefaultRole:input.jitDefaultRole});
+      if((saved?.challenges||[]).length===0)await authAdmin("sso/providers/"+encodeURIComponent(providerId),"PUT",{disabled:false});
       return out({configured:true,protocol:"saml",providerBrand:brand,providerIdentifier:providerId,metadataUrl:URL+"/auth/v1/sso/saml/metadata",acsUrl:URL+"/auth/v1/sso/saml/acs",domains,domainChallenges:saved?.challenges||[]},201,req)
     }
 
