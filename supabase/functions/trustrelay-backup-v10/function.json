@@ -1,0 +1,7 @@
+{
+  "slug": "trustrelay-backup-v10",
+  "verify_jwt": false,
+  "production_version": 7,
+  "staging_version": 7,
+  "auth_mode": "backup-trigger-secret"
+}
