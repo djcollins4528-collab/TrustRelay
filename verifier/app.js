@@ -698,7 +698,7 @@ function scimBaseUrl(){
 }
 
 function showScimCredentials(x){
-  const base=scimBaseUrl();
+  const base=x?.scimBaseUrl||scimBaseUrl();
   const credential=x?.credential||{};
   const raw=credential.bearerToken||credential.clientSecret||x?.token||"";
   const expires=credential.expiresAt||x?.tokenExpiresAt||null;
@@ -784,7 +784,7 @@ function renderScim(){
       const details=document.createElement("div");
       const title=document.createElement("strong");title.textContent=credential.label||"SCIM credential";
       const meta=document.createElement("p");
-      meta.textContent=(credential.clientId||"credential")+" · expires "+(credential.expiresAt?formatDate(credential.expiresAt,true):"—");
+      meta.textContent=(credential.secretLastFour?"•••• "+credential.secretLastFour+" · ":"")+(credential.clientId||"credential")+" · expires "+(credential.expiresAt?formatDate(credential.expiresAt,true):"—");
       const chips=document.createElement("div");chips.className="row-meta";
       const statusChip=document.createElement("span");statusChip.className="small-chip";statusChip.textContent=credential.status||"unknown";
       const used=document.createElement("span");used.className="small-chip";used.textContent="last used "+(credential.lastUsedAt?formatDate(credential.lastUsedAt,true):"never");
