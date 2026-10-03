@@ -178,6 +178,12 @@ Deno.serve(async req=>{
   if(!providerConfigured())throw{status:503,code:"BILLING_NOT_CONFIGURED"};
 
   if(action==="checkout"){
+    if(URL.includes("msfrbsnihylfynrtdgxe")){
+      const readiness=await rpcUser("trustrelay_platform_readiness_v10",{p_org_id:orgId},authorization);
+      if(readiness?.ready!==true){
+        throw{status:503,code:"COMMERCIAL_LAUNCH_NOT_READY",details:{blockers:readiness?.blockers||[]}};
+      }
+    }
     const planCode=String(input.planCode||"").trim();
     const price=priceFor(planCode);
     if(!price)throw{status:400,code:"BILLING_PLAN_NOT_CHECKOUT_ENABLED"};
