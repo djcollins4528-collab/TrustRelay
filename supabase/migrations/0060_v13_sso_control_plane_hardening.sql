@@ -2,12 +2,14 @@
 -- Keep public wrappers security-invoker and move privileged logic into the private schema.
 -- Anonymous SSO discovery is served by the independently authenticated Edge Function.
 
+drop policy if exists organization_sso_configs_deny_all on public.organization_sso_configs;
 create policy organization_sso_configs_deny_all
 on public.organization_sso_configs
 for all to anon, authenticated
 using (false)
 with check (false);
 
+drop policy if exists organization_sso_domains_deny_all on public.organization_sso_domains;
 create policy organization_sso_domains_deny_all
 on public.organization_sso_domains
 for all to anon, authenticated
