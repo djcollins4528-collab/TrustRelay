@@ -232,14 +232,21 @@ async function evidenceFile(body){return await edgePost("trustrelay-evidence-v08
 async function complianceEdge(body){return await edgePost("trustrelay-compliance-export-v09",body,"COMPLIANCE_REQUEST_FAILED")}
 async function billingEdge(body){return await edgePost("trustrelay-billing-v10",body,"BILLING_REQUEST_FAILED")}
 async function ssoEdge(body){return await edgePost("trustrelay-sso-v13",body,"SSO_REQUEST_FAILED")}
+async function publicSsoEdge(body){
+  const r=await fetch(SUPABASE_URL+"/functions/v1/trustrelay-sso-v13",{
+    method:"POST",
+    headers:{apikey:SUPABASE_PUBLISHABLE_KEY,"content-type":"application/json",accept:"application/json"},
+    body:JSON.stringify(body)
+  });
+  const text=await r.text();let data=null;try{data=text?JSON.parse(text):null}catch{}
+  if(!r.ok){const e=new Error(data?.error?.code||"SSO_DISCOVERY_FAILED");e.code=data?.error?.code||"SSO_DISCOVERY_FAILED";e.status=r.status;e.details=data?.error?.details;throw e}
+  return data
+}
 
 async function discoverEnterpriseSso(email){
   const normalized=String(email||"").trim().toLowerCase();
   if(!normalized||!normalized.includes("@"))throw new Error("Enter a valid work email.");
-  const {data,error}=await supabase.rpc("trustrelay_sso_discover_v13",{p_email:normalized});
-  if(error)throw error;
-  if(data?.ok===false){const e=new Error(data.code||"SSO_DISCOVERY_FAILED");e.code=data.code;throw e}
-  return data;
+  return await publicSsoEdge({action:"discover",email:normalized});
 }
 async function startEnterpriseSso(email,known=null){
   const info=known||await discoverEnterpriseSso(email);
@@ -310,7 +317,7 @@ async function loadDashboard(){
     rpc("trustrelay_org_onboarding_v10",{p_org_id:state.orgId}).catch(()=>null),
     billingEdge({action:"status",orgId:state.orgId}).catch(e=>({error:{code:e.code||e.message},providerConfigured:false})),
     rpc("trustrelay_platform_readiness_v10",{p_org_id:state.orgId}).catch(()=>null),
-    rpc("trustrelay_sso_status_v13",{p_org_id:state.orgId}).catch(e=>({ok:false,error:{code:e.code||e.message}}))
+    rpc("trustrelay_sso_config_v13",{p_org_id:state.orgId}).catch(e=>({ok:false,error:{code:e.code||e.message}}))
   ]);
   state.dashboard=results[0];
   state.notifications=results[1];
@@ -612,39 +619,41 @@ function renderSso(){
   const root=$("ssoConnectionSummary");
   if(!root)return;
   $("ssoCallbackUrl").textContent=SUPABASE_URL+"/auth/v1/callback";
-  const x=state.sso;
-  const configured=Boolean(x?.configured&&x?.connection);
-  const c=x?.connection||{};
+  const c=state.sso||{};
+  const configured=Boolean(c?.configured);
   const chip=$("ssoStatusChip");
-  chip.textContent=configured?String(c.status||"configured").toUpperCase():"NOT CONFIGURED";
+  chip.textContent=configured?(c.enforcementMode==="required"?"SSO REQUIRED":"ACTIVE"):"NOT CONFIGURED";
   if(!configured){
     root.innerHTML='<div class="empty-management">No enterprise identity provider is configured for this organization.</div>';
   }else{
-    const brand=c.providerBrand==="microsoft_entra"?"Microsoft Entra ID":"Okta";
+    const brand=c.providerKind==="entra"?"Microsoft Entra ID":"Okta";
     root.innerHTML=
       '<div class="sso-summary-row"><span>Provider</span><span>'+esc(brand)+'</span></div>'+
       '<div class="sso-summary-row"><span>Protocol</span><span>'+esc(String(c.protocol||"").toUpperCase())+'</span></div>'+
       '<div class="sso-summary-row"><span>Domains</span><span>'+esc((c.domains||[]).join(", "))+'</span></div>'+
       '<div class="sso-summary-row"><span>Enforcement</span><span>'+esc(c.enforcementMode||"optional")+'</span></div>'+
-      '<div class="sso-summary-row"><span>JIT membership</span><span>'+esc(c.jitEnabled?"enabled · "+c.jitDefaultRole:"disabled")+'</span></div>'+
-      '<div class="sso-summary-row"><span>Last verified</span><span>'+esc(c.lastVerifiedAt?formatDate(c.lastVerifiedAt,true):"Not yet tested")+'</span></div>'+
-      '<div class="sso-summary-row"><span>Break-glass owner</span><span>'+esc(c.breakGlassConfigured?"configured":"not assigned")+'</span></div>';
+      '<div class="sso-summary-row"><span>JIT membership</span><span>'+esc(c.jitEnabled?"enabled · "+(c.defaultRole||"verifier"):"disabled")+'</span></div>'+
+      '<div class="sso-summary-row"><span>Last verified</span><span>'+esc(c.lastTestedAt?formatDate(c.lastTestedAt,true):"Not yet tested")+'</span></div>'+
+      '<div class="sso-summary-row"><span>Current session</span><span>'+esc(c.session?.providerMatched?"enterprise IdP verified":c.session?.breakGlass?"break-glass owner":"non-SSO")+'</span></div>'+
+      '<div class="sso-summary-row"><span>Break-glass owner</span><span>'+esc(c.breakGlassEnabled?"enabled":"disabled")+'</span></div>';
   }
   $("testSsoButton").classList.toggle("hidden",!configured);
   $("disableSsoButton").classList.toggle("hidden",!configured);
-  $("requireSsoButton").classList.toggle("hidden",!configured||c.status!=="verified"||c.enforcementMode==="required");
+  $("requireSsoButton").classList.toggle("hidden",!configured||c.enforcementMode==="required"||c.session?.providerMatched!==true);
   $("makeSsoOptionalButton").classList.toggle("hidden",!configured||c.enforcementMode!=="required");
   if(configured){
-    const brandRadio=document.querySelector('input[name="ssoProviderBrand"][value="'+CSS.escape(c.providerBrand||"microsoft_entra")+'"]');
+    const uiBrand=c.providerKind==="entra"?"microsoft_entra":"okta";
+    const brandRadio=document.querySelector('input[name="ssoProviderBrand"][value="'+CSS.escape(uiBrand)+'"]');
     if(brandRadio)brandRadio.checked=true;
     $("ssoDomains").value=(c.domains||[]).join("\n");
     $("ssoJitEnabled").checked=Boolean(c.jitEnabled);
-    $("ssoJitRole").value=c.jitDefaultRole||"verifier";
-    if(c.providerBrand==="microsoft_entra"){
+    $("ssoJitRole").value=c.defaultRole||"verifier";
+    $("ssoJitRole").disabled=!$("ssoJitEnabled").checked;
+    if(uiBrand==="microsoft_entra"){
       $("entraFields").classList.remove("hidden");$("oktaFields").classList.add("hidden");
     }else{
       $("entraFields").classList.add("hidden");$("oktaFields").classList.remove("hidden");
-      if(c.issuerUrl)$("ssoOktaIssuer").value=c.issuerUrl;
+      if(c.issuer)$("ssoOktaIssuer").value=c.issuer;
     }
   }
 }
@@ -712,17 +721,17 @@ function setup(){
       await ssoEdge(payload);
       $("ssoClientSecret").value="";
       toast("Enterprise OIDC configured. Test it before requiring SSO.","success");
-      state.sso=await rpc("trustrelay_sso_status_v13",{p_org_id:state.orgId});renderSso();
+      state.sso=await rpc("trustrelay_sso_config_v13",{p_org_id:state.orgId});renderSso();
     }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
     finally{busy(b,false)}
   });
   $("testSsoButton").onclick=async()=>{
-    const c=state.sso?.connection;if(!c)return;
+    const c=state.sso;if(!c?.configured)return;
     const email=state.user?.email||sessionStorage.getItem("trustrelay_verifier_email")||"";
     if(!email){toast("Your account email is unavailable.","error");return}
     const b=$("testSsoButton");busy(b,true,"Redirecting…");
     try{
-      const info={ssoAvailable:true,protocol:c.protocol,providerIdentifier:c.providerIdentifier};
+      const info={ssoAvailable:true,protocol:c.protocol,providerIdentifier:c.protocol==="saml"?c.ssoProviderId:c.providerIdentifier};
       await supabase.auth.signOut();
       await startEnterpriseSso(email,info);
     }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error");busy(b,false)}
@@ -735,13 +744,13 @@ function setup(){
       state.sso=await rpc("trustrelay_sso_status_v13",{p_org_id:state.orgId});renderSso();
     }catch(err){
       const code=String(err.code||err.message);
-      const friendly=code==="SSO_CURRENT_SESSION_REQUIRED"?"Test and sign in through the configured enterprise provider before requiring SSO.":code;
+      const friendly=code==="SSO_TEST_REQUIRED"?"Test and sign in through the configured enterprise provider before requiring SSO.":code;
       toast(friendly.replaceAll("_"," "),"error");
     }finally{busy(b,false)}
   };
   $("makeSsoOptionalButton").onclick=async()=>{
     const b=$("makeSsoOptionalButton");busy(b,true,"Updating…");
-    try{await rpc("trustrelay_set_sso_enforcement_v13",{p_org_id:state.orgId,p_required:false});toast("Enterprise SSO is optional again.","success");state.sso=await rpc("trustrelay_sso_status_v13",{p_org_id:state.orgId});renderSso()}
+    try{const c=state.sso||{};await rpc("trustrelay_set_sso_policy_v13",{p_org_id:state.orgId,p_enforcement_mode:"optional",p_jit_enabled:Boolean(c.jitEnabled),p_default_role:c.defaultRole||"verifier",p_break_glass_enabled:true});toast("Enterprise SSO is optional again.","success");state.sso=await rpc("trustrelay_sso_config_v13",{p_org_id:state.orgId});renderSso()}
     catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}finally{busy(b,false)}
   };
   $("disableSsoButton").onclick=async()=>{
@@ -981,7 +990,7 @@ async function startPortal(){
     if(accountResult?.ok===false)throw new Error(accountResult.code||"ACCOUNT_BINDING_FAILED");
     const mfaReady=await ensureVerifierMfa();
     if(!mfaReady)return;
-    await rpc("trustrelay_sso_session_bootstrap_v13").catch(err=>{
+    await rpc("trustrelay_sso_bootstrap_v13").catch(err=>{
       if(String(err.code||err.message)!=="REQUEST_REJECTED")console.warn("SSO bootstrap",err.code||err.message);
     });
     await acceptPendingOrgInvite();
