@@ -623,19 +623,34 @@ function renderSso(){
   const configured=Boolean(c?.configured);
   const chip=$("ssoStatusChip");
   chip.textContent=configured?(c.enforcementMode==="required"?"SSO REQUIRED":"ACTIVE"):"NOT CONFIGURED";
+  root.replaceChildren();
   if(!configured){
-    root.innerHTML='<div class="empty-management">No enterprise identity provider is configured for this organization.</div>';
+    const empty=document.createElement("div");
+    empty.className="empty-management";
+    empty.textContent="No enterprise identity provider is configured for this organization.";
+    root.appendChild(empty);
   }else{
     const brand=c.providerKind==="entra"?"Microsoft Entra ID":"Okta";
-    root.innerHTML=
-      '<div class="sso-summary-row"><span>Provider</span><span>'+esc(brand)+'</span></div>'+
-      '<div class="sso-summary-row"><span>Protocol</span><span>'+esc(String(c.protocol||"").toUpperCase())+'</span></div>'+
-      '<div class="sso-summary-row"><span>Domains</span><span>'+esc((c.domains||[]).join(", "))+'</span></div>'+
-      '<div class="sso-summary-row"><span>Enforcement</span><span>'+esc(c.enforcementMode||"optional")+'</span></div>'+
-      '<div class="sso-summary-row"><span>JIT membership</span><span>'+esc(c.jitEnabled?"enabled · "+(c.defaultRole||"verifier"):"disabled")+'</span></div>'+
-      '<div class="sso-summary-row"><span>Last verified</span><span>'+esc(c.lastTestedAt?formatDate(c.lastTestedAt,true):"Not yet tested")+'</span></div>'+
-      '<div class="sso-summary-row"><span>Current session</span><span>'+esc(c.session?.providerMatched?"enterprise IdP verified":c.session?.breakGlass?"break-glass owner":"non-SSO")+'</span></div>'+
-      '<div class="sso-summary-row"><span>Break-glass owner</span><span>'+esc(c.breakGlassEnabled?"enabled":"disabled")+'</span></div>';
+    const rows=[
+      ["Provider",brand],
+      ["Protocol",String(c.protocol||"").toUpperCase()],
+      ["Domains",(c.domains||[]).join(", ")],
+      ["Enforcement",c.enforcementMode||"optional"],
+      ["JIT membership",c.jitEnabled?"enabled · "+(c.defaultRole||"verifier"):"disabled"],
+      ["Last verified",c.lastTestedAt?formatDate(c.lastTestedAt,true):"Not yet tested"],
+      ["Current session",c.session?.providerMatched?"enterprise IdP verified":c.session?.breakGlass?"break-glass owner":"non-SSO"],
+      ["Break-glass owner",c.breakGlassEnabled?"enabled":"disabled"]
+    ];
+    for(const [label,value] of rows){
+      const row=document.createElement("div");
+      row.className="sso-summary-row";
+      const key=document.createElement("span");
+      const val=document.createElement("span");
+      key.textContent=label;
+      val.textContent=String(value??"");
+      row.append(key,val);
+      root.appendChild(row);
+    }
   }
   $("testSsoButton").classList.toggle("hidden",!configured);
   $("disableSsoButton").classList.toggle("hidden",!configured);
