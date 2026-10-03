@@ -101,8 +101,9 @@ async function sha256(value){
   const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(String(value||"")));
   return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");
 }
-function endpoints(){
-  const base=CANONICAL_APP_ORIGIN+"/scim/v2";
+function endpoints(tenantKey){
+  const root=CANONICAL_APP_ORIGIN+"/scim/v2";
+  const base=tenantKey?root+"/"+encodeURIComponent(String(tenantKey)):root;
   return{
     endpoint:base,
     scimBaseUrl:base,
@@ -123,13 +124,14 @@ function decorate(data){
     rateLimitPerMinute:Number(cfg.rateLimitPerMinute||data?.rateLimitPerMinute||300),
     lastSyncAt:cfg.lastSyncAt||data?.lastSyncAt||null,
     lastError:cfg.lastError||data?.lastError||null,
+    tenantKey:data?.tenantKey||cfg.tenantKey||null,
     credentials,
     users:{
       total:Number(counts.users??data?.users?.total??0),
       active:Number(counts.activeUsers??data?.users?.active??0),
       inactive:Math.max(0,Number(counts.users??0)-Number(counts.activeUsers??0))
     },
-    ...endpoints()
+    ...endpoints(data?.tenantKey||cfg.tenantKey||null)
   };
 }
 
@@ -161,7 +163,7 @@ Deno.serve(async req=>{
       if(!["compliance","verifier","developer","auditor"].includes(role))
         throw{status:400,code:"SCIM_DEFAULT_ROLE_INVALID"};
 
-      const days=Math.max(31,Math.min(1095,Number(input.expirationDays||180)||180));
+      const days=Math.max(31,Math.min(1095,Number(input.expirationDays||365)||365));
       const expiresAt=new Date(Date.now()+days*86400000).toISOString();
       const clientId="tr_scim_"+randomHex(16);
       const clientSecret=randomSecret(32);
@@ -174,6 +176,7 @@ Deno.serve(async req=>{
         p_actor_account_id:status.actorAccountId,
         p_client_id:clientId,
         p_secret_hash:await sha256(clientSecret),
+        p_secret_last_four:clientSecret.slice(-4),
         p_label:label,
         p_default_role:role,
         p_expires_at:expiresAt
@@ -188,6 +191,7 @@ Deno.serve(async req=>{
           bearerToken:clientSecret,
           expiresAt,
           label,
+          secretLastFour:clientSecret.slice(-4),
           shownOnce:true
         },
         token:clientSecret,
