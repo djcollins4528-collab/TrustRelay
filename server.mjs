@@ -129,11 +129,18 @@ function normalizedHost(req){
   if(raw.startsWith("["))return "";
   return raw.split(":")[0].replace(/\\.$/,"");
 }
+function trustedStagingRenderIdentity(){
+  return ENVIRONMENT==="staging"
+    && String(process.env.RENDER_SERVICE_ID||"")==="srv-davrss2d0e5s7395aq10"
+    && RENDER_EXTERNAL_HOSTNAME==="trustrelay-staging.onrender.com"
+    && String(process.env.RENDER_GIT_REPO_SLUG||"")==="djcollins4528-collab/TrustRelay"
+    && String(process.env.RENDER_GIT_BRANCH||"")==="main";
+}
 function hostAllowed(req){
   const host=normalizedHost(req);
   if(host)return !ALLOWED_HOSTS.size||ALLOWED_HOSTS.has(host);
-  if(String(process.env.RENDER||"")!=="true")return false;
-  if(ENVIRONMENT!=="production")return true;
+  if(trustedStagingRenderIdentity())return ALLOWED_HOSTS.has(RENDER_EXTERNAL_HOSTNAME);
+  if(ENVIRONMENT!=="production"||String(process.env.RENDER||"")!=="true")return false;
   if(!REQUIRE_EDGE_ORIGIN||!EDGE_ORIGIN_SECRET)return false;
   return secretEqual(String(req.headers["x-trustrelay-edge-origin"]||""),EDGE_ORIGIN_SECRET);
 }

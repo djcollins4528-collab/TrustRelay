@@ -204,6 +204,36 @@ jobs:
           grep -q 'TRUSTRELAY_REQUIRE_EDGE_ORIGIN' server.mjs
           grep -q 'x-trustrelay-edge-origin' server.mjs
 
+      - name: Verify hostless Render staging proxy fallback is identity-bound
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SUPABASE_URL="https://msfrbsnihylfynrtdgxe.supabase.co"
+          export SUPABASE_PUBLISHABLE_KEY="sb_publishable_ci_only"
+          export TRUSTRELAY_ENVIRONMENT="staging"
+          export TRUSTRELAY_ALLOWED_HOSTS="trustrelay-staging.onrender.com"
+          export RENDER_SERVICE_ID="srv-davrss2d0e5s7395aq10"
+          export RENDER_EXTERNAL_HOSTNAME="trustrelay-staging.onrender.com"
+          export RENDER_GIT_REPO_SLUG="djcollins4528-collab/TrustRelay"
+          export RENDER_GIT_BRANCH="main"
+          export PORT="18086"
+          node server.mjs >/tmp/trustrelay-staging-hostless.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+
+          for i in {1..20}; do
+            if curl --silent --fail http://127.0.0.1:18086/healthz >/tmp/staging-hostless-health.json; then break; fi
+            sleep 0.25
+          done
+          test "$(cat /tmp/staging-hostless-health.json)" = '{"status":"ok"}'
+
+          code="$(curl --http1.0 --silent --output /tmp/staging-hostless-body --write-out '%{http_code}' -H 'Host:' http://127.0.0.1:18086/version)"
+          test "$code" = "200"
+          grep -q '"environment":"staging"' /tmp/staging-hostless-body
+
+          grep -q 'trustedStagingRenderIdentity' server.mjs
+          grep -q 'srv-davrss2d0e5s7395aq10' server.mjs
+
       - name: Verify mandatory edge-origin lock fails closed
         shell: bash
         run: |
