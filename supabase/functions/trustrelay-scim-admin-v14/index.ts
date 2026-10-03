@@ -76,22 +76,26 @@ Deno.serve(async req=>{
 
     if(action==="status")return out(req,{...status,...endpoints()});
 
-    if(action==="create_credential"||action==="rotate_credential"){
+    if(action==="create_credential"||action==="rotate_credential"||action==="enable"||action==="rotate"){
       const role=String(input.defaultRole||status?.config?.defaultRole||"verifier");
       if(!["compliance","verifier","developer","auditor"].includes(role))throw{status:400,code:"SCIM_DEFAULT_ROLE_INVALID"};
       const days=Math.max(365,Math.min(1095,Number(input.expirationDays||365)||365));
       const expiresAt=new Date(Date.now()+days*86400000).toISOString();
       const clientId="tr_scim_"+randomHex(16);
       const clientSecret=randomSecret(32);
-      const label=String(input.label||(action==="rotate_credential"?"Rotation":"Primary")).trim().slice(0,80)||"Primary";
+      const rotating=action==="rotate_credential"||action==="rotate";
+      const label=String(input.label||(rotating?"Rotation":"Primary")).trim().slice(0,80)||"Primary";
       const result=await serviceRpc("trustrelay_scim_store_credential_v14",{
         p_org_id:orgId,p_actor_account_id:status.actorAccountId,
         p_client_id:clientId,p_secret_hash:await sha256(clientSecret),
         p_label:label,p_default_role:role,p_expires_at:expiresAt
       });
       return out(req,{
-        ok:true,credential:{id:result.credentialId,clientId,clientSecret,bearerToken:clientSecret,expiresAt,shownOnce:true},
-        providerKind:result.providerKind,defaultRole:role,...endpoints()
+        ok:true,configured:true,status:"active",
+        credential:{id:result.credentialId,clientId,clientSecret,bearerToken:clientSecret,expiresAt,shownOnce:true},
+        providerKind:result.providerKind,defaultRole:role,
+        endpoint:endpoints().scimBaseUrl,token:clientSecret,tokenLastFour:clientSecret.slice(-4),
+        ...endpoints()
       },201);
     }
 
@@ -103,11 +107,22 @@ Deno.serve(async req=>{
       return out(req,{...result,...endpoints()});
     }
 
+    if(action==="policy"){
+      const role=String(input.defaultRole||status?.config?.defaultRole||"verifier");
+      if(!["compliance","verifier","developer","auditor"].includes(role))throw{status:400,code:"SCIM_DEFAULT_ROLE_INVALID"};
+      const result=await serviceRpc("trustrelay_scim_set_policy_v14",{
+        p_org_id:orgId,p_actor_account_id:status.actorAccountId,p_default_role:role,
+        p_allow_static_bearer:input.allowStaticBearer!==false,
+        p_group_sync_enabled:input.groupSyncEnabled!==false
+      });
+      return out(req,{...result,configured:true,status:status?.config?.status||"active",...endpoints()});
+    }
+
     if(action==="disable"){
       const result=await serviceRpc("trustrelay_scim_disable_v14",{
         p_org_id:orgId,p_actor_account_id:status.actorAccountId
       });
-      return out(req,{...result,...endpoints()});
+      return out(req,{...result,configured:true,status:"disabled",...endpoints()});
     }
 
     throw{status:400,code:"ACTION_INVALID"};
