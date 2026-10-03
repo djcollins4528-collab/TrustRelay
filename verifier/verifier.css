@@ -33,3 +33,7 @@
 #productionBlockers .management-row:last-child:only-child{border-left-color:rgba(109,215,189,.55)}
 @media(max-width:980px){.billing-plan-grid{grid-template-columns:1fr}}
 @media(max-width:720px){.launch-status{align-items:flex-start;flex-direction:column}}
+
+
+.turnstile-slot { margin: 12px 0; }
+.clipboard-fallback { position: fixed; opacity: 0; pointer-events: none; }
