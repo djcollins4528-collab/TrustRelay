@@ -267,6 +267,42 @@ jobs:
           fi
           grep -q "TRUSTRELAY_EDGE_ORIGIN_SECRET_REQUIRED" /tmp/trustrelay-required-origin.log
 
+      - name: Verify production Render hostname remains reachable before edge cutover
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SUPABASE_URL="https://msfrbsnihylfynrtdgxe.supabase.co"
+          export SUPABASE_PUBLISHABLE_KEY="sb_publishable_ci_only"
+          export TRUSTRELAY_ENVIRONMENT="production"
+          export TRUSTRELAY_ALLOWED_HOSTS="trustrelay.example.invalid"
+          export TRUSTRELAY_TURNSTILE_SITE_KEY="ci-test-site-key"
+          export TRUSTRELAY_REQUIRE_EDGE_ORIGIN="false"
+          export NODE_ENV="production"
+          export RENDER="true"
+          export RENDER_GIT_REPO_SLUG="djcollins4528-collab/TrustRelay"
+          export RENDER_GIT_BRANCH="main"
+          export RENDER_GIT_COMMIT="$GITHUB_SHA"
+          export RENDER_SERVICE_ID="srv-davrsuk9v7es738v9q7g"
+          export RENDER_EXTERNAL_HOSTNAME="trustrelay-production.onrender.com"
+          export TRUSTRELAY_APPROVED_COMMIT_SHA="$GITHUB_SHA"
+          export PORT="18087"
+
+          node server.mjs >/tmp/trustrelay-public-render-host.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+
+          for i in {1..20}; do
+            if curl --silent --fail http://127.0.0.1:18087/healthz >/dev/null; then break; fi
+            sleep 0.25
+          done
+
+          code="$(curl --silent --output /tmp/public-render-body --write-out '%{http_code}' -H 'Host: trustrelay-production.onrender.com' http://127.0.0.1:18087/)"
+          test "$code" = "200"
+
+          rejected="$(curl --silent --output /tmp/public-render-rejected --write-out '%{http_code}' -H 'Host: attacker.invalid' http://127.0.0.1:18087/)"
+          test "$rejected" = "421"
+          grep -q 'HOST_NOT_ALLOWED' /tmp/public-render-rejected
+
       - name: Verify strict edge mode rejects public Render hostname
         shell: bash
         run: |
