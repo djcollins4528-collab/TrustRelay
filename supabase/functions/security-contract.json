@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "policy": "Any Edge Function with verify_jwt=false must be explicitly listed here and retain its independent authentication/public-safety markers.",
+  "functions": {
+    "trustrelay-credential-verify-v06": {
+      "mode": "public-credential-verifier",
+      "required": [
+        "trustrelay-authority+jwt",
+        "consume_rate_limit_v05",
+        "VERIFY_GLOBAL_RPM"
+      ]
+    },
+    "trustrelay-jwks-v06": {
+      "mode": "public-jwks",
+      "required": [
+        "loadJwks",
+        "JWKS_TTL_MS",
+        "etag"
+      ]
+    },
+    "trustrelay-evidence-v08": {
+      "mode": "validated-bearer-user",
+      "required": [
+        "/auth/v1/user",
+        "authorization",
+        "CANONICAL_APP_ORIGIN"
+      ]
+    },
+    "trustrelay-partner-v07": {
+      "mode": "partner-api-key",
+      "required": [
+        "x-trustrelay-key",
+        "p_api_key",
+        "p_required_scope"
+      ]
+    },
+    "trustrelay-verifier-evaluate-v07": {
+      "mode": "validated-bearer-user",
+      "required": [
+        "/auth/v1/user",
+        "authorization",
+        "CANONICAL_APP_ORIGIN"
+      ]
+    },
+    "trustrelay-compliance-export-v09": {
+      "mode": "validated-bearer-user",
+      "required": [
+        "/auth/v1/user",
+        "authorization",
+        "CANONICAL_APP_ORIGIN"
+      ]
+    },
+    "trustrelay-billing-v10": {
+      "mode": "bearer-user-or-stripe-webhook",
+      "required": [
+        "/auth/v1/user",
+        "stripe-signature",
+        "STRIPE_WEBHOOK_SECRET",
+        "trustrelay_sensitive_action_guard_admin_v11"
+      ]
+    },
+    "trustrelay-webhook-egress-v10": {
+      "mode": "internal-shared-secret",
+      "required": [
+        "x-trustrelay-egress-key",
+        "timingSafeEqual",
+        "expectedInternalSecret"
+      ]
+    },
+    "trustrelay-backup-v10": {
+      "mode": "backup-trigger-secret",
+      "required": [
+        "x-trustrelay-backup-token",
+        "validateTrigger",
+        "trustrelay_validate_backup_trigger_v10"
+      ]
+    },
+    "trustrelay-backup-sink-v10": {
+      "mode": "signed-backup-source",
+      "required": [
+        "x-trustrelay-signature",
+        "x-trustrelay-kid",
+        "x-trustrelay-ts"
+      ]
+    }
+  }
+}
