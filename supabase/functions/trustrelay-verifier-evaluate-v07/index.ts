@@ -6,7 +6,7 @@ function envJson(n){try{return JSON.parse(Deno.env.get(n)||"{}")}catch{return{}}
 function pub(){const x=envJson("SUPABASE_PUBLISHABLE_KEYS");return x.default||""}
 function sec(){const x=envJson("SUPABASE_SECRET_KEYS");return x.default||Object.values(x).find(v=>typeof v==="string"&&v)||""}
 async function sha256Hex(text){const d=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(text)));return [...d].map(b=>b.toString(16).padStart(2,"0")).join("")}
-async function hmacHex(secret,text){const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);const sig=new Uint8Array(await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(text)));return [...sig].map(b=>b.toString(16).padStart(2,"0")).join("")}
+function randomCapability(){const b=crypto.getRandomValues(new Uint8Array(32));let s="";for(const x of b)s+=String.fromCharCode(x);return btoa(s).replaceAll("+","-").replaceAll("/","_").replace(/=+$/,"")}
 async function parse(r){const t=await r.text();let d=null;try{d=t?JSON.parse(t):null}catch{}return{ok:r.ok,status:r.status,data:d}}
 function serviceHeaders(){
   const k=sec();
@@ -80,19 +80,22 @@ Deno.serve(async req=>{
     const partnerBody={...body};
     delete partnerBody.orgId;
     const partnerRaw=JSON.stringify(partnerBody);
-    const timestamp=String(Math.floor(Date.now()/1000));
     const bodyHash=await sha256Hex(partnerRaw);
-    const canonical=["v1",timestamp,orgId,u.id,"POST","/v1/decisions/evaluate",bodyHash].join("\n");
-    const internalSignature=await hmacHex(serviceKey,canonical);
+    const capability=randomCapability();
+    const capabilityHash=await sha256Hex(capability);
+    await rpcService("trustrelay_mint_portal_capability_v12",{
+      p_auth_user_id:u.id,
+      p_session_id:sessionId,
+      p_org_id:orgId,
+      p_body_sha256:bodyHash,
+      p_token_hash:capabilityHash
+    });
 
     const partner=await fetch(URL+"/functions/v1/trustrelay-partner-v07/v1/decisions/evaluate",{
       method:"POST",
       headers:{
         apikey:pub(),
-        "x-trustrelay-internal-org":orgId,
-        "x-trustrelay-internal-user":u.id,
-        "x-trustrelay-internal-ts":timestamp,
-        "x-trustrelay-internal-sig":internalSignature,
+        "x-trustrelay-internal-capability":capability,
         "content-type":"application/json",
         accept:"application/json"
       },
