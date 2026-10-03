@@ -37,3 +37,6 @@
 
 .turnstile-slot { margin: 12px 0; }
 .clipboard-fallback { position: fixed; opacity: 0; pointer-events: none; }
+
+
+.security-gate-copy{max-width:62ch}.mfa-enrollment{display:grid;grid-template-columns:minmax(180px,240px) 1fr;gap:20px;align-items:center;margin:18px 0}.mfa-qr{width:100%;max-width:240px;aspect-ratio:1;background:#fff;border-radius:14px;padding:10px}.mfa-secret{overflow-wrap:anywhere}@media(max-width:680px){.mfa-enrollment{grid-template-columns:1fr}.mfa-qr{margin:0 auto}}
