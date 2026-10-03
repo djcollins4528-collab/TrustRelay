@@ -12,17 +12,23 @@ function b64text(t){return b64(new TextEncoder().encode(t))}
 function parse(v,f){if(v==null||v==="")return f;if(typeof v!=="string")return v;try{return JSON.parse(v)}catch{return f}}
 function canon(v){if(Array.isArray(v))return v.map(canon);if(v&&typeof v==="object")return Object.keys(v).sort().reduce((a,k)=>(a[k]=canon(v[k]),a),{});return v}
 async function hash64(t){return b64(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t))))}
+async function generateSigningKey(){
+  const pair=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]);
+  const pub=await crypto.subtle.exportKey("jwk",pair.publicKey),priv=await crypto.subtle.exportKey("jwk",pair.privateKey);
+  const thumb=await hash64(JSON.stringify({crv:pub.crv,kty:pub.kty,x:pub.x,y:pub.y}));
+  return {pub,priv,thumb,kid:"trk_"+thumb.slice(0,20)};
+}
 async function activeKey(){
-  try{return await rpc("trustrelay_get_active_signing_key_v06",{})}
-  catch(e){
-    if(e?.code!=="SIGNING_KEY_UNAVAILABLE")throw e;
-    const pair=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]);
-    const pub=await crypto.subtle.exportKey("jwk",pair.publicKey),priv=await crypto.subtle.exportKey("jwk",pair.privateKey);
-    const thumb=await hash64(JSON.stringify({crv:pub.crv,kty:pub.kty,x:pub.x,y:pub.y}));
-    const kid="trk_"+thumb.slice(0,20);
-    await rpc("trustrelay_bootstrap_signing_key_v06",{p_kid:kid,p_public_jwk:JSON.stringify(pub),p_private_jwk:JSON.stringify(priv),p_public_thumbprint:thumb});
-    return await rpc("trustrelay_get_active_signing_key_v06",{});
-  }
+  let current=null;
+  try{current=await rpc("trustrelay_get_active_signing_key_v06",{})}
+  catch(e){if(e?.code!=="SIGNING_KEY_UNAVAILABLE")throw e}
+  if(current&&!current.rotationRequired)return current;
+  const next=await generateSigningKey();
+  await rpc("trustrelay_rotate_signing_key_v12",{
+    p_kid:next.kid,p_public_jwk:JSON.stringify(next.pub),p_private_jwk:JSON.stringify(next.priv),
+    p_public_thumbprint:next.thumb,p_force:Boolean(current?.rotationRequired)
+  });
+  return await rpc("trustrelay_get_active_signing_key_v06",{});
 }
 Deno.serve(async req=>{
  try{
