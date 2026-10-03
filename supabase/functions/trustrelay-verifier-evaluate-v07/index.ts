@@ -5,11 +5,17 @@ const APP_ORIGIN=(Deno.env.get("TRUSTRELAY_APP_ORIGIN")||CANONICAL_APP_ORIGIN).r
 function envJson(n){try{return JSON.parse(Deno.env.get(n)||"{}")}catch{return{}}}
 function pub(){const x=envJson("SUPABASE_PUBLISHABLE_KEYS");return x.default||""}
 function sec(){const x=envJson("SUPABASE_SECRET_KEYS");return x.default||Object.values(x).find(v=>typeof v==="string"&&v)||""}
-function sh(){const k=sec();const h={apikey:k,"content-type":"application/json",accept:"application/json"};if(k&&!k.startsWith("sb_secret_"))h.authorization="Bearer "+k;return h}
 async function parse(r){const t=await r.text();let d=null;try{d=t?JSON.parse(t):null}catch{}return{ok:r.ok,status:r.status,data:d}}
-async function rpc(name,payload){
-  const r=await fetch(URL+"/rest/v1/rpc/"+name,{method:"POST",headers:sh(),body:JSON.stringify(payload||{})});
-  const x=await parse(r);if(!x.ok)throw{status:503,code:"DATABASE_ERROR"};return x.data;
+async function rpcUser(name,payload,authorization){
+  const r=await fetch(URL+"/rest/v1/rpc/"+name,{
+    method:"POST",
+    headers:{apikey:pub(),authorization,"content-type":"application/json",accept:"application/json"},
+    body:JSON.stringify(payload||{})
+  });
+  const x=await parse(r);
+  if(!x.ok)throw{status:x.status||503,code:x.data?.code||"DATABASE_ERROR"};
+  if(x.data?.ok===false)throw{status:Number(x.data?.status)||403,code:x.data?.code||"REQUEST_DENIED"};
+  return x.data;
 }
 async function user(req){
   const auth=req.headers.get("authorization")||"";
@@ -42,13 +48,21 @@ Deno.serve(async req=>{
   try{
     if(req.method==="OPTIONS")return corsPreflight(req);
     if(req.method!=="POST")return out({error:{code:"METHOD_NOT_ALLOWED"}},405,req);
+    const authorization=req.headers.get("authorization")||"";
     const u=await user(req);
     const body=await jsonBody(req);
     const orgId=String(body.orgId||"").trim();
-    if(!orgId)return out({error:{code:"ORGANIZATION_REQUIRED"}},400,req);
+    if(!orgId||orgId.length>160)return out({error:{code:"ORGANIZATION_REQUIRED"}},400,req);
 
-    const key=await rpc("trustrelay_get_portal_key_v07",{p_auth_user_id:u.id,p_org_id:orgId});
-    if(!key?.ok)return out({error:{code:key?.code||"ORGANIZATION_ACCESS_DENIED"}},Number(key?.status)||403,req);
+    // This user-scoped RPC independently enforces active session, AAL2 MFA,
+    // organization membership and the decisions.evaluate permission.
+    const access=await rpcUser("trustrelay_my_org_permissions_v09",{p_org_id:orgId},authorization);
+    if(access?.permissions?.["decisions.evaluate"]!==true){
+      return out({error:{code:"ORGANIZATION_PERMISSION_DENIED"}},403,req);
+    }
+
+    const serviceKey=sec();
+    if(!serviceKey)return out({error:{code:"INTERNAL_SERVICE_AUTH_UNAVAILABLE"}},503,req);
 
     const partnerBody={...body};
     delete partnerBody.orgId;
@@ -57,7 +71,9 @@ Deno.serve(async req=>{
       method:"POST",
       headers:{
         apikey:pub(),
-        "x-trustrelay-key":key.apiKey,
+        "x-trustrelay-internal-service":serviceKey,
+        "x-trustrelay-internal-org":orgId,
+        "x-trustrelay-internal-user":u.id,
         "content-type":"application/json",
         accept:"application/json"
       },
@@ -66,12 +82,8 @@ Deno.serve(async req=>{
     const result=await parse(partner);
     if(!result.ok)return out(result.data||{error:{code:"PARTNER_API_ERROR"}},result.status,req);
 
-    await rpc("trustrelay_mark_portal_decision_v07",{
-      p_auth_user_id:u.id,p_org_id:orgId,p_request_id:String(partnerBody.requestId||"")
-    });
-
     if(result.data?.decision)result.data.decision.source="portal";
-    result.data.portal={organizationId:orgId,role:key.role};
+    result.data.portal={organizationId:orgId,role:access.role||null};
     return out(result.data,200,req);
   }catch(e){
     const status=Number(e?.status)||500;
