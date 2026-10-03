@@ -16,6 +16,8 @@
 - trustrelay-compliance-export-v09
 - trustrelay-billing-v10
 - trustrelay-sso-v13
+- trustrelay-scim-admin-v14
+- trustrelay-scim-v14
 - trustrelay-webhook-egress-v10
 
 Each directory contains the current staging `index.ts` plus `function.json` where applicable. `trustrelay-webhook-egress-v10` is intentionally `verify_jwt=false` because it is an internal transport endpoint authenticated with a high-entropy Vault-backed `X-TrustRelay-Egress-Key`; it does not trust caller-supplied destination validation and independently resolves/validates/pins the outbound target.
@@ -86,3 +88,16 @@ The v1.0 egress resolves A/AAAA at delivery time, rejects private/reserved addre
 - Reconfiguration resets enforcement to optional until the exact configured IdP successfully authenticates an owner/admin session. A non-SSO owner break-glass path is retained.
 
 - Enterprise SSO domains require DNS ownership verification at `_trustrelay.<domain>`; only challenge hashes are stored. Provider login remains disabled until verification succeeds.
+
+
+## SCIM provisioning
+
+- `trustrelay-scim-admin-v14` is the authenticated organization administration surface for credential creation, rotation, revocation and disablement.
+- `trustrelay-scim-v14` implements SCIM 2.0 Users, Groups, ServiceProviderConfig, ResourceTypes and Schemas.
+- Microsoft Entra can use OAuth 2.0 client credentials with one-hour access tokens. Customer credentials expire and support overlap during rotation.
+- Okta/private SCIM integrations may use the same rotatable high-entropy client secret as a Bearer token when static bearer compatibility is enabled.
+- Raw SCIM client secrets and access tokens are never stored; only SHA-256 hashes are retained.
+- Deprovisioning is organization-scoped and soft-disables membership. It never deletes the global TrustRelay person/account.
+- SCIM cannot deactivate or claim Owner/Admin memberships. Privileged access remains an explicit TrustRelay administration action.
+- New SCIM users must use a corporate domain already verified by Enterprise SSO.
+- SCIM group membership is synchronized but does not implicitly grant TrustRelay Owner/Admin roles.
