@@ -76,3 +76,11 @@ TrustRelay webhook egress:
 - Vault secret `trustrelay-webhook-egress-url-v10` — environment-specific Edge Function URL
 
 The v1.0 egress resolves A/AAAA at delivery time, rejects private/reserved addresses, opens the TCP socket directly to a validated IP, upgrades to TLS using the original hostname for certificate validation, and rejects HTTP redirects.
+
+
+## Enterprise SSO control plane
+
+- `trustrelay-sso-v13` provides rate-limited public domain discovery plus authenticated organization-level Entra ID / Okta administration.
+- OIDC client secrets are forwarded directly to Supabase Auth's server-only provider API and are never stored in TrustRelay tables.
+- SAML provisioning remains fail-closed unless `TRUSTRELAY_SAML_ENABLED=true`; current Supabase plan requirements must be satisfied first.
+- Reconfiguration resets enforcement to optional until the exact configured IdP successfully authenticates an owner/admin session. A non-SSO owner break-glass path is retained.
