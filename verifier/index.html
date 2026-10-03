@@ -218,7 +218,7 @@
             <button id="verifyAuditChainButton" class="button secondary" type="button">Verify audit chain</button>
           </div>
           <div id="auditChainStatus" class="message hidden"></div>
-          <form id="complianceExportForm" class="focus-card">
+          <form id="complianceExportForm" class="focus-card" method="post" action="/verifier/">
             <div class="form-grid">
               <div class="field"><label for="exportFormat">Format</label><select id="exportFormat"><option value="json">JSON</option><option value="csv">CSV</option></select></div>
               <div class="field"><label for="exportFrom">From <span class="optional-label">default 30 days</span></label><input id="exportFrom" type="datetime-local"></div>
