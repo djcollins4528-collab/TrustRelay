@@ -257,9 +257,9 @@ jobs:
           grep -q 'ensureVerifierMfa' verifier/app.js
           grep -q 'auth.mfa.enroll' verifier/app.js
           grep -q 'auth.mfa.challenge' verifier/app.js
-          grep -q 'MFA_ENROLLMENT_REQUIRED' supabase/migrations/0040_v12_institutional_totp_mfa.sql
-          grep -q "requiredAal','aal2" supabase/migrations/0040_v12_institutional_totp_mfa.sql
-          grep -q 'trustrelay_rotate_signing_key_v12' supabase/migrations/0041_v12_signing_key_rotation.sql
+          grep -R -q 'MFA_ENROLLMENT_REQUIRED' supabase/migrations/*institutional_totp_mfa.sql
+          grep -R -q "requiredAal','aal2" supabase/migrations/*institutional_totp_mfa.sql
+          grep -R -q 'trustrelay_rotate_signing_key_v12' supabase/migrations/*signing_key_rotation.sql
 
       - name: Verify runtime quarantine kill switch
         shell: bash
