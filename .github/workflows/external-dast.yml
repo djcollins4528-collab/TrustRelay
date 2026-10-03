@@ -26,7 +26,7 @@ jobs:
           ready=0
           last_code="000"
           last_body=""
-          for i in {1..60}; do
+          for i in {1..20}; do
             last_code="$(curl --silent --show-error --max-time 5 --output /tmp/staging-version --write-out '%{http_code}' https://trustrelay-staging.onrender.com/version || true)"
             last_body="$(head -c 1024 /tmp/staging-version 2>/dev/null || true)"
             if [ "$last_code" = "200" ] && printf '%s' "$last_body" | grep -Fq "\"commit\":\"$GITHUB_SHA\""; then
