@@ -62,6 +62,7 @@ if(ENVIRONMENT==="production"){
   if(supabaseUrlObject.hostname!==EXPECTED_PROD_SUPABASE_HOST)failures.push("SUPABASE_URL_PROJECT");
   if(REQUIRE_EDGE_ORIGIN&&!EDGE_ORIGIN_SECRET)failures.push("TRUSTRELAY_EDGE_ORIGIN_SECRET_REQUIRED");
   if(EDGE_ORIGIN_SECRET&&EDGE_ORIGIN_SECRET.length<32)failures.push("TRUSTRELAY_EDGE_ORIGIN_SECRET_WEAK");
+  if(REQUIRE_EDGE_ORIGIN&&[...ALLOWED_HOSTS].some(host=>host.endsWith(".onrender.com")))failures.push("TRUSTRELAY_EDGE_ORIGIN_PUBLIC_RENDER_HOST");
   if(failures.length){
     console.error("Production security configuration invalid:",failures.join(","));
     process.exit(1);
