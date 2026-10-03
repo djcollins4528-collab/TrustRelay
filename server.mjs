@@ -342,7 +342,7 @@ function consumeRuntimeRateLimit(req){
   return {allowed:bucket.count<=RATE_LIMIT_PER_MINUTE,remaining,resetSeconds};
 }
 function isRateLimitedPath(pathname){
-  return pathname==="/runtime-config.json"||pathname==="/version"||pathname.startsWith("/v1/")||pathname.startsWith("/internal/");
+  return pathname==="/runtime-config.json"||pathname==="/version"||pathname.startsWith("/v1/")||pathname.startsWith("/scim/v2")||pathname.startsWith("/internal/");
 }
 function applyRuntimeRateLimit(req,res,pathname){
   if(!isRateLimitedPath(pathname))return true;
