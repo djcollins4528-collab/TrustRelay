@@ -115,6 +115,7 @@ function headers(extra={}){
     "Permissions-Policy":"accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), publickey-credentials-create=(self), publickey-credentials-get=(self), screen-wake-lock=(), usb=(), xr-spatial-tracking=()",
     "Cross-Origin-Opener-Policy":"same-origin",
     "Cross-Origin-Resource-Policy":"same-origin",
+    "Cross-Origin-Embedder-Policy":"credentialless",
     "Origin-Agent-Cluster":"?1",
     "X-Permitted-Cross-Domain-Policies":"none",
     "X-DNS-Prefetch-Control":"off",
@@ -392,7 +393,7 @@ const server=http.createServer({
     res.writeHead(200,headers({
       "Content-Type":types[ext]||"application/octet-stream",
       "Content-Length":data.length,
-      "Cache-Control":noStore?"no-store":"public, max-age=300",
+      "Cache-Control":noStore?"no-cache, no-store, must-revalidate, max-age=0":"public, max-age=300, immutable",
       ...(noStore?{"Pragma":"no-cache","Expires":"0"}:{}),
       ...(authenticatedSurface?{"X-Robots-Tag":"noindex, nofollow, noarchive"}:{})
     }));
