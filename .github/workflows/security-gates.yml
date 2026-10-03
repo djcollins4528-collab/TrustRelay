@@ -67,6 +67,13 @@ jobs:
           export TRUSTRELAY_ALLOWED_HOSTS="127.0.0.1"
           export TRUSTRELAY_TURNSTILE_SITE_KEY="ci-test-site-key"
           export NODE_ENV="production"
+          export RENDER="true"
+          export RENDER_GIT_REPO_SLUG="djcollins4528-collab/TrustRelay"
+          export RENDER_GIT_BRANCH="main"
+          export RENDER_GIT_COMMIT="$GITHUB_SHA"
+          export RENDER_SERVICE_ID="srv-davrsuk9v7es738v9q7g"
+          export RENDER_EXTERNAL_HOSTNAME="trustrelay-production.onrender.com"
+          export TRUSTRELAY_APPROVED_COMMIT_SHA="$GITHUB_SHA"
           export PORT="18080"
           node server.mjs >/tmp/trustrelay-ci.log 2>&1 &
           pid=$!
@@ -118,6 +125,31 @@ jobs:
           fi
           printf '%s\n' "$headers" | grep -qi "^x-content-type-options: nosniff"
           printf '%s\n' "$headers" | grep -qi "^x-frame-options: DENY"
+
+      - name: Verify unapproved production commit is rejected
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SUPABASE_URL="https://msfrbsnihylfynrtdgxe.supabase.co"
+          export SUPABASE_PUBLISHABLE_KEY="sb_publishable_ci_only"
+          export TRUSTRELAY_ENVIRONMENT="production"
+          export TRUSTRELAY_ALLOWED_HOSTS="127.0.0.1"
+          export TRUSTRELAY_TURNSTILE_SITE_KEY="ci-test-site-key"
+          export NODE_ENV="production"
+          export RENDER="true"
+          export RENDER_GIT_REPO_SLUG="djcollins4528-collab/TrustRelay"
+          export RENDER_GIT_BRANCH="main"
+          export RENDER_GIT_COMMIT="$GITHUB_SHA"
+          export RENDER_SERVICE_ID="srv-davrsuk9v7es738v9q7g"
+          export RENDER_EXTERNAL_HOSTNAME="trustrelay-production.onrender.com"
+          export TRUSTRELAY_APPROVED_COMMIT_SHA="0000000000000000000000000000000000000000"
+          export PORT="18081"
+
+          if node server.mjs >/tmp/trustrelay-unapproved.log 2>&1; then
+            echo "Production runtime unexpectedly accepted an unapproved commit."
+            exit 1
+          fi
+          grep -q "UNAPPROVED_COMMIT" /tmp/trustrelay-unapproved.log
 
       - name: Reject inline browser code and style
         shell: python
