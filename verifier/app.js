@@ -739,9 +739,10 @@ function setup(){
   $("requireSsoButton").onclick=async()=>{
     const b=$("requireSsoButton");busy(b,true,"Enabling…");
     try{
-      await rpc("trustrelay_set_sso_enforcement_v13",{p_org_id:state.orgId,p_required:true});
+      const c=state.sso||{};
+      await rpc("trustrelay_set_sso_policy_v13",{p_org_id:state.orgId,p_enforcement_mode:"required",p_jit_enabled:Boolean(c.jitEnabled),p_default_role:c.defaultRole||"verifier",p_break_glass_enabled:true});
       toast("Enterprise SSO is now required for this organization.","success");
-      state.sso=await rpc("trustrelay_sso_status_v13",{p_org_id:state.orgId});renderSso();
+      state.sso=await rpc("trustrelay_sso_config_v13",{p_org_id:state.orgId});renderSso();
     }catch(err){
       const code=String(err.code||err.message);
       const friendly=code==="SSO_TEST_REQUIRED"?"Test and sign in through the configured enterprise provider before requiring SSO.":code;
