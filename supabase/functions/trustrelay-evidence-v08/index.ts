@@ -14,6 +14,101 @@ function out(d,s=200,req=null){return Response.json(d,{status:s,headers:{"cache-
 async function sha256Hex(buffer){const d=new Uint8Array(await crypto.subtle.digest("SHA-256",buffer));return[...d].map(b=>b.toString(16).padStart(2,"0")).join("")}
 const admin=createClient(URL,sec(),{auth:{persistSession:false,autoRefreshToken:false}});
 
+const SCANNER_VERSION="trustrelay-static-evidence-v1";
+function findBytes(haystack,needle){
+  outer:for(let i=0;i<=haystack.length-needle.length;i++){
+    for(let j=0;j<needle.length;j++)if(haystack[i+j]!==needle[j])continue outer;
+    return i;
+  }
+  return -1;
+}
+function asciiBytes(s){return new TextEncoder().encode(s)}
+function trimEndIndex(bytes){
+  let i=bytes.length-1;
+  while(i>=0&&(bytes[i]===0x20||bytes[i]===0x09||bytes[i]===0x0a||bytes[i]===0x0d||bytes[i]===0x0c))i--;
+  return i;
+}
+function starts(bytes,sig,offset=0){
+  if(bytes.length<offset+sig.length)return false;
+  for(let i=0;i<sig.length;i++)if(bytes[offset+i]!==sig[i])return false;
+  return true;
+}
+function detectMime(bytes){
+  if(starts(bytes,[0x25,0x50,0x44,0x46,0x2d]))return "application/pdf";
+  if(starts(bytes,[0xff,0xd8,0xff]))return "image/jpeg";
+  if(starts(bytes,[0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]))return "image/png";
+  if(starts(bytes,[0x52,0x49,0x46,0x46])&&starts(bytes,[0x57,0x45,0x42,0x50],8))return "image/webp";
+  return "application/octet-stream";
+}
+function scanEvidence(buffer,declaredMime){
+  const bytes=new Uint8Array(buffer);
+  const findings=[];
+  const detectedMime=detectMime(bytes);
+  if(detectedMime==="application/octet-stream")findings.push("UNRECOGNIZED_MAGIC");
+  if(detectedMime!==declaredMime)findings.push("MIME_MAGIC_MISMATCH");
+
+  const eicar=asciiBytes("X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*");
+  if(findBytes(bytes,eicar)>=0)findings.push("EICAR_TEST_SIGNATURE");
+
+  const masqueradeSignatures=[
+    ["PE_MZ",[0x4d,0x5a]],["ELF",[0x7f,0x45,0x4c,0x46]],
+    ["ZIP",[0x50,0x4b,0x03,0x04]],["RAR",[0x52,0x61,0x72,0x21,0x1a,0x07]],
+    ["SEVEN_ZIP",[0x37,0x7a,0xbc,0xaf,0x27,0x1c]],["GZIP",[0x1f,0x8b]],
+    ["OLE_CFBF",[0xd0,0xcf,0x11,0xe0,0xa1,0xb1,0x1a,0xe1]]
+  ];
+  for(const [name,sig] of masqueradeSignatures){
+    if(starts(bytes,sig))findings.push("DISALLOWED_CONTAINER_"+name);
+  }
+
+  if(detectedMime==="application/pdf"){
+    const dangerous=["/JavaScript","/JS","/Launch","/EmbeddedFile","/RichMedia","/OpenAction","/AA","/XFA"];
+    for(const token of dangerous)if(findBytes(bytes,asciiBytes(token))>=0)findings.push("PDF_ACTIVE_CONTENT_"+token.slice(1).toUpperCase());
+    const end=trimEndIndex(bytes);
+    const eof=asciiBytes("%%EOF");
+    if(end<eof.length-1||!starts(bytes,[...eof],end-eof.length+1))findings.push("PDF_TRAILER_INVALID");
+  } else if(detectedMime==="image/jpeg"){
+    const end=trimEndIndex(bytes);
+    if(end<1||bytes[end-1]!==0xff||bytes[end]!==0xd9)findings.push("JPEG_TRAILER_INVALID");
+  } else if(detectedMime==="image/png"){
+    let pos=8,sawIend=false;
+    while(pos+12<=bytes.length){
+      const len=((bytes[pos]<<24)>>>0)|(bytes[pos+1]<<16)|(bytes[pos+2]<<8)|bytes[pos+3];
+      const type=String.fromCharCode(bytes[pos+4],bytes[pos+5],bytes[pos+6],bytes[pos+7]);
+      const next=pos+12+len;
+      if(next>bytes.length){findings.push("PNG_CHUNK_BOUNDS_INVALID");break}
+      if(type==="IEND"){
+        sawIend=true;
+        if(len!==0||next!==bytes.length)findings.push("PNG_TRAILING_OR_IEND_INVALID");
+        break;
+      }
+      pos=next;
+    }
+    if(!sawIend)findings.push("PNG_IEND_MISSING");
+  } else if(detectedMime==="image/webp"){
+    if(bytes.length<12)findings.push("WEBP_HEADER_INVALID");
+    else{
+      const riffSize=(bytes[4]|(bytes[5]<<8)|(bytes[6]<<16)|(bytes[7]<<24))>>>0;
+      if(riffSize+8!==bytes.length)findings.push("WEBP_SIZE_OR_TRAILING_INVALID");
+    }
+  }
+
+  return {
+    scannerVersion:SCANNER_VERSION,
+    verdict:findings.length?"rejected":"clean",
+    detectedMime,
+    findings,
+    checks:{
+      strictAllowlist:true,
+      magicBytes:true,
+      eicarSignature:true,
+      executableArchiveMasquerade:true,
+      pdfActiveContent:true,
+      trailingPolyglot:true
+    }
+  };
+}
+
+
 function corsHeaders(req){
   const origin=req?.headers?.get?.("origin")||"";
   if(!origin||!CANONICAL_APP_ORIGIN||origin!==CANONICAL_APP_ORIGIN)return{};
@@ -58,11 +153,21 @@ Deno.serve(async req=>{
     const {data,error}=await admin.storage.from(d.storage_bucket).download(d.storage_key);
     if(error||!data)throw{status:404,code:"UPLOADED_OBJECT_NOT_FOUND"};
     const buf=await data.arrayBuffer(),size=buf.byteLength;
-    const type=(data.type||d.mime_type||"").split(";")[0].trim().toLowerCase();
-    const allowed=["application/pdf","image/jpeg","image/png","image/webp"];
-    const detected=allowed.includes(type)?type:String(d.mime_type||"");
+    const declared=(d.mime_type||"").split(";")[0].trim().toLowerCase();
     const hash=await sha256Hex(buf);
-    const fin=await rpc("trustrelay_finalize_document_v08",{p_uid:u.id,p_document_id:d.id,p_content_sha256:hash,p_actual_size:size,p_detected_mime:detected});
+    const scan=scanEvidence(buf,declared);
+    if(scan.verdict!=="clean"){
+      await rpc("trustrelay_reject_document_scan_v10",{
+        p_uid:u.id,p_document_id:d.id,p_content_sha256:hash,p_actual_size:size,
+        p_detected_mime:scan.detectedMime,p_scan_result_json:JSON.stringify(scan)
+      });
+      await admin.storage.from(d.storage_bucket).remove([d.storage_key]);
+      return out({error:{code:"DOCUMENT_MALWARE_SCAN_REJECTED",findings:scan.findings}},422,req);
+    }
+    const fin=await rpc("trustrelay_finalize_document_v10",{
+      p_uid:u.id,p_document_id:d.id,p_content_sha256:hash,p_actual_size:size,
+      p_detected_mime:scan.detectedMime,p_scan_result_json:JSON.stringify(scan)
+    });
     if(!fin?.ok)return out({error:{code:fin?.code||"DOCUMENT_FINALIZE_FAILED"}},Number(fin?.status)||400,req);
     return out({document:{id:fin.document.id,classification:fin.document.classification,reviewStatus:fin.document.review_status,scanStatus:fin.document.scan_status,contentSha256:fin.document.content_sha256,sizeBytes:fin.document.size_bytes,finalizedAt:fin.document.finalized_at}},200,req);
   }
