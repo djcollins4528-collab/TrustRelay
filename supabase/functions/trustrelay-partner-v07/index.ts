@@ -44,8 +44,10 @@ async function rpc(name, payload) {
   return d;
 }
 async function body(req) {
+  const contentLength=Number(req.headers.get("content-length")||0);
+  if (Number.isFinite(contentLength) && contentLength > 262144) throw {status:413,code:"PAYLOAD_TOO_LARGE"};
   const t = await req.text();
-  if (t.length > 262144) throw {status:413,code:"PAYLOAD_TOO_LARGE"};
+  if (new TextEncoder().encode(t).byteLength > 262144) throw {status:413,code:"PAYLOAD_TOO_LARGE"};
   if (!t) return {};
   try { return JSON.parse(t); } catch { throw {status:400,code:"INVALID_JSON"}; }
 }
