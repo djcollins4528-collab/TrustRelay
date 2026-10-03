@@ -92,12 +92,12 @@ The v1.0 egress resolves A/AAAA at delivery time, rejects private/reserved addre
 
 ## SCIM provisioning
 
-- `trustrelay-scim-admin-v14` is the authenticated organization administration surface for credential creation, rotation, revocation and disablement.
-- `trustrelay-scim-v14` implements SCIM 2.0 Users, Groups, ServiceProviderConfig, ResourceTypes and Schemas.
-- Microsoft Entra can use OAuth 2.0 client credentials with one-hour access tokens. Customer credentials expire and support overlap during rotation.
-- Okta/private SCIM integrations may use the same rotatable high-entropy client secret as a Bearer token when static bearer compatibility is enabled.
-- Raw SCIM client secrets and access tokens are never stored; only SHA-256 hashes are retained.
-- Deprovisioning is organization-scoped and soft-disables membership. It never deletes the global TrustRelay person/account.
-- SCIM cannot deactivate or claim Owner/Admin memberships. Privileged access remains an explicit TrustRelay administration action.
-- New SCIM users must use a corporate domain already verified by Enterprise SSO.
-- SCIM group membership is synchronized but does not implicitly grant TrustRelay Owner/Admin roles.
+- `trustrelay-scim-admin-v14` is the authenticated, MFA-protected organization administration surface for SCIM enablement, token rotation, default-role policy and disable/re-enable.
+- `trustrelay-scim-v14` is a server-to-server SCIM 2.0 Users endpoint with ServiceProviderConfig, ResourceTypes and User Schema discovery.
+- Each organization receives a tenant-scoped high-entropy Bearer token. The raw token is shown only when created or rotated; TrustRelay stores only its SHA-256 hash and last four characters.
+- User provisioning supports create, replace, supported PATCH operations, lookup/filtering and soft deprovisioning. Group provisioning is intentionally not enabled in v1.4.
+- Deprovisioning disables only the user's membership in that TrustRelay organization. It does not delete the global TrustRelay person/account.
+- SCIM cannot deprovision an organization Owner; ownership must be transferred first.
+- New SCIM users must use a corporate domain already verified through Enterprise SSO.
+- When SCIM is enabled, SSO JIT will not silently recreate an unprovisioned or deprovisioned membership; an active SCIM assignment is required.
+- The SCIM endpoint is independently authenticated and rate limited, so its Edge Function intentionally runs with `verify_jwt=false`.
