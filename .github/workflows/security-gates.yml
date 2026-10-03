@@ -126,7 +126,8 @@ jobs:
           test "$duplicate_auth" = "400"
 
           sensitive_headers="$(curl --silent --head http://127.0.0.1:18080/web/app.js | tr -d '\r')"
-          printf '%s\n' "$sensitive_headers" | grep -qi '^cache-control: no-store'
+          printf '%s\n' "$sensitive_headers" | grep -qi '^cache-control: .*no-store'
+          printf '%s\n' "$sensitive_headers" | grep -qi '^cache-control: .*must-revalidate'
           printf '%s\n' "$sensitive_headers" | grep -qi '^x-robots-tag: noindex, nofollow, noarchive'
 
           bad_host="$(curl --silent --output /tmp/body --write-out '%{http_code}' -H 'Host: attacker.invalid' http://127.0.0.1:18080/)"
