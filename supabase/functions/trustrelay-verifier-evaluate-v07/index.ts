@@ -8,16 +8,28 @@ function sec(){const x=envJson("SUPABASE_SECRET_KEYS");return x.default||Object.
 async function sha256Hex(text){const d=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(text)));return [...d].map(b=>b.toString(16).padStart(2,"0")).join("")}
 async function hmacHex(secret,text){const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);const sig=new Uint8Array(await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(text)));return [...sig].map(b=>b.toString(16).padStart(2,"0")).join("")}
 async function parse(r){const t=await r.text();let d=null;try{d=t?JSON.parse(t):null}catch{}return{ok:r.ok,status:r.status,data:d}}
-async function rpcUser(name,payload,authorization){
+function serviceHeaders(){
+  const k=sec();
+  const h={apikey:k,"content-type":"application/json",accept:"application/json"};
+  if(k&&!k.startsWith("sb_secret_"))h.authorization="Bearer "+k;
+  return h;
+}
+async function rpcService(name,payload){
   const r=await fetch(URL+"/rest/v1/rpc/"+name,{
-    method:"POST",
-    headers:{apikey:pub(),authorization,"content-type":"application/json",accept:"application/json"},
-    body:JSON.stringify(payload||{})
+    method:"POST",headers:serviceHeaders(),body:JSON.stringify(payload||{})
   });
   const x=await parse(r);
   if(!x.ok)throw{status:x.status||503,code:x.data?.code||"DATABASE_ERROR"};
   if(x.data?.ok===false)throw{status:Number(x.data?.status)||403,code:x.data?.code||"REQUEST_DENIED"};
   return x.data;
+}
+function jwtPayload(authorization){
+  try{
+    const token=String(authorization||"").replace(/^Bearer\s+/i,"");
+    const p=token.split(".")[1];if(!p)return{};
+    const s=p.replaceAll("-","+").replaceAll("_","/")+"===".slice((p.length+3)%4);
+    return JSON.parse(atob(s));
+  }catch{return{}}
 }
 async function user(req){
   const auth=req.headers.get("authorization")||"";
@@ -56,15 +68,14 @@ Deno.serve(async req=>{
     const orgId=String(body.orgId||"").trim();
     if(!orgId||orgId.length>160)return out({error:{code:"ORGANIZATION_REQUIRED"}},400,req);
 
-    // This user-scoped RPC independently enforces active session, AAL2 MFA,
-    // organization membership and the decisions.evaluate permission.
-    const access=await rpcUser("trustrelay_my_org_permissions_v09",{p_org_id:orgId},authorization);
-    if(access?.permissions?.["decisions.evaluate"]!==true){
-      return out({error:{code:"ORGANIZATION_PERMISSION_DENIED"}},403,req);
-    }
-
     const serviceKey=sec();
     if(!serviceKey)return out({error:{code:"INTERNAL_SERVICE_AUTH_UNAVAILABLE"}},503,req);
+
+    const claims=jwtPayload(authorization);
+    const sessionId=String(claims.session_id||"").trim();
+    const access=await rpcService("trustrelay_portal_session_context_v12",{
+      p_auth_user_id:u.id,p_session_id:sessionId,p_org_id:orgId
+    });
 
     const partnerBody={...body};
     delete partnerBody.orgId;
