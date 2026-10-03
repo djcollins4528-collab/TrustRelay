@@ -263,7 +263,10 @@ jobs:
           grep -R -q 'trustrelay_rotate_signing_key_v12' supabase/migrations
           grep -R -q 'trustrelay_portal_session_context_v12' supabase/migrations
           grep -R -q 'api_key.portal_secret_retired' supabase/migrations
-          grep -R -q 'one_time_internal' supabase/migrations
+          grep -R -q 'trustrelay_mint_portal_capability_v12' supabase/migrations
+          grep -R -q 'trustrelay_consume_portal_capability_v12' supabase/migrations
+          grep -R -q "interval '30 seconds'" supabase/migrations
+          grep -R -q 'consumed_at is null' supabase/migrations
 
       - name: Verify runtime quarantine kill switch
         shell: bash
