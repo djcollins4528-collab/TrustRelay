@@ -18,6 +18,18 @@ function serviceHeaders() {
   if (key && !key.startsWith("sb_secret_")) h.authorization = "Bearer " + key;
   return h;
 }
+function secretEqual(a,b) {
+  const aa=new TextEncoder().encode(String(a||""));
+  const bb=new TextEncoder().encode(String(b||""));
+  if(!aa.length||aa.length!==bb.length)return false;
+  let diff=0;for(let i=0;i<aa.length;i++)diff|=aa[i]^bb[i];
+  return diff===0;
+}
+function internalServiceAuthorized(req) {
+  const expected=secretKey();
+  const supplied=(req.headers.get("x-trustrelay-internal-service")||"").trim();
+  return !!expected && secretEqual(supplied,expected);
+}
 function json(data, status=200, extra={}) {
   return Response.json(data, { status, headers: { "cache-control":"no-store", "x-content-type-options":"nosniff", ...extra } });
 }
@@ -179,11 +191,21 @@ Deno.serve(async req => {
       return json({status:"ok",service:"trustrelay-partner-v07",version:"1.0.0"});
     }
 
-    const apiKey = apiKeyFrom(req);
-    if (!apiKey) throw {status:401,code:"API_KEY_REQUIRED"};
+    const internal=internalServiceAuthorized(req);
+    const internalOrgId=internal?(req.headers.get("x-trustrelay-internal-org")||"").trim():"";
+    const internalUserId=internal?(req.headers.get("x-trustrelay-internal-user")||"").trim():"";
+    if(internal){
+      if(!internalOrgId||internalOrgId.length>160)throw {status:400,code:"INTERNAL_ORGANIZATION_INVALID"};
+      if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(internalUserId)){
+        throw {status:400,code:"INTERNAL_USER_INVALID"};
+      }
+    }
+    const apiKey=internal?"":apiKeyFrom(req);
+    if(!internal&&!apiKey)throw {status:401,code:"API_KEY_REQUIRED"};
 
     const getMatch = /^\/v1\/decisions\/([^/]+)$/.exec(path);
     if (req.method==="GET" && getMatch) {
+      if(internal)throw {status:404,code:"NOT_FOUND"};
       const requestId=decodeURIComponent(getMatch[1]);
       const ctx=await rpc("trustrelay_partner_context_v07",{
         p_api_key:apiKey,p_request_id:requestId,p_required_scope:"decisions:read",p_rate_limit:120
@@ -226,11 +248,22 @@ Deno.serve(async req => {
     };
     const requestFingerprint=await sha256Hex(JSON.stringify(canonical(sanitized)));
 
-    const ctx=await rpc("trustrelay_partner_context_v07",{
-      p_api_key:apiKey,p_request_id:requestId,p_required_scope:"decisions:write",p_rate_limit:120
-    });
-    if (!ctx?.ok) throw {status:Number(ctx?.status)||401,code:ctx?.code||"API_KEY_INVALID"};
-    if (ctx.prior) {
+    const ctx=internal
+      ? await rpc("trustrelay_internal_partner_context_v12",{
+          p_org_id:internalOrgId,p_request_id:requestId,p_rate_limit:120
+        })
+      : await rpc("trustrelay_partner_context_v07",{
+          p_api_key:apiKey,p_request_id:requestId,p_required_scope:"decisions:write",p_rate_limit:120
+        });
+    if(!ctx?.ok)throw {status:Number(ctx?.status)||401,code:ctx?.code||(internal?"INTERNAL_CONTEXT_DENIED":"API_KEY_INVALID")};
+    if(ctx.prior){
+      if(internal){
+        const marked=await rpc("trustrelay_mark_portal_decision_v07",{
+          p_auth_user_id:internalUserId,p_org_id:ctx.organization.id,p_request_id:requestId
+        });
+        if(!marked?.ok)throw {status:Number(marked?.status)||403,code:marked?.code||"PORTAL_AUDIT_BINDING_FAILED"};
+        ctx.prior.source="portal";
+      }
       return json({
         idempotent:true,requestId,decision:publicDecision(ctx.prior),
         rate:ctx.rate,organization:{id:ctx.organization.id,name:ctx.organization.name,mode:ctx.organization.mode}
@@ -317,6 +350,13 @@ Deno.serve(async req => {
     const record=Array.isArray(recordRaw)?recordRaw[0]:recordRaw;
     if (!record) throw {status:503,code:"DECISION_PERSISTENCE_FAILED"};
 
+    if(internal){
+      const marked=await rpc("trustrelay_mark_portal_decision_v07",{
+        p_auth_user_id:internalUserId,p_org_id:ctx.organization.id,p_request_id:requestId
+      });
+      if(!marked?.ok)throw {status:Number(marked?.status)||403,code:marked?.code||"PORTAL_AUDIT_BINDING_FAILED"};
+    }
+
     const responseDecision={
       id:decisionId,requestId,correlationId,decision:result.decision,
       reasonCode:result.reasonCode,reasonDetail:result.reasonDetail,
@@ -324,7 +364,7 @@ Deno.serve(async req => {
       evaluationHash:record.evaluation_hash||record.evaluationHash||null,
       auditEventId:record.audit_event_id||record.auditEventId||null,
       latencyMs:Math.max(0,Math.round(performance.now()-started)),
-      source:"api"
+      source:internal?"portal":"api"
     };
 
     await rpc("trustrelay_after_decision_v09",{p_org_id:ctx.organization.id,p_decision_id:decisionId}).catch(()=>{});
