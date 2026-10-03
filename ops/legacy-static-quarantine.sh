@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
 # Quarantine only the retired legacy Render static site.
-# This mutates the ephemeral Render build workspace, never the GitHub repository.
+# BASH_ENV sources this file in the disposable Render build workspace.
+# Cleanup is immediate so the publishPath "." upload cannot capture repository files.
 
 if [[ "${RENDER_SERVICE_ID:-}" != "srv-daul9tk9v7es73a0tsdg" ]]; then
   return 0 2>/dev/null || exit 0
 fi
 
-# BASH_ENV may be sourced by nested build shells. Register cleanup only once,
-# on the outer build shell, so Render's own builder can finish normally.
-if [[ "${TRUSTRELAY_STATIC_QUARANTINE_TRAP_SET:-}" == "1" ]]; then
+if [[ "${TRUSTRELAY_STATIC_QUARANTINE_DONE:-}" == "1" ]]; then
   return 0 2>/dev/null || exit 0
 fi
-export TRUSTRELAY_STATIC_QUARANTINE_TRAP_SET=1
+export TRUSTRELAY_STATIC_QUARANTINE_DONE=1
 
-trustrelay_quarantine_legacy_static() {
-  local root="/opt/render/project/src"
-  if [[ ! -f "$root/server.mjs" || ! -d "$root/supabase" || ! -d "$root/web" ]]; then
-    echo "Legacy static quarantine cleanup skipped: TrustRelay checkout not found at $root." >&2
-    return 1
-  fi
+root="/opt/render/project/src"
+if [[ ! -f "$root/server.mjs" || ! -d "$root/supabase" || ! -d "$root/web" ]]; then
+  echo "Legacy static quarantine failed: TrustRelay checkout not found at $root." >&2
+  return 1 2>/dev/null || exit 1
+fi
 
-  find "$root" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+echo "Legacy static quarantine starting: replacing disposable publish root."
 
-  cat > "$root/index.html" <<'EOF'
+find "$root" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+
+cat > "$root/index.html" <<'EOF'
 <!doctype html>
 <html lang="en">
 <head>
@@ -39,7 +39,12 @@ trustrelay_quarantine_legacy_static() {
 </body>
 </html>
 EOF
-  echo "Legacy static quarantine completed: publish root replaced with retirement page."
-}
 
-trap trustrelay_quarantine_legacy_static EXIT
+extra="$(find "$root" -mindepth 1 -maxdepth 1 ! -name index.html -print -quit)"
+if [[ ! -f "$root/index.html" || -n "$extra" ]]; then
+  echo "Legacy static quarantine failed: publish root contains unexpected files." >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+echo "Legacy static quarantine verified: publish root contains only index.html."
+return 0 2>/dev/null || exit 0

@@ -259,6 +259,13 @@ jobs:
           grep -q 'auth.mfa.challenge' verifier/app.js
           grep -R -q 'MFA_ENROLLMENT_REQUIRED' supabase/migrations/*institutional_totp_mfa.sql
           grep -R -q "requiredAal','aal2" supabase/migrations/*institutional_totp_mfa.sql
+          grep -R -q "interval '8 hours'" supabase/migrations/*institutional_session_ceiling_8h.sql
+          grep -R -q "'maxSessionHours',8" supabase/migrations/*institutional_session_ceiling_8h.sql
+          grep -R -q "interval '8 hours'" supabase/migrations/*secretless_portal_session_bridge.sql
+          if grep -R -q "interval '12 hours'" supabase/migrations/*institutional_session_ceiling_8h.sql; then
+            echo "Final institutional session ceiling regressed above 8 hours."
+            exit 1
+          fi
           grep -R -q 'trustrelay_rotate_signing_key_v12' supabase/migrations/*signing_key_rotation.sql
 
       - name: Verify runtime quarantine kill switch
@@ -285,6 +292,18 @@ jobs:
           code="$(curl --silent --output /tmp/quarantine-body --write-out '%{http_code}' http://127.0.0.1:18082/)"
           test "$code" = "503"
           grep -q 'RUNTIME_QUARANTINED' /tmp/quarantine-body
+
+      - name: Enforce legacy static quarantine hook
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n ops/legacy-static-quarantine.sh
+          grep -q 'TRUSTRELAY_STATIC_QUARANTINE_DONE' ops/legacy-static-quarantine.sh
+          grep -q 'Legacy static quarantine verified' ops/legacy-static-quarantine.sh
+          if grep -q 'trap trustrelay_quarantine_legacy_static EXIT' ops/legacy-static-quarantine.sh; then
+            echo "Legacy static quarantine must execute immediately, not rely on an EXIT trap."
+            exit 1
+          fi
 
       - name: Enforce unique migration versions
         shell: python
