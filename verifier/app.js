@@ -46,7 +46,6 @@ async function mountTurnstile(form) {
   form.dataset.turnstileMounted = "1";
   const slot = document.createElement("div");
   slot.className = "turnstile-slot";
-  slot.style.margin = "12px 0";
   const submit = form.querySelector('button[type="submit"],input[type="submit"]');
   if (submit) form.insertBefore(slot, submit); else form.appendChild(slot);
   const turnstile = await loadTurnstile();
@@ -99,7 +98,7 @@ function clearMsg(el){el.className="message hidden";el.textContent=""}
 function busy(btn,on,text="Working…"){if(!btn)return;if(on){btn.dataset.originalText=btn.textContent;btn.textContent=text;btn.disabled=true}else{btn.textContent=btn.dataset.originalText||btn.textContent;btn.disabled=false}}
 function openModal(html){els.modalContent.innerHTML=html;els.modalBackdrop.classList.remove("hidden")}
 function closeModal(){els.modalBackdrop.classList.add("hidden");els.modalContent.innerHTML=""}
-async function copyText(text,label="Copied"){try{await navigator.clipboard.writeText(text);toast(label,"success")}catch{const a=document.createElement("textarea");a.value=text;a.style.position="fixed";a.style.opacity="0";document.body.appendChild(a);a.select();document.execCommand("copy");a.remove();toast(label,"success")}}
+async function copyText(text,label="Copied"){try{await navigator.clipboard.writeText(text);toast(label,"success")}catch{const a=document.createElement("textarea");a.value=text;a.className="clipboard-fallback";document.body.appendChild(a);a.select();document.execCommand("copy");a.remove();toast(label,"success")}}
 function authRedirectUrl(){const u=new URL("/verifier/",window.location.origin);const token=localStorage.getItem("trustrelay_pending_org_invite");if(token)u.searchParams.set("org_invite",token);return u.toString()}
 function showOtp(show){$("magicForm").classList.toggle("hidden",show);$("otpForm").classList.toggle("hidden",!show);if(show){const e=localStorage.getItem("trustrelay_verifier_email")||$("authEmail").value.trim();if(e)$("otpEmail").value=e;setTimeout(()=>$("otpCode").focus(),0)}clearMsg(els.authMessage)}
 function setAuthenticated(on){els.authView.classList.toggle("hidden",on);els.portalView.classList.toggle("hidden",!on);els.accountButton.classList.toggle("hidden",!on);els.notificationButton?.classList.toggle("hidden",!on)}
