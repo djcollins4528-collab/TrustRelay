@@ -113,10 +113,10 @@
         "tr_scim_secret_",
         "sha256Hex",
         "trustrelay_scim_resolve_bearer_v14",
-        "consume_rate_limit_v05",
         "application/scim+json",
         "ServiceProviderConfig",
-        "urn:ietf:params:scim:schemas:core:2.0:User"
+        "urn:ietf:params:scim:schemas:core:2.0:User",
+        "SCIM_RATE_LIMITED"
       ]
     }
   }
