@@ -27,19 +27,27 @@
       ]
     },
     "trustrelay-partner-v07": {
-      "mode": "partner-api-key",
+      "mode": "partner-api-key-or-hmac-internal-edge",
       "required": [
         "x-trustrelay-key",
         "p_api_key",
-        "p_required_scope"
+        "p_required_scope",
+        "x-trustrelay-internal-sig",
+        "x-trustrelay-internal-ts",
+        "bodyHash",
+        "hmacHex"
       ]
     },
     "trustrelay-verifier-evaluate-v07": {
-      "mode": "validated-bearer-user",
+      "mode": "validated-bearer-user-plus-hmac-internal-edge",
       "required": [
         "/auth/v1/user",
         "authorization",
-        "CANONICAL_APP_ORIGIN"
+        "CANONICAL_APP_ORIGIN",
+        "trustrelay_my_org_permissions_v09",
+        "x-trustrelay-internal-sig",
+        "bodyHash",
+        "hmacHex"
       ]
     },
     "trustrelay-compliance-export-v09": {
