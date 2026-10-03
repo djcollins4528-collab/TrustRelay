@@ -1,38 +1,54 @@
 -- TrustRelay v1.2 portal-secret retirement, phase 2.
--- Internal verifier decisions no longer require recoverable portal credentials.
--- Convert any historical portal keys into non-secret audit identities and delete their Vault secrets.
+-- Portal rows are non-credential audit identities. Partner credentials remain
+-- bounded-expiry credentials. Destroy all recoverable legacy portal secrets.
 
-do $$
-declare
-  v_row record;
-  v_now text:=to_char(clock_timestamp() at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
-  v_hash text;
-begin
-  for v_row in
-    select id,organization_id,secret_vault_id
-    from public.api_keys
-    where key_type='portal'
-    for update
-  loop
-    if v_row.secret_vault_id is not null then
-      delete from vault.secrets where id=v_row.secret_vault_id;
-    end if;
+alter table public.api_keys
+  drop constraint if exists api_keys_active_requires_bounded_expiry;
 
-    v_hash:=encode(digest(gen_random_bytes(32),'sha256'),'hex');
+alter table public.api_keys
+  add constraint api_keys_active_requires_bounded_expiry
+  check (
+    (
+      key_type='portal'
+      and prefix='tr_internal'
+      and secret_vault_id is null
+      and last_four is null
+    )
+    or revoked_at is not null
+    or (
+      key_type='partner'
+      and expires_at is not null
+      and btrim(expires_at)<>''
+      and expires_at::timestamptz > created_at::timestamptz
+      and expires_at::timestamptz <= created_at::timestamptz + interval '365 days'
+    )
+  ) not valid;
 
-    update public.api_keys
-    set prefix='tr_internal',
-        key_hash=v_hash,
-        last_four=null,
-        secret_vault_id=null,
-        updated_at=v_now
-    where id=v_row.id;
+with target as materialized (
+  select secret_vault_id
+  from public.api_keys
+  where key_type='portal' and secret_vault_id is not null
+),
+updated as (
+  update public.api_keys
+  set
+    name='Verifier Portal Internal',
+    prefix='tr_internal',
+    key_hash=encode(digest(gen_random_bytes(32),'sha256'),'hex'),
+    last_four=null,
+    secret_vault_id=null,
+    expires_at=null,
+    updated_at=to_char(clock_timestamp() at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+  where key_type='portal'
+  returning id
+)
+delete from vault.secrets s
+using target t
+where s.id=t.secret_vault_id;
 
-    perform private.trustrelay_append_org_audit_v09(
-      v_row.organization_id,null,'api_key.portal_secret_retired','api_key',v_row.id,
-      jsonb_build_object('credentialStored',false,'retiredAt',v_now)
-    );
-  end loop;
-end $$;
+alter table public.api_keys
+  validate constraint api_keys_active_requires_bounded_expiry;
+
+drop function if exists public.trustrelay_get_portal_key_v07(uuid,text);
 
 notify pgrst,'reload schema';
