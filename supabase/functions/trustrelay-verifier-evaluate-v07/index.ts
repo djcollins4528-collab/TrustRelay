@@ -6,7 +6,7 @@ function envJson(n){try{return JSON.parse(Deno.env.get(n)||"{}")}catch{return{}}
 function pub(){const x=envJson("SUPABASE_PUBLISHABLE_KEYS");return x.default||""}
 function sec(){const x=envJson("SUPABASE_SECRET_KEYS");return x.default||Object.values(x).find(v=>typeof v==="string"&&v)||""}
 async function sha256Hex(text){const d=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(text)));return [...d].map(b=>b.toString(16).padStart(2,"0")).join("")}
-function randomCapability(){const b=crypto.getRandomValues(new Uint8Array(32));let s="";for(const x of b)s+=String.fromCharCode(x);return btoa(s).replaceAll("+","-").replaceAll("/","_").replace(/=+$/,"")}
+function randomCapability(){const b=crypto.getRandomValues(new Uint8Array(32));return "icap_"+[...b].map(x=>x.toString(16).padStart(2,"0")).join("")}
 async function parse(r){const t=await r.text();let d=null;try{d=t?JSON.parse(t):null}catch{}return{ok:r.ok,status:r.status,data:d}}
 function serviceHeaders(){
   const k=sec();
