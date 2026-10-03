@@ -133,6 +133,7 @@ jobs:
           test "$bad_host" = "421"
 
           headers="$(curl --silent --head http://127.0.0.1:18080/ | tr -d '\r')"
+          printf '%s\n' "$headers" | grep -qi "^content-security-policy:.*default-src 'none'"
           printf '%s\n' "$headers" | grep -qi "^content-security-policy:.*style-src 'self'"
           printf '%s\n' "$headers" | grep -qi "style-src-attr 'none'"
           if printf '%s\n' "$headers" | grep -qi "unsafe-inline"; then
@@ -276,6 +277,19 @@ jobs:
               text = path.read_text(encoding="utf-8")
               if re.search(r"\.style\.[A-Za-z_$]", text): failures.append(f"{path}: runtime inline style assignment")
               if re.search(r"\beval\s*\(|new\s+Function\s*\(", text): failures.append(f"{path}: dynamic code execution")
+              if re.search(r"\.outerHTML\s*=|\binsertAdjacentHTML\s*\(|\bdocument\.write\s*\(", text):
+                failures.append(f"{path}: forbidden HTML injection sink")
+              if re.search(r"setAttribute\s*\(\s*['\"]srcdoc['\"]", text):
+                failures.append(f"{path}: srcdoc injection sink")
+              inner_html_baseline = {
+                  "web/app.js": 20,
+                  "verifier/app.js": 30,
+                  "reviewer/app.js": 4,
+              }
+              inner_html_count = len(re.findall(r"\.innerHTML\s*=", text))
+              allowed_inner_html = inner_html_baseline.get(path.as_posix(), 0)
+              if inner_html_count > allowed_inner_html:
+                failures.append(f"{path}: innerHTML sink count increased ({inner_html_count}>{allowed_inner_html})")
 
           if failures:
               print("Browser hardening invariant failed:")

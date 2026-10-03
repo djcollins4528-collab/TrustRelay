@@ -69,7 +69,7 @@ if(ENVIRONMENT==="production"){
 const supabaseOrigin=supabaseUrlObject.origin;
 const supabaseWs=supabaseOrigin.replace(/^https:/,"wss:");
 const csp=[
-  "default-src 'self'",
+  "default-src 'none'",
   "base-uri 'none'",
   "object-src 'none'",
   "frame-ancestors 'none'",
