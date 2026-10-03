@@ -90,6 +90,17 @@
         "x-trustrelay-kid",
         "x-trustrelay-ts"
       ]
+    },
+    "trustrelay-sso-v13": {
+      "mode": "rate-limited-public-discovery-or-validated-bearer-admin",
+      "required": [
+        "/auth/v1/user",
+        "authorization",
+        "CANONICAL_APP_ORIGIN",
+        "consume_rate_limit_v05",
+        "trustrelay_sso_discover_v13",
+        "trustrelay_store_sso_provider_v13"
+      ]
     }
   }
 }
