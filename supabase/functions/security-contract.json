@@ -105,6 +105,18 @@
         "cloudflare-dns.com",
         "SAML_PLAN_UPGRADE_REQUIRED"
       ]
+    },
+    "trustrelay-scim-v14": {
+      "mode": "scim-oauth-or-rotatable-bearer",
+      "required": [
+        "authorization",
+        "trustrelay_scim_resolve_bearer_v14",
+        "trustrelay_scim_issue_access_token_v14",
+        "client_credentials",
+        "ServiceProviderConfig",
+        "urn:ietf:params:scim:schemas:core:2.0:User",
+        "urn:ietf:params:scim:schemas:core:2.0:Group"
+      ]
     }
   }
 }
