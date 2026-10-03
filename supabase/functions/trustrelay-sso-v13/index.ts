@@ -53,6 +53,38 @@ async function sha256Hex(value){
   const b=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(String(value||""))));
   return [...b].map(x=>x.toString(16).padStart(2,"0")).join("")
 }
+function randomHex(bytes=24){
+  const b=crypto.getRandomValues(new Uint8Array(bytes));
+  return [...b].map(x=>x.toString(16).padStart(2,"0")).join("")
+}
+function equalHex(a,b){
+  if(typeof a!=="string"||typeof b!=="string"||a.length!==b.length)return false;
+  let diff=0;for(let i=0;i<a.length;i++)diff|=a.charCodeAt(i)^b.charCodeAt(i);
+  return diff===0
+}
+function normalizeTxtData(value){
+  const raw=String(value||"").trim();
+  const chunks=[...raw.matchAll(/"((?:\\.|[^"])*)"/g)].map(m=>m[1].replace(/\\(["\\])/g,"$1"));
+  return chunks.length?chunks.join(""):raw
+}
+async function lookupTxt(name){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),5000);
+  try{
+    const url="https://cloudflare-dns.com/dns-query?name="+encodeURIComponent(name)+"&type=TXT";
+    const r=await fetch(url,{headers:{accept:"application/dns-json"},signal:controller.signal});
+    if(!r.ok)throw{status:502,code:"DNS_VERIFICATION_PROVIDER_ERROR",details:{providerStatus:r.status}};
+    const data=await r.json();
+    if(Number(data?.Status)!==0)return[];
+    return (Array.isArray(data?.Answer)?data.Answer:[])
+      .filter(x=>Number(x?.type)===16)
+      .map(x=>normalizeTxtData(x?.data))
+      .filter(Boolean)
+  }catch(e){
+    if(e?.name==="AbortError")throw{status:504,code:"DNS_VERIFICATION_TIMEOUT"};
+    throw e
+  }finally{clearTimeout(timer)}
+}
 async function discoveryRateLimit(req){
   const forwarded=(req.headers.get("cf-connecting-ip")||req.headers.get("x-forwarded-for")||"unknown").split(",")[0].trim();
   const key=(await sha256Hex(forwarded)).slice(0,32);
@@ -139,16 +171,55 @@ async function requireManage(orgId,authorization){
   const cfg=await rpcUser("trustrelay_sso_config_v13",{p_org_id:orgId},authorization);
   return{permissions:p,config:cfg}
 }
+async function prepareDomainChallenges(orgId,actorAccountId){
+  const state=await rpcAdmin("trustrelay_sso_domain_state_v13",{p_org_id:orgId});
+  const challenges=[];
+  for(const row of Array.isArray(state?.domains)?state.domains:[]){
+    if(row?.verificationStatus==="verified")continue;
+    const token=randomHex(24);
+    const recordName="_trustrelay."+String(row.domain||"");
+    const recordValue="trustrelay-verification="+token;
+    const tokenHash=await sha256Hex(recordValue);
+    await rpcAdmin("trustrelay_set_sso_domain_challenge_v13",{
+      p_org_id:orgId,p_actor_account_id:actorAccountId,p_domain:row.domain,p_token_hash:tokenHash
+    });
+    challenges.push({domain:row.domain,recordName,recordType:"TXT",recordValue})
+  }
+  return challenges
+}
+async function verifyDomains(orgId,actorAccountId){
+  const state=await rpcAdmin("trustrelay_sso_domain_state_v13",{p_org_id:orgId});
+  const verified=[],pending=[];
+  for(const row of Array.isArray(state?.domains)?state.domains:[]){
+    if(row?.verificationStatus==="verified"){verified.push(row.domain);continue}
+    if(!row?.tokenHash){pending.push({domain:row.domain,reason:"challenge_required"});continue}
+    const values=await lookupTxt("_trustrelay."+String(row.domain||""));
+    let matched=false;
+    for(const value of values){
+      const hash=await sha256Hex(value);
+      if(equalHex(hash,String(row.tokenHash))){matched=true;break}
+    }
+    if(matched){
+      await rpcAdmin("trustrelay_mark_sso_domain_verified_v13",{
+        p_org_id:orgId,p_actor_account_id:actorAccountId,p_domain:row.domain
+      });
+      verified.push(row.domain)
+    }else pending.push({domain:row.domain,reason:"dns_record_not_found"})
+  }
+  return{verified,pending,allVerified:pending.length===0&&verified.length>0}
+}
 async function saveProvider({orgId,authorization,actorAccountId,protocol,brand,identifier,samlProviderId,issuer,metadataUrl,clientId,domains,jitEnabled,jitDefaultRole}){
   await rpcAdmin("trustrelay_store_sso_provider_v13",{
     p_org_id:orgId,p_actor_account_id:actorAccountId,p_protocol:protocol,p_provider_kind:providerKind(brand),
     p_provider_identifier:identifier||null,p_saml_provider_id:samlProviderId||null,p_issuer:issuer||null,
     p_metadata_url:metadataUrl||null,p_client_id:clientId||null,p_domains:domains
   });
-  return await rpcUser("trustrelay_set_sso_policy_v13",{
+  const challenges=await prepareDomainChallenges(orgId,actorAccountId);
+  const policy=await rpcUser("trustrelay_set_sso_policy_v13",{
     p_org_id:orgId,p_enforcement_mode:"optional",p_jit_enabled:Boolean(jitEnabled),
     p_default_role:String(jitDefaultRole||"verifier"),p_break_glass_enabled:true
-  },authorization)
+  },authorization);
+  return{policy,challenges}
 }
 
 Deno.serve(async req=>{
@@ -184,6 +255,19 @@ Deno.serve(async req=>{
       return out({...current,capabilities:{oidc:true,saml:SAML_ENABLED,customOidcProviderLimitOnCurrentFreePlan:3},callbackUrl:URL+"/auth/v1/callback",samlMetadataUrl:URL+"/auth/v1/sso/saml/metadata",samlAcsUrl:URL+"/auth/v1/sso/saml/acs"},200,req)
     }
 
+    if(action==="domain_challenges"){
+      if(!current?.configured)throw{status:404,code:"SSO_NOT_CONFIGURED"};
+      const challenges=await prepareDomainChallenges(orgId,actorAccountId);
+      return out({challenges},200,req)
+    }
+
+    if(action==="verify_domains"){
+      if(!current?.configured)throw{status:404,code:"SSO_NOT_CONFIGURED"};
+      const result=await verifyDomains(orgId,actorAccountId);
+      const config=await rpcUser("trustrelay_sso_config_v13",{p_org_id:orgId},authorization);
+      return out({...result,config},200,req)
+    }
+
     if(action==="configure_oidc"){
       const brand=String(input.providerBrand||"");
       if(!["microsoft_entra","okta"].includes(brand))throw{status:400,code:"SSO_PROVIDER_INVALID"};
@@ -198,11 +282,12 @@ Deno.serve(async req=>{
         name:"TrustRelay - "+displayName(brand),client_id:clientId,client_secret:clientSecret,
         issuer,scopes:["openid","profile","email"],pkce_enabled:true,email_optional:false,enabled:true
       });
+      let saved;
       try{
-        await saveProvider({orgId,authorization,actorAccountId,protocol:"oidc",brand,identifier,samlProviderId:null,issuer,metadataUrl:null,clientId,domains,jitEnabled:input.jitEnabled,jitDefaultRole:input.jitDefaultRole})
+        saved=await saveProvider({orgId,authorization,actorAccountId,protocol:"oidc",brand,identifier,samlProviderId:null,issuer,metadataUrl:null,clientId,domains,jitEnabled:input.jitEnabled,jitDefaultRole:input.jitDefaultRole})
       }catch(e){await customProviderDisable(identifier).catch(()=>{});throw e}
       if(current?.configured&&current?.protocol==="oidc"&&current?.providerIdentifier&&current.providerIdentifier!==identifier)await customProviderDisable(current.providerIdentifier).catch(()=>{});
-      return out({configured:true,protocol:"oidc",providerBrand:brand,providerIdentifier:identifier,callbackUrl:URL+"/auth/v1/callback",issuer,domains,providerCreated:Boolean(provider)},201,req)
+      return out({configured:true,protocol:"oidc",providerBrand:brand,providerIdentifier:identifier,callbackUrl:URL+"/auth/v1/callback",issuer,domains,domainChallenges:saved?.challenges||[],providerCreated:Boolean(provider)},201,req)
     }
 
     if(action==="configure_saml"){
@@ -215,8 +300,8 @@ Deno.serve(async req=>{
       const provider=await samlProviderUpsert(existingId,metadataUrl,domains,"trustrelay-"+providerKind(brand)+"-"+String(orgId).replace(/^org_/,"").slice(0,16));
       const providerId=String(provider?.id||existingId||"");
       if(!providerId)throw{status:502,code:"SAML_PROVIDER_ID_MISSING"};
-      await saveProvider({orgId,authorization,actorAccountId,protocol:"saml",brand,identifier:null,samlProviderId:providerId,issuer:null,metadataUrl,clientId:null,domains,jitEnabled:input.jitEnabled,jitDefaultRole:input.jitDefaultRole});
-      return out({configured:true,protocol:"saml",providerBrand:brand,providerIdentifier:providerId,metadataUrl:URL+"/auth/v1/sso/saml/metadata",acsUrl:URL+"/auth/v1/sso/saml/acs",domains},201,req)
+      const saved=await saveProvider({orgId,authorization,actorAccountId,protocol:"saml",brand,identifier:null,samlProviderId:providerId,issuer:null,metadataUrl,clientId:null,domains,jitEnabled:input.jitEnabled,jitDefaultRole:input.jitDefaultRole});
+      return out({configured:true,protocol:"saml",providerBrand:brand,providerIdentifier:providerId,metadataUrl:URL+"/auth/v1/sso/saml/metadata",acsUrl:URL+"/auth/v1/sso/saml/acs",domains,domainChallenges:saved?.challenges||[]},201,req)
     }
 
     if(action==="disable"){
