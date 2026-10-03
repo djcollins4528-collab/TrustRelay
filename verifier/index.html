@@ -259,7 +259,7 @@
               <div class="field">
                 <label for="ssoDomains">Authorized email domains</label>
                 <textarea id="ssoDomains" rows="3" required placeholder="company.com&#10;subsidiary.com"></textarea>
-                <small>Public email domains such as Gmail, Outlook, Yahoo and iCloud are rejected.</small>
+                <small>Public email domains such as Gmail, Outlook, Yahoo and iCloud are rejected. Each corporate domain must be verified with a TrustRelay DNS TXT record before discovery or JIT access becomes active.</small>
               </div>
               <div class="sso-jit-row">
                 <label><input id="ssoJitEnabled" type="checkbox"> Enable just-in-time membership</label>
@@ -278,6 +278,8 @@
               <div class="card-heading"><div><h3>Organization SSO policy</h3><p>Test the configured provider successfully before requiring it.</p></div></div>
               <div id="ssoConnectionSummary" class="sso-summary"></div>
               <div class="management-actions sso-actions">
+                <button id="domainSsoRecordsButton" class="button secondary hidden" type="button">DNS verification records</button>
+                <button id="verifySsoDomainsButton" class="button secondary hidden" type="button">Verify domains</button>
                 <button id="testSsoButton" class="button secondary hidden" type="button">Test enterprise sign-in</button>
                 <button id="requireSsoButton" class="button primary hidden" type="button">Require SSO</button>
                 <button id="makeSsoOptionalButton" class="button secondary hidden" type="button">Make SSO optional</button>
