@@ -125,6 +125,12 @@ jobs:
           fi
           printf '%s\n' "$headers" | grep -qi "^x-content-type-options: nosniff"
           printf '%s\n' "$headers" | grep -qi "^x-frame-options: DENY"
+          printf '%s\n' "$headers" | grep -qi "^strict-transport-security: max-age=63072000; includeSubDomains; preload"
+          grep -q 'maxHeaderSize:8192' server.mjs
+          grep -q 'requireHostHeader:true' server.mjs
+          grep -q 'insecureHTTPParser:false' server.mjs
+          grep -q 'server.maxHeadersCount=64' server.mjs
+          grep -q 'HPE_HEADER_OVERFLOW' server.mjs
 
       - name: Verify unapproved production commit is rejected
         shell: bash
