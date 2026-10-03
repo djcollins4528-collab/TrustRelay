@@ -28,5 +28,6 @@ jobs:
           target: ${{ matrix.target }}
           allow_issue_writing: false
           fail_action: true
+          rules_file_name: '.zap/rules.tsv'
           artifact_name: zap-${{ strategy.job-index }}
           cmd_options: '-a'
