@@ -9,10 +9,13 @@ function jsonpart(v){return JSON.parse(new TextDecoder().decode(b64decode(v)))}
 function id(p){return p+crypto.randomUUID().replaceAll("-","")}
 async function hex(t){return[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t)))].map(b=>b.toString(16).padStart(2,"0")).join("")}
 
-Deno.serve(async ()=>{
+Deno.serve(async req=>{
  try{
+   if(!["GET","HEAD"].includes(req.method))return Response.json({error:{code:"METHOD_NOT_ALLOWED"}},{status:405,headers:{"cache-control":"no-store","x-content-type-options":"nosniff","allow":"GET, HEAD"}});
    const d=await rpc("trustrelay_list_public_signing_keys_v06",{});
    const keys=(d.keys||[]).map(x=>({...x.publicJwk,kid:x.kid,alg:x.alg,use:"sig"}));
-   return Response.json({keys},{headers:{"cache-control":"public, max-age=300","x-content-type-options":"nosniff"}});
- }catch{return Response.json({error:{code:"KEY_REGISTRY_UNAVAILABLE"}},{status:503})}
+   const headers={"cache-control":"public, max-age=300","x-content-type-options":"nosniff"};
+   if(req.method==="HEAD")return new Response(null,{status:200,headers});
+   return Response.json({keys},{headers});
+ }catch{return Response.json({error:{code:"KEY_REGISTRY_UNAVAILABLE"}},{status:503,headers:{"cache-control":"no-store","x-content-type-options":"nosniff"}})}
 });
