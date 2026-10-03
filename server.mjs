@@ -337,7 +337,7 @@ const server=http.createServer({
   catch{return sendJson(res,400,{error:{code:"INVALID_URL"}})}
   if(url.pathname==="/healthz"){
     if(!["GET","HEAD"].includes(req.method||"GET"))return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD"});
-    return sendJson(res,200,{status:RUNTIME_DISABLED?"quarantined":"ok"});
+    return sendJson(res,200,{status:RUNTIME_DISABLED?"quarantined":"ok"},{"Cache-Control":"no-cache, no-store, must-revalidate, max-age=0, private","Pragma":"no-cache","Expires":"0"});
   }
   if(!hostAllowed(req))return sendJson(res,421,{error:{code:"HOST_NOT_ALLOWED"}});
   if(EDGE_ORIGIN_SECRET&&!secretEqual(String(req.headers["x-trustrelay-edge-origin"]||""),EDGE_ORIGIN_SECRET)){
