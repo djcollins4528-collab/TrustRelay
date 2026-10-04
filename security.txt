@@ -1,0 +1,5 @@
+Contact: mailto:trustrelaysupport@gmail.com?subject=SECURITY%20REPORT
+Expires: 2027-04-01T00:00:00Z
+Preferred-Languages: en
+Canonical: https://trustrelay-production.onrender.com/.well-known/security.txt
+Policy: https://trustrelay-production.onrender.com/security/
