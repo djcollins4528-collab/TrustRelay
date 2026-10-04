@@ -108,7 +108,8 @@ function endpoints(tenantKey){
     endpoint:base,
     scimBaseUrl:base,
     serviceProviderConfigUrl:base+"/ServiceProviderConfig",
-    usersUrl:base+"/Users"
+    usersUrl:base+"/Users",
+    groupsUrl:base+"/Groups"
   };
 }
 function decorate(data){
@@ -124,8 +125,10 @@ function decorate(data){
     rateLimitPerMinute:Number(cfg.rateLimitPerMinute||data?.rateLimitPerMinute||300),
     lastSyncAt:cfg.lastSyncAt||data?.lastSyncAt||null,
     lastError:cfg.lastError||data?.lastError||null,
+    groupSyncEnabled:Boolean(cfg.groupSyncEnabled??data?.groupSyncEnabled),
     tenantKey:data?.tenantKey||cfg.tenantKey||null,
     credentials,
+    groups:Array.isArray(data?.groups)?data.groups:[],
     users:{
       total:Number(counts.users??data?.users?.total??0),
       active:Number(counts.activeUsers??data?.users?.active??0),
@@ -154,7 +157,7 @@ Deno.serve(async req=>{
     const orgId=String(input.orgId||"").trim();
     if(!orgId)throw{status:400,code:"ORGANIZATION_ID_REQUIRED"};
 
-    const status=await userRpc("trustrelay_scim_admin_status_v14",{p_org_id:orgId},authorization);
+    const status=await userRpc("trustrelay_scim_admin_status_v15",{p_org_id:orgId},authorization);
 
     if(action==="status")return out(req,decorate(status));
 
@@ -181,7 +184,7 @@ Deno.serve(async req=>{
         p_default_role:role,
         p_expires_at:expiresAt
       });
-      const fresh=await userRpc("trustrelay_scim_admin_status_v14",{p_org_id:orgId},authorization);
+      const fresh=await userRpc("trustrelay_scim_admin_status_v15",{p_org_id:orgId},authorization);
       return out(req,{
         ...decorate(fresh),
         credential:{
@@ -207,7 +210,7 @@ Deno.serve(async req=>{
         p_actor_account_id:status.actorAccountId,
         p_credential_id:credentialId
       });
-      const fresh=await userRpc("trustrelay_scim_admin_status_v14",{p_org_id:orgId},authorization);
+      const fresh=await userRpc("trustrelay_scim_admin_status_v15",{p_org_id:orgId},authorization);
       return out(req,decorate(fresh));
     }
 
@@ -220,9 +223,51 @@ Deno.serve(async req=>{
         p_actor_account_id:status.actorAccountId,
         p_default_role:role,
         p_allow_static_bearer:true,
-        p_group_sync_enabled:false
+        p_group_sync_enabled:Boolean(status?.config?.groupSyncEnabled)
       });
-      const fresh=await userRpc("trustrelay_scim_admin_status_v14",{p_org_id:orgId},authorization);
+      const fresh=await userRpc("trustrelay_scim_admin_status_v15",{p_org_id:orgId},authorization);
+      return out(req,decorate(fresh));
+    }
+
+    if(action==="group_sync"){
+      const enabled=Boolean(input.enabled);
+      await serviceRpc("trustrelay_scim_set_group_sync_v15",{
+        p_org_id:orgId,
+        p_actor_account_id:status.actorAccountId,
+        p_enabled:enabled
+      });
+      const fresh=await userRpc("trustrelay_scim_admin_status_v15",{p_org_id:orgId},authorization);
+      return out(req,decorate(fresh));
+    }
+
+    if(action==="group_mapping_set"){
+      const groupId=String(input.groupId||"").trim();
+      const role=String(input.role||"").trim();
+      const priority=Math.max(1,Math.min(1000,Number(input.priority||100)||100));
+      if(!groupId)throw{status:400,code:"SCIM_GROUP_ID_REQUIRED"};
+      if(!["compliance","verifier","developer","auditor"].includes(role))
+        throw{status:400,code:"SCIM_GROUP_ROLE_INVALID"};
+      await serviceRpc("trustrelay_scim_group_mapping_set_v15",{
+        p_org_id:orgId,
+        p_actor_account_id:status.actorAccountId,
+        p_group_id:groupId,
+        p_role:role,
+        p_priority:priority,
+        p_enabled:input.enabled!==false
+      });
+      const fresh=await userRpc("trustrelay_scim_admin_status_v15",{p_org_id:orgId},authorization);
+      return out(req,decorate(fresh));
+    }
+
+    if(action==="group_mapping_delete"){
+      const groupId=String(input.groupId||"").trim();
+      if(!groupId)throw{status:400,code:"SCIM_GROUP_ID_REQUIRED"};
+      await serviceRpc("trustrelay_scim_group_mapping_delete_v15",{
+        p_org_id:orgId,
+        p_actor_account_id:status.actorAccountId,
+        p_group_id:groupId
+      });
+      const fresh=await userRpc("trustrelay_scim_admin_status_v15",{p_org_id:orgId},authorization);
       return out(req,decorate(fresh));
     }
 
@@ -230,7 +275,7 @@ Deno.serve(async req=>{
       await serviceRpc("trustrelay_scim_disable_v14",{
         p_org_id:orgId,p_actor_account_id:status.actorAccountId
       });
-      const fresh=await userRpc("trustrelay_scim_admin_status_v14",{p_org_id:orgId},authorization);
+      const fresh=await userRpc("trustrelay_scim_admin_status_v15",{p_org_id:orgId},authorization);
       return out(req,decorate(fresh));
     }
 
