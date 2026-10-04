@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#06111d">
+  <meta name="robots" content="noindex">
+  <meta name="description" content="TrustRelay vulnerability disclosure policy and good-faith security research guidelines.">
+  <title>Vulnerability Disclosure — TrustRelay</title>
+  <link rel="stylesheet" href="../legal/legal.css">
+</head>
+<body>
+  <header>
+    <div class="bar">
+      <a class="brand" href="../">TrustRelay</a>
+      <nav class="nav" aria-label="Security navigation">
+        <a href="../legal/">Trust Center</a>
+        <a href="../status/">Service Status</a>
+        <a href="../developers/">Developers</a>
+        <a href="../support/">Support</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <p class="eyebrow">SECURITY REPORTING</p>
+    <h1>Vulnerability Disclosure</h1>
+    <p class="hero-copy">TrustRelay welcomes responsible reports that help us identify and remediate security weaknesses before they affect customers. Please report suspected vulnerabilities privately and do not post sensitive findings in public issues, forums, or social media.</p>
+
+    <div class="action-row">
+      <a class="btn" href="mailto:trustrelaysupport@gmail.com?subject=SECURITY%20REPORT">Report a security issue</a>
+      <a class="btn alt" href="../.well-known/security.txt">security.txt</a>
+      <a class="btn alt" href="../legal/security.html">Security Statement</a>
+    </div>
+
+    <div class="trust-notice"><strong>Current reporting route.</strong> Until TrustRelay completes its custom-domain email cutover, security reports use the dedicated TrustRelay support mailbox with the subject <strong>SECURITY REPORT</strong>. A domain-based security mailbox will replace this route during production-domain activation.</div>
+
+    <section>
+      <div class="section-head">
+        <div><p class="eyebrow">What to include</p><h2>Give us enough to reproduce the issue.</h2></div>
+        <p>Clear, minimally invasive reproduction information lets us validate and remediate reports faster.</p>
+      </div>
+      <div class="grid">
+        <div class="card"><h3>Affected surface</h3><p>Identify the page, endpoint, workflow, account type, or integration involved.</p></div>
+        <div class="card"><h3>Reproduction steps</h3><p>Provide a concise sequence of actions, expected behavior, actual behavior, and any sanitized request or response details.</p></div>
+        <div class="card"><h3>Security impact</h3><p>Explain what an attacker could gain, alter, disclose, bypass, or disrupt.</p></div>
+        <div class="card"><h3>Evidence</h3><p>Include screenshots, logs, proof-of-concept details, or timestamps with secrets, personal data, and third-party data removed wherever possible.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <div><p class="eyebrow">Good-faith testing</p><h2>Keep research safe and bounded.</h2></div>
+        <p>Security research should avoid creating risk for other users, infrastructure providers, or production availability.</p>
+      </div>
+      <div class="checklist">
+        <div class="check-item"><span class="check-mark">✓</span><div><strong>Use accounts and data you control</strong><small>Do not access, modify, retain, or disclose another person's data.</small></div><span class="badge good">Expected</span></div>
+        <div class="check-item"><span class="check-mark">✓</span><div><strong>Minimize impact</strong><small>Stop after demonstrating the security condition. Do not establish persistence or expand access beyond what is necessary to prove the issue.</small></div><span class="badge good">Expected</span></div>
+        <div class="check-item"><span class="check-mark pending">!</span><div><strong>No denial-of-service or destructive testing</strong><small>Do not intentionally exhaust resources, corrupt data, delete data, or materially degrade service availability.</small></div><span class="badge warn">Out of scope</span></div>
+        <div class="check-item"><span class="check-mark pending">!</span><div><strong>No social engineering or physical attacks</strong><small>Phishing, credential theft, impersonation, harassment, physical intrusion, and attacks against employees, operators, customers, or vendors are out of scope.</small></div><span class="badge warn">Out of scope</span></div>
+        <div class="check-item"><span class="check-mark pending">!</span><div><strong>No third-party infrastructure testing</strong><small>Do not test Supabase, Render, Stripe, Cloudflare, email providers, or other third-party services through TrustRelay unless you have separate authorization from that provider.</small></div><span class="badge warn">Out of scope</span></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <div><p class="eyebrow">Response process</p><h2>What happens after a report.</h2></div>
+        <p>TrustRelay triages reports according to exploitability, affected data or privileges, blast radius, and operational impact.</p>
+      </div>
+      <div class="grid">
+        <div class="card"><h3>1. Intake</h3><p>The report is reviewed privately and correlated with current logs, deployment state, and affected controls.</p></div>
+        <div class="card"><h3>2. Validation</h3><p>We reproduce the issue when possible and determine severity, scope, compensating controls, and whether immediate containment is required.</p></div>
+        <div class="card"><h3>3. Remediation</h3><p>Fixes move through the same security gates, static analysis, DAST, and approved-commit production controls used for normal releases.</p></div>
+        <div class="card"><h3>4. Closure</h3><p>Material incidents follow the documented incident-response process. Public disclosure timing is coordinated when disclosure is appropriate.</p></div>
+      </div>
+    </section>
+
+    <div class="draft"><strong>No bounty promise or certification claim.</strong> TrustRelay does not currently operate a paid bug-bounty program and does not represent this policy as an independent certification, legal safe-harbor agreement, or waiver of applicable law. The policy is intended to provide a clear private reporting channel and good-faith testing boundaries.</div>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <span>TrustRelay · Vulnerability Disclosure</span>
+      <span>Last updated October 3, 2026</span>
+    </div>
+  </footer>
+</body>
+</html>
