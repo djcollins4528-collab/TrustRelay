@@ -325,6 +325,8 @@
                   <button id="enableScimButton" class="button primary" type="button">Generate SCIM credential</button>
                   <button id="rotateScimTokenButton" class="button secondary hidden" type="button">Add rotation token</button>
                   <button id="saveScimPolicyButton" class="button secondary hidden" type="button">Save default role</button>
+                  <button id="enableScimGroupSyncButton" class="button secondary hidden" type="button">Enable Group Push</button>
+                  <button id="disableScimGroupSyncButton" class="button secondary hidden" type="button">Disable Group Push</button>
                   <button id="disableScimButton" class="button danger hidden" type="button">Disable SCIM</button>
                   <button id="reenableScimButton" class="button primary hidden" type="button">Re-enable SCIM</button>
                 </div>
@@ -339,12 +341,19 @@
                 <div id="scimEndpointList" class="sso-summary"></div>
                 <div class="scim-provider-note"><strong>Microsoft Entra ID</strong><p>Use the SCIM Base URL as the Tenant URL and paste the generated TrustRelay token into Secret Token.</p></div>
                 <div class="scim-provider-note"><strong>Okta</strong><p>Use SCIM 2.0 with HTTP Authorization Header and paste the generated TrustRelay token as the bearer credential.</p></div>
-                <div class="scim-provider-note"><strong>Users lifecycle only</strong><p>Create, lookup/filter, update, suspend, reactivate, and deprovision are supported. Group Push is intentionally deferred from this release.</p></div>
+                <div class="scim-provider-note"><strong>Users + Group Push</strong><p>Provision users and groups from Entra ID or Okta, then map synchronized groups to TrustRelay roles. Owner and Admin can never be assigned through SCIM.</p></div>
               </div>
             </div>
 
             <div class="section-heading"><div><h3>SCIM credentials</h3><p>Secret tokens are shown only when created. TrustRelay stores only their SHA-256 hashes; revoke the old token after your identity provider has switched to the new one.</p></div></div>
             <div id="scimCredentialList" class="management-list"></div>
+
+            <div class="section-heading"><div><h3>Group Push & role mapping</h3><p>Groups synchronized by Microsoft Entra ID or Okta can assign safe organization roles automatically. Lower priority numbers win when a user belongs to multiple mapped groups.</p></div></div>
+            <div class="sso-safety">
+              <strong>Privilege boundary</strong>
+              <p>Group Push can assign only Verifier, Auditor, Developer, or Compliance. Owner, Admin, and manually managed memberships remain protected from SCIM changes.</p>
+            </div>
+            <div id="scimGroupList" class="management-list"></div>
           </div>
         </section>
 
