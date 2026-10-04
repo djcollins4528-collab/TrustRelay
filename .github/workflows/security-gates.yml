@@ -96,6 +96,26 @@ jobs:
 
           print("Pentest remediation invariants verified.")
 
+      - name: Enforce pentest remediation invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'AMOUNT_REQUIRED' supabase/migrations/0077_v15_authorization_policy_hardening.sql
+          grep -q 'CURRENCY_REQUIRED' supabase/migrations/0077_v15_authorization_policy_hardening.sql
+          grep -q 'AMOUNT_REQUIRED' supabase/functions/trustrelay-partner-v07/index.ts
+          grep -q 'CURRENCY_REQUIRED' supabase/functions/trustrelay-partner-v07/index.ts
+          grep -q 'REQUEST_ID_REUSE_MISMATCH' supabase/functions/trustrelay-partner-v07/index.ts
+          grep -Fq 'verified.valid===true' supabase/functions/trustrelay-partner-v07/index.ts
+          grep -Fq 'let authority=verified.valid===true' supabase/functions/trustrelay-partner-v07/index.ts
+          for file in \
+            supabase/functions/trustrelay-profile-v06/index.ts \
+            supabase/functions/trustrelay-grant-create-v06/index.ts \
+            supabase/functions/trustrelay-invite-accept-v06/index.ts \
+            supabase/functions/trustrelay-grant-revoke-v06/index.ts \
+            supabase/functions/trustrelay-credential-issue-v06/index.ts; do
+            grep -Fq '/auth/v1/user' "$file"
+          done
+
       - name: Verify production static-surface isolation
         shell: bash
         run: |
