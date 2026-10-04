@@ -5,6 +5,7 @@ const CANONICAL_APP_ORIGIN=SUPABASE_URL.includes("msfrbsnihylfynrtdgxe")
     ?"https://trustrelay-staging.onrender.com":"";
 
 const USER_SCHEMA="urn:ietf:params:scim:schemas:core:2.0:User";
+const GROUP_SCHEMA="urn:ietf:params:scim:schemas:core:2.0:Group";
 const LIST_SCHEMA="urn:ietf:params:scim:api:messages:2.0:ListResponse";
 const ERR_SCHEMA="urn:ietf:params:scim:api:messages:2.0:Error";
 const PATCH_SCHEMA="urn:ietf:params:scim:api:messages:2.0:PatchOp";
@@ -147,6 +148,79 @@ function applyPatch(target,operation){
   }
   throw{status:400,code:"SCIM_PATCH_PATH_UNSUPPORTED",scimType:"noTarget"};
 }
+
+function groupModel(row){
+  return{
+    externalId:row?.externalId||null,
+    displayName:String(row?.displayName||""),
+    members:[...new Set((Array.isArray(row?.members)?row.members:[])
+      .map(x=>String(x?.value||x||"").trim()).filter(Boolean))]
+  };
+}
+function groupMemberIds(value){
+  const list=Array.isArray(value)?value:[];
+  return[...new Set(list.map(x=>String(
+    typeof x==="string"?x:x?.value||""
+  ).trim()).filter(Boolean))];
+}
+function applyGroupObject(target,value,mode="replace"){
+  if(!value||typeof value!=="object"||Array.isArray(value))return target;
+  if("externalId" in value)target.externalId=value.externalId==null?null:String(value.externalId);
+  if("displayName" in value)target.displayName=String(value.displayName||"");
+  if(Array.isArray(value.members)){
+    const ids=groupMemberIds(value.members);
+    target.members=mode==="add"?[...new Set([...target.members,...ids])]:ids;
+  }
+  return target;
+}
+function applyGroupPatch(target,operation){
+  const op=String(operation?.op||"").toLowerCase();
+  if(!["add","replace","remove"].includes(op))
+    throw{status:400,code:"SCIM_PATCH_OP_INVALID",scimType:"invalidSyntax"};
+  const path=String(operation?.path||"").trim(),value=operation?.value;
+  if(!path){
+    if(op==="remove")throw{status:400,code:"SCIM_PATCH_PATH_REQUIRED",scimType:"noTarget"};
+    return applyGroupObject(target,value,op==="add"?"add":"replace");
+  }
+  const p=path.toLowerCase();
+  if(p==="displayname"){
+    target.displayName=op==="remove"?"":String(value||"");
+    return target;
+  }
+  if(p==="externalid"){
+    target.externalId=op==="remove"?null:String(value||"");
+    return target;
+  }
+  if(p==="members"){
+    const ids=groupMemberIds(value);
+    if(op==="add")target.members=[...new Set([...target.members,...ids])];
+    else if(op==="replace")target.members=ids;
+    else if(ids.length)target.members=target.members.filter(x=>!ids.includes(x));
+    else target.members=[];
+    return target;
+  }
+  const fm=path.match(/^members\[value\s+eq\s+["']([^"']+)["']\]$/i);
+  if(fm){
+    const memberId=fm[1];
+    if(op==="remove")target.members=target.members.filter(x=>x!==memberId);
+    else target.members=[...new Set([...target.members,memberId])];
+    return target;
+  }
+  throw{status:400,code:"SCIM_PATCH_PATH_UNSUPPORTED",scimType:"noTarget"};
+}
+function parseGroupFilter(value){
+  if(!value)return{attribute:null,value:null};
+  const m=String(value).match(
+    /^\s*(displayName|externalId|id)\s+eq\s+"((?:[^"\\]|\\.)*)"\s*$/i
+  );
+  if(!m)throw{status:400,code:"SCIM_FILTER_UNSUPPORTED",scimType:"invalidFilter"};
+  const a=m[1].toLowerCase();
+  return{
+    attribute:a==="displayname"?"displayName":a==="externalid"?"externalId":"id",
+    value:m[2].replace(/\\(["\\])/g,"$1")
+  };
+}
+
 function parseFilter(value){
   if(!value)return{attribute:null,value:null};
   const m=String(value).match(
@@ -191,6 +265,29 @@ function userResource(row,base){
   };
   return u;
 }
+
+function groupResource(row,base){
+  const g={
+    schemas:[GROUP_SCHEMA],
+    id:row.id,
+    displayName:row.displayName,
+    members:(Array.isArray(row.members)?row.members:[]).map(x=>({
+      value:String(x?.value||""),
+      display:x?.display||undefined,
+      "$ref":base+"/Users/"+encodeURIComponent(String(x?.value||""))
+    }))
+  };
+  if(row.externalId)g.externalId=row.externalId;
+  g.meta={
+    resourceType:"Group",
+    created:row.createdAt,
+    lastModified:row.updatedAt,
+    version:versionFor(row),
+    location:base+"/Groups/"+encodeURIComponent(row.id)
+  };
+  return g;
+}
+
 function providerConfig(base){
   return{
     schemas:[SPC_SCHEMA],
@@ -212,9 +309,8 @@ function providerConfig(base){
   };
 }
 function resourceTypes(base){
-  return{
-    schemas:[LIST_SCHEMA],totalResults:1,startIndex:1,itemsPerPage:1,
-    Resources:[{
+  const Resources=[
+    {
       schemas:[RT_SCHEMA],
       id:"User",
       name:"User",
@@ -222,7 +318,20 @@ function resourceTypes(base){
       description:"TrustRelay organization member",
       schema:USER_SCHEMA,
       meta:{resourceType:"ResourceType",location:base+"/ResourceTypes/User"}
-    }]
+    },
+    {
+      schemas:[RT_SCHEMA],
+      id:"Group",
+      name:"Group",
+      endpoint:"/Groups",
+      description:"TrustRelay SCIM group used for enterprise role mapping",
+      schema:GROUP_SCHEMA,
+      meta:{resourceType:"ResourceType",location:base+"/ResourceTypes/Group"}
+    }
+  ];
+  return{
+    schemas:[LIST_SCHEMA],totalResults:Resources.length,startIndex:1,
+    itemsPerPage:Resources.length,Resources
   };
 }
 function userSchema(base){
@@ -248,6 +357,24 @@ function userSchema(base){
     meta:{resourceType:"Schema",location:base+"/Schemas/"+encodeURIComponent(USER_SCHEMA)}
   };
 }
+
+function groupSchema(base){
+  return{
+    schemas:[SCHEMA_SCHEMA],id:GROUP_SCHEMA,name:"Group",
+    description:"TrustRelay SCIM Group",
+    attributes:[
+      {name:"displayName",type:"string",multiValued:false,required:true,caseExact:false,mutability:"readWrite",returned:"default",uniqueness:"server"},
+      {name:"externalId",type:"string",multiValued:false,required:false,caseExact:true,mutability:"readWrite",returned:"default",uniqueness:"none"},
+      {name:"members",type:"complex",multiValued:true,required:false,mutability:"readWrite",returned:"default",subAttributes:[
+        {name:"value",type:"string",multiValued:false,required:true,caseExact:true,mutability:"immutable",returned:"default",uniqueness:"none"},
+        {name:"$ref",type:"reference",referenceTypes:["User"],multiValued:false,required:false,caseExact:true,mutability:"immutable",returned:"default"},
+        {name:"display",type:"string",multiValued:false,required:false,caseExact:false,mutability:"readOnly",returned:"default",uniqueness:"none"}
+      ]}
+    ],
+    meta:{resourceType:"Schema",location:base+"/Schemas/"+encodeURIComponent(GROUP_SCHEMA)}
+  };
+}
+
 async function authenticate(req){
   const auth=req.headers.get("authorization")||"";
   const m=auth.match(/^Bearer\s+(\S+)$/i);
@@ -261,7 +388,9 @@ function mapDbError(e){
   const c=String(e?.code||"");
   if(c.includes("CONFLICT")||c.includes("UNIQUENESS")||c.includes("ALREADY_EXISTS"))
     return{status:409,type:"uniqueness"};
-  if(c==="SCIM_USER_NOT_FOUND")return{status:404,type:"noTarget"};
+  if(c==="SCIM_USER_NOT_FOUND"||c==="SCIM_GROUP_NOT_FOUND"||c==="SCIM_GROUP_MAPPING_NOT_FOUND")return{status:404,type:"noTarget"};
+  if(c==="SCIM_GROUP_MEMBER_NOT_FOUND"||c==="SCIM_GROUP_DISPLAY_NAME_INVALID"||c==="SCIM_GROUP_ROLE_INVALID"||c==="SCIM_GROUP_PRIORITY_INVALID")return{status:400,type:"invalidValue"};
+  if(c==="SCIM_GROUP_SYNC_DISABLED")return{status:409,type:"mutability"};
   if(c==="SCIM_FILTER_UNSUPPORTED")return{status:400,type:"invalidFilter"};
   if(c==="SCIM_PRIVILEGED_MEMBER_PROTECTED")return{status:409,type:"mutability"};
   if(c==="SCIM_EMAIL_DOMAIN_NOT_VERIFIED")return{status:403,type:"invalidValue"};
@@ -299,23 +428,118 @@ Deno.serve(async req=>{
 
     if(method==="GET"&&resource==="ResourceTypes"){
       if(id){
-        if(id!=="User")return scimError(404,"Resource type not found.");
-        return scimResponse(resourceTypes(base).Resources[0]);
+        const rt=resourceTypes(base).Resources.find(x=>x.id===id);
+        if(!rt)return scimError(404,"Resource type not found.");
+        return scimResponse(rt);
       }
       return scimResponse(resourceTypes(base));
     }
 
     if(method==="GET"&&resource==="Schemas"){
-      if(id&&decodeURIComponent(id)!==USER_SCHEMA)
+      if(id){
+        const schemaId=decodeURIComponent(id);
+        if(schemaId===USER_SCHEMA)return scimResponse(userSchema(base));
+        if(schemaId===GROUP_SCHEMA)return scimResponse(groupSchema(base));
         return scimError(404,"Schema not found.");
-      return scimResponse(id?userSchema(base):{
-        schemas:[LIST_SCHEMA],totalResults:1,startIndex:1,itemsPerPage:1,
-        Resources:[userSchema(base)]
+      }
+      return scimResponse({
+        schemas:[LIST_SCHEMA],totalResults:2,startIndex:1,itemsPerPage:2,
+        Resources:[userSchema(base),groupSchema(base)]
       });
     }
 
-    if(resource==="Groups")
-      return scimError(501,"SCIM Group Push is not enabled for this TrustRelay release.");
+    if(resource==="Groups"){
+      if(method==="GET"&&id){
+        const x=await rpc("trustrelay_scim_get_group_v15",{
+          p_org_id:orgId,p_group_id:id
+        });
+        const g=groupResource(x.group,base);
+        return scimResponse(g,200,{etag:g.meta.version,location:g.meta.location});
+      }
+
+      if(method==="GET"){
+        const url=new URL(req.url),f=parseGroupFilter(url.searchParams.get("filter"));
+        const start=Math.max(1,Number(url.searchParams.get("startIndex")||1)||1);
+        const count=Math.max(1,Math.min(100,Number(url.searchParams.get("count")||100)||100));
+        const x=await rpc("trustrelay_scim_list_groups_v15",{
+          p_org_id:orgId,
+          p_filter_attribute:f.attribute,
+          p_filter_value:f.value,
+          p_start_index:start,
+          p_count:count
+        });
+        const groups=(x.groups||[]).map(g=>groupResource(g,base));
+        return scimResponse({
+          schemas:[LIST_SCHEMA],
+          totalResults:Number(x.totalResults||0),
+          startIndex:Number(x.startIndex||start),
+          itemsPerPage:groups.length,
+          Resources:groups
+        });
+      }
+
+      if(method==="POST"&&!id){
+        const input=await jsonBody(req);
+        const x=await rpc("trustrelay_scim_upsert_group_v15",{
+          p_org_id:orgId,
+          p_group_id:null,
+          p_external_id:input.externalId??null,
+          p_display_name:String(input.displayName||""),
+          p_member_ids:groupMemberIds(input.members)
+        });
+        const g=groupResource(x.group,base);
+        return scimResponse(g,201,{location:g.meta.location,etag:g.meta.version});
+      }
+
+      if(method==="PUT"&&id){
+        const input=await jsonBody(req);
+        const x=await rpc("trustrelay_scim_upsert_group_v15",{
+          p_org_id:orgId,
+          p_group_id:id,
+          p_external_id:input.externalId??null,
+          p_display_name:String(input.displayName||""),
+          p_member_ids:groupMemberIds(input.members)
+        });
+        const g=groupResource(x.group,base);
+        return scimResponse(g,200,{location:g.meta.location,etag:g.meta.version});
+      }
+
+      if(method==="PATCH"&&id){
+        const input=await jsonBody(req);
+        if(!Array.isArray(input.Operations)||!input.Operations.length)
+          throw{status:400,code:"SCIM_PATCH_OPERATIONS_REQUIRED",scimType:"invalidSyntax"};
+        if(Array.isArray(input.schemas)&&!input.schemas.includes(PATCH_SCHEMA))
+          throw{status:400,code:"SCIM_PATCH_SCHEMA_INVALID",scimType:"invalidSyntax"};
+
+        const existing=await rpc("trustrelay_scim_get_group_v15",{
+          p_org_id:orgId,p_group_id:id
+        });
+        let model=groupModel(existing.group);
+        for(const op of input.Operations)model=applyGroupPatch(model,op);
+
+        const x=await rpc("trustrelay_scim_upsert_group_v15",{
+          p_org_id:orgId,
+          p_group_id:id,
+          p_external_id:model.externalId,
+          p_display_name:model.displayName,
+          p_member_ids:model.members
+        });
+        const g=groupResource(x.group,base);
+        return scimResponse(g,200,{location:g.meta.location,etag:g.meta.version});
+      }
+
+      if(method==="DELETE"&&id){
+        await rpc("trustrelay_scim_delete_group_v15",{
+          p_org_id:orgId,p_group_id:id
+        });
+        return new Response(null,{status:204,headers:{
+          "cache-control":"no-store",
+          "x-content-type-options":"nosniff"
+        }});
+      }
+
+      return scimError(405,"Method not allowed.");
+    }
 
     if(resource!==""&&resource!=="Users")
       return scimError(404,"SCIM resource not found.");
