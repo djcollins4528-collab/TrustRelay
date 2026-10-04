@@ -415,11 +415,6 @@ const server=http.createServer({
     if(!["GET","HEAD"].includes(req.method||"GET"))return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD"});
     return sendJson(res,200,{status:RUNTIME_DISABLED?"quarantined":"ok"},{"Cache-Control":"no-cache, no-store, must-revalidate, max-age=0, private","Pragma":"no-cache","Expires":"0"});
   }
-  if(url.pathname==="/status.json"){
-    if(!["GET","HEAD"].includes(req.method||"GET"))return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD"});
-    const snapshot=await statusSnapshot();
-    return sendJson(res,200,snapshot,{"Cache-Control":"no-cache, no-store, must-revalidate, max-age=0","Pragma":"no-cache","Expires":"0"});
-  }
   if(!hostAllowed(req))return sendJson(res,421,{error:{code:"HOST_NOT_ALLOWED"}});
   if(EDGE_ORIGIN_SECRET&&!secretEqual(String(req.headers["x-trustrelay-edge-origin"]||""),EDGE_ORIGIN_SECRET)){
     return sendJson(res,403,{error:{code:"EDGE_ORIGIN_REQUIRED"}});
@@ -428,6 +423,11 @@ const server=http.createServer({
     return sendJson(res,503,{error:{code:"RUNTIME_QUARANTINED"}},{"Retry-After":"3600"});
   }
   if(!applyRuntimeRateLimit(req,res,url.pathname))return;
+  if(url.pathname==="/status.json"){
+    if(!["GET","HEAD"].includes(req.method||"GET"))return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD"});
+    const snapshot=await statusSnapshot();
+    return sendJson(res,200,snapshot,{"Cache-Control":"no-cache, no-store, must-revalidate, max-age=0","Pragma":"no-cache","Expires":"0"});
+  }
   if(url.pathname==="/internal/webhook-egress"){
     return sendJson(res,410,{error:{code:"WEBHOOK_EGRESS_RETIRED",replacement:"trustrelay-webhook-egress-v10"}});
   }
