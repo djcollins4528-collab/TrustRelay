@@ -1,0 +1,52 @@
+name: Production Trust Surface Smoke
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify production trust surfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://trustrelay-production.onrender.com"
+
+          check_200() {
+            local path="$1"
+            local status
+            status="$(curl -fsS -o /tmp/body -w "%{http_code}" --max-time 15 "$base$path")"
+            test "$status" = "200"
+          }
+
+          check_200 "/healthz"
+          jq -e '.status == "ok"' /tmp/body >/dev/null
+
+          check_200 "/status.json"
+          jq -e '.overall == "operational" and .components.runtime == "operational" and .components.platform == "operational"' /tmp/body >/dev/null
+
+          check_200 "/"
+          grep -q "TrustRelay" /tmp/body
+
+          check_200 "/legal/"
+          grep -q "Trust Center" /tmp/body
+
+          check_200 "/security/"
+          grep -q "Vulnerability Disclosure" /tmp/body
+
+          check_200 "/.well-known/security.txt"
+          grep -q "^Contact:" /tmp/body
+          grep -q "^Expires:" /tmp/body
+          grep -q "^Policy:" /tmp/body
+
+          check_200 "/developers/"
+          grep -q "Developer Center" /tmp/body
+
+          echo "PRODUCTION_TRUST_SURFACE_SMOKE_PASS"
