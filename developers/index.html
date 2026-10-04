@@ -16,7 +16,8 @@
       <nav class="topnav" aria-label="Developer navigation">
         <a href="#quickstart">Quick start</a>
         <a href="#api">API</a>
-        <a href="#webhooks">Webhooks</a>
+        <a href="#scim">SCIM</a>
+      <a href="#webhooks">Webhooks</a>
         <a href="../verifier/openapi.json">OpenAPI</a>
         <a href="../legal/">Trust Center</a>
         <a href="../status/">Status</a>
@@ -229,6 +230,35 @@ response = requests.post(
 response.raise_for_status()
 decision = response.json()</code></pre>
         </div>
+      </section>
+
+      <section id="scim">
+        <div class="section-heading"><p class="eyebrow">Enterprise provisioning</p><h2>SCIM 2.0 user and group lifecycle.</h2><p>Organizations using Microsoft Entra ID or Okta can provision TrustRelay members, synchronize groups, and map approved groups to bounded organization roles.</p></div>
+        <div class="two-col">
+          <div class="doc-card">
+            <h3>Tenant-bound endpoint</h3>
+            <p>The Verifier Portal issues the organization-specific SCIM Base URL and a one-time bearer token. The raw token is shown only at creation; TrustRelay stores its SHA-256 hash.</p>
+            <p><code>/scim/v2/{tenantKey}</code></p>
+          </div>
+          <div class="doc-card">
+            <h3>Supported resources</h3>
+            <dl>
+              <dt><code>/Users</code></dt><dd>Create, list/filter, retrieve, replace, patch, suspend/reactivate, and deprovision organization users.</dd>
+              <dt><code>/Groups</code></dt><dd>Create, list/filter, retrieve, replace, patch membership, and delete synchronized groups.</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Capability</th><th>Support</th><th>Security behavior</th></tr></thead>
+          <tbody>
+            <tr><td>ServiceProviderConfig / ResourceTypes / Schemas</td><td><span class="pill good">Supported</span></td><td>Advertises current SCIM capabilities to the identity provider.</td></tr>
+            <tr><td>User lifecycle</td><td><span class="pill good">Supported</span></td><td>SCIM deprovisioning removes organization access without deleting the global TrustRelay identity.</td></tr>
+            <tr><td>Group Push</td><td><span class="pill good">Supported</span></td><td>Membership changes reconcile only SCIM-managed non-privileged memberships.</td></tr>
+            <tr><td>Enterprise role mapping</td><td><span class="pill good">Supported</span></td><td>Mappings are limited to Verifier, Auditor, Developer, or Compliance. Owner and Admin cannot be assigned by SCIM.</td></tr>
+            <tr><td>Credential rotation</td><td><span class="pill good">Supported</span></td><td>Overlapping bearer credentials support zero-downtime rotation before the old credential is revoked.</td></tr>
+          </tbody>
+        </table></div>
+        <div class="notice"><strong>Privilege boundary.</strong> SCIM cannot take over manually managed memberships or protected Owner/Admin memberships. When Group Push is disabled, SCIM-managed users reconcile to the organization's default SCIM role.</div>
       </section>
 
       <section id="webhooks">
