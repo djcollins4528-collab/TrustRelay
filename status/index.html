@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#06111d">
+  <meta name="robots" content="noindex">
+  <meta name="description" content="Current TrustRelay service health for the production runtime and core platform dependency.">
+  <title>Service Status — TrustRelay</title>
+  <link rel="stylesheet" href="../legal/legal.css">
+</head>
+<body>
+  <header>
+    <div class="bar">
+      <a class="brand" href="../">TrustRelay</a>
+      <nav class="nav" aria-label="Status navigation">
+        <a href="../legal/">Trust Center</a>
+        <a href="../security/">Security Reporting</a>
+        <a href="../developers/">Developers</a>
+        <a href="../support/">Support</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <p class="eyebrow">SERVICE STATUS</p>
+    <h1>TrustRelay system health</h1>
+    <p class="hero-copy">This page reports the current production runtime state and the availability of the identity and data platform dependency used by TrustRelay. It does not claim historical uptime that has not been independently measured.</p>
+
+    <section>
+      <div class="posture-card">
+        <p class="eyebrow">Current status</p>
+        <h3 id="overallStatus">Checking…</h3>
+        <p id="statusMessage">Running a live health check.</p>
+        <div class="posture-list">
+          <div class="posture-row"><span>Production runtime</span><strong id="runtimeStatus">Checking…</strong></div>
+          <div class="posture-row"><span>Identity & data platform</span><strong id="dependencyStatus">Checking…</strong></div>
+          <div class="posture-row"><span>Partner API gateway</span><strong id="apiStatus">Checking…</strong></div>
+          <div class="posture-row"><span>SCIM gateway</span><strong id="scimStatus">Checking…</strong></div>
+        </div>
+        <p id="lastChecked" class="fine-print">Last checked: —</p>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <div><p class="eyebrow">Status definitions</p><h2>What the indicators mean.</h2></div>
+        <p>Status is derived from TrustRelay's live production runtime and a bounded dependency health check. A successful page load alone is not treated as proof that every downstream workflow is healthy.</p>
+      </div>
+      <div class="grid">
+        <div class="card"><h3>Operational</h3><p>The production runtime is serving requests and the platform dependency health check succeeded.</p><div class="card-meta"><span>Live state</span><span class="badge good">Operational</span></div></div>
+        <div class="card"><h3>Degraded</h3><p>The TrustRelay runtime is reachable but a core dependency check did not complete successfully.</p><div class="card-meta"><span>Investigate</span><span class="badge warn">Degraded</span></div></div>
+        <div class="card"><h3>Unavailable</h3><p>The status endpoint could not be reached or the production runtime reports a quarantined state.</p><div class="card-meta"><span>Service impact</span><span class="badge warn">Unavailable</span></div></div>
+        <div class="card"><h3>Historical uptime</h3><p>TrustRelay does not yet publish a percentage uptime claim. Historical reporting will be added only after sufficient monitoring history exists.</p><div class="card-meta"><span>No invented SLA</span><span class="badge good">Transparent</span></div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <div><p class="eyebrow">Security & incidents</p><h2>Report a problem privately.</h2></div>
+        <p>Suspected vulnerabilities should not be submitted through public channels. Use the vulnerability disclosure route for security issues and Support for ordinary product problems.</p>
+      </div>
+      <div class="action-row">
+        <a class="btn" href="../security/">Security reporting</a>
+        <a class="btn alt" href="../support/">Product support</a>
+        <a class="btn alt" href="../legal/">Trust Center</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <span>TrustRelay · Service Status</span>
+      <span>Live status only · no historical SLA claim</span>
+    </div>
+  </footer>
+
+  <script src="./status.js" defer></script>
+</body>
+</html>
