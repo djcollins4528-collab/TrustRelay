@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#06111d">
+  <meta name="robots" content="noindex">
+  <meta name="description" content="TrustRelay security and assurance factsheet for enterprise diligence.">
+  <title>Security & Assurance Factsheet — TrustRelay</title>
+  <link rel="stylesheet" href="./legal.css">
+</head>
+<body>
+  <header>
+    <div class="bar">
+      <a class="brand" href="../">TrustRelay</a>
+      <nav class="nav" aria-label="Assurance navigation">
+        <a href="./">Trust Center</a>
+        <a href="../status/">Status</a>
+        <a href="../security/">Security Reporting</a>
+        <a href="../developers/">Developers</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <p class="eyebrow">ENTERPRISE DILIGENCE · CURRENT CONTROL SUMMARY</p>
+    <h1>Security & Assurance Factsheet</h1>
+    <p class="hero-copy">A concise summary of controls implemented in the TrustRelay production-candidate platform. This factsheet distinguishes implemented engineering from external assurance, contractual commitments, and certifications that are still pending.</p>
+
+    <div class="trust-notice"><strong>Scope.</strong> This page is an operational assurance summary, not a certification, audit opinion, legal representation, or substitute for a customer-specific security review.</div>
+
+    <section>
+      <div class="section-head">
+        <div><p class="eyebrow">Identity & access</p><h2>Enterprise access is bounded and auditable.</h2></div>
+        <p>Authentication and authorization controls are separated so possession of an identity is not equivalent to permission to perform sensitive institutional actions.</p>
+      </div>
+      <div class="grid">
+        <div class="card"><h3>Passwordless user authentication</h3><p>Email magic-link/OTP avoids reusable user passwords in the normal account flow.</p><div class="card-meta"><span>Authentication</span><span class="badge good">Implemented</span></div></div>
+        <div class="card"><h3>Enterprise SSO</h3><p>Organization SSO supports Microsoft Entra ID and Okta with server-enforced organization policy and lockout protections.</p><div class="card-meta"><span>SSO</span><span class="badge good">Implemented</span></div></div>
+        <div class="card"><h3>SCIM lifecycle</h3><p>SCIM 2.0 supports user lifecycle, Group Push, membership synchronization, and safe enterprise role mapping.</p><div class="card-meta"><span>Provisioning</span><span class="badge good">Implemented</span></div></div>
+        <div class="card"><h3>Privilege boundary</h3><p>SCIM cannot assign Owner or Admin and does not take over manually managed or privileged memberships.</p><div class="card-meta"><span>Least privilege</span><span class="badge good">Enforced</span></div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <div><p class="eyebrow">Application & data</p><h2>Sensitive operations stay on trusted paths.</h2></div>
+        <p>TrustRelay uses server-side authorization, private storage, explicit evidence-sharing workflows, and integrity records to reduce browser and client trust.</p>
+      </div>
+      <div class="grid">
+        <div class="card"><h3>Server-enforced RBAC</h3><p>Organization roles and privileged operations are enforced by trusted server functions rather than presentation-layer controls alone.</p></div>
+        <div class="card"><h3>Private evidence storage</h3><p>Identity and supporting evidence is kept private and exposed only through bounded workflow-controlled access paths.</p></div>
+        <div class="card"><h3>Cryptographic integrity</h3><p>Authority credentials use ES256 signing; evidence and export artifacts use SHA-256 integrity hashes; organization activity uses hash-linked audit evidence.</p></div>
+        <div class="card"><h3>Scoped integrations</h3><p>Partner API keys are scope-limited and stored as hashes. Webhooks use signed delivery with retry and delivery-history controls.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <div><p class="eyebrow">Secure delivery & operations</p><h2>Changes are gated before production.</h2></div>
+        <p>Production deploys use an approved-commit gate and separate production and staging environments. Security checks are integrated into the delivery workflow.</p>
+      </div>
+      <div class="checklist">
+        <div class="check-item"><span class="check-mark">✓</span><div><strong>Separate staging and production resources</strong><small>Application and backend environments are isolated with production-specific validation.</small></div><span class="badge good">Implemented</span></div>
+        <div class="check-item"><span class="check-mark">✓</span><div><strong>Static analysis and security gates</strong><small>CodeQL, repository security checks, dependency/workflow controls, and release checks run in CI.</small></div><span class="badge good">Implemented</span></div>
+        <div class="check-item"><span class="check-mark">✓</span><div><strong>Dynamic application security testing</strong><small>Automated DAST is part of the release process; it is not represented as an independent penetration test.</small></div><span class="badge good">Implemented</span></div>
+        <div class="check-item"><span class="check-mark">✓</span><div><strong>Production smoke monitoring</strong><small>Public trust surfaces and current service health are checked on a recurring schedule.</small></div><span class="badge good">Implemented</span></div>
+        <div class="check-item"><span class="check-mark">✓</span><div><strong>Incident and recovery procedures</strong><small>Incident response, backup, recovery, privacy-request, and production-readiness procedures are documented.</small></div><span class="badge good">Implemented</span></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <div><p class="eyebrow">Public assurance</p><h2>Inspect the controls and current posture.</h2></div>
+        <p>TrustRelay publishes operational and security surfaces so prospects do not have to rely solely on marketing claims.</p>
+      </div>
+      <div class="doc-grid">
+        <a class="card" href="./security.html"><h3>Security Statement</h3><p>Implemented controls and explicit non-claims.</p><div class="card-meta"><span>Security</span><span class="badge good">Published</span></div></a>
+        <a class="card" href="../status/"><h3>Live Service Status</h3><p>Current runtime and dependency health without an invented uptime percentage.</p><div class="card-meta"><span>Operations</span><span class="badge good">Live</span></div></a>
+        <a class="card" href="../security/"><h3>Vulnerability Disclosure</h3><p>Private reporting route and bounded good-faith research guidelines.</p><div class="card-meta"><span>Security</span><span class="badge good">Published</span></div></a>
+        <a class="card" href="../developers/"><h3>Developer Center</h3><p>Partner API contract, authentication, errors, webhooks, and integration guidance.</p><div class="card-meta"><span>Technical</span><span class="badge good">Published</span></div></a>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <div><p class="eyebrow">External assurance</p><h2>Claims we intentionally do not make yet.</h2></div>
+        <p>These controls require independent parties or formal external completion and remain clearly separated from implemented engineering.</p>
+      </div>
+      <div class="checklist">
+        <div class="check-item"><span class="check-mark pending">!</span><div><strong>Independent penetration test</strong><small>Pending third-party engagement and remediation verification.</small></div><span class="badge warn">Pending</span></div>
+        <div class="check-item"><span class="check-mark pending">!</span><div><strong>SOC 2 / ISO 27001</strong><small>No audit report or certification is currently claimed.</small></div><span class="badge warn">Not claimed</span></div>
+        <div class="check-item"><span class="check-mark pending">!</span><div><strong>Qualified legal review</strong><small>Binding commercial documents and final retention commitments remain blocked pending counsel review.</small></div><span class="badge warn">Pending</span></div>
+        <div class="check-item"><span class="check-mark pending">!</span><div><strong>Custom production domain</strong><small>The current production-candidate hostname remains temporary until the production-owned domain and edge cutover are complete.</small></div><span class="badge warn">Pending</span></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <span>TrustRelay · Security & Assurance Factsheet</span>
+      <span>Last updated October 3, 2026 · No certification implied</span>
+    </div>
+  </footer>
+</body>
+</html>
