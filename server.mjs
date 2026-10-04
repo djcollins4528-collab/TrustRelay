@@ -498,7 +498,7 @@ const server=http.createServer({
     const html=ext===".html";
     const relative=path.relative(ROOT,actual).split(path.sep).join("/");
     const authenticatedSurface=/^(web|verifier|reviewer)\//.test(relative);
-    const noStore=html||authenticatedSurface;
+    const noStore=html||authenticatedSurface||relative==="robots.txt";
     res.writeHead(200,headers({
       "Content-Type":types[ext]||"application/octet-stream",
       "Content-Length":data.length,
