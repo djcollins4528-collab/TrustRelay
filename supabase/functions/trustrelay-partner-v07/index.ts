@@ -77,15 +77,6 @@ function canonical(v) {
   }
   return v;
 }
-function decodeJwtPayload(token) {
-  try {
-    const p = token.split(".")[1];
-    if (!p) return {};
-    const s = p.replaceAll("-","+").replaceAll("_","/");
-    const pad = s + "=".repeat((4 - s.length % 4) % 4);
-    return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(pad), c=>c.charCodeAt(0))));
-  } catch { return {}; }
-}
 function resourceMatches(pattern, resource) {
   if (pattern === "*") return true;
   if (pattern.endsWith("*")) return resource.startsWith(pattern.slice(0,-1));
@@ -253,6 +244,10 @@ Deno.serve(async req => {
         });
     if(!ctx?.ok)throw {status:Number(ctx?.status)||401,code:ctx?.code||(internal?"INTERNAL_CONTEXT_DENIED":"API_KEY_INVALID")};
     if(ctx.prior){
+      const priorFingerprint=String(ctx.prior.request_fingerprint||"");
+      if(!priorFingerprint||priorFingerprint!==requestFingerprint){
+        throw {status:409,code:"REQUEST_ID_REUSE_MISMATCH"};
+      }
       if(internal){
         const marked=await rpc("trustrelay_mark_portal_decision_v07",{
           p_auth_user_id:internalUserId,p_org_id:ctx.organization.id,p_request_id:requestId
@@ -274,13 +269,12 @@ Deno.serve(async req => {
     if(quota.allowed===false) throw {status:429,code:"PLAN_LIMIT_EXCEEDED",details:{metric:"decisions",current:quota.current,limit:quota.limit,planCode:quota.planCode}};
 
     const verified=await verifyCredential(token);
-    const decoded=decodeJwtPayload(token);
     let result;
-    let authority=verified.authority || null;
-    let credentialJti=verified?.credential?.jti || decoded?.jti || null;
-    let grantId=authority?.grantId || decoded?.grant_id || null;
-    let principalId=authority?.principalPersonId || decoded?.principal_person_id || null;
-    let representativeId=authority?.representativePersonId || decoded?.representative_person_id || null;
+    let authority=verified.valid===true ? (verified.authority || null) : null;
+    let credentialJti=verified.valid===true ? (verified?.credential?.jti || null) : null;
+    let grantId=verified.valid===true ? (authority?.grantId || null) : null;
+    let principalId=verified.valid===true ? (authority?.principalPersonId || null) : null;
+    let representativeId=verified.valid===true ? (authority?.representativePersonId || null) : null;
 
     if (verified.valid !== true) {
       result={
