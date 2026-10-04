@@ -719,8 +719,8 @@ function showScimCredentials(x){
 }
 
 function renderScim(){
-  const root=$("scimSummary"),endpointRoot=$("scimEndpointList"),credRoot=$("scimCredentialList");
-  if(!root||!endpointRoot||!credRoot)return;
+  const root=$("scimSummary"),endpointRoot=$("scimEndpointList"),credRoot=$("scimCredentialList"),groupRoot=$("scimGroupList");
+  if(!root||!endpointRoot||!credRoot||!groupRoot)return;
 
   const x=state.scim||{},cfg=x.config||{};
   const configured=Boolean(x.configured);
@@ -731,6 +731,8 @@ function renderScim(){
   const credentials=Array.isArray(x.credentials)?x.credentials:[];
   const activeCredentials=credentials.filter(c=>c.status==="active"&&(!c.expiresAt||Date.parse(c.expiresAt)>Date.now()));
   const counts=x.counts||{},users={active:counts.activeUsers??0,total:counts.users??0};
+  const groups=Array.isArray(x.groups)?x.groups:[];
+  const groupSyncEnabled=Boolean(x.groupSyncEnabled??cfg.groupSyncEnabled);
   const defaultRole=x.defaultRole||cfg.defaultRole||"verifier";
 
   $("scimStatusChip").textContent=!configured?"NOT CONFIGURED":active?"ACTIVE":"DISABLED";
@@ -749,6 +751,8 @@ function renderScim(){
       ["Service",status],
       ["Default role",defaultRole],
       ["Users",String(users.active??0)+" active / "+String(users.total??0)+" total"],
+      ["Group Push",groupSyncEnabled?"enabled":"disabled"],
+      ["Groups",String(counts.groups??groups.length)+" synchronized / "+String(counts.mappedGroups??groups.filter(g=>g.mappingEnabled).length)+" mapped"],
       ["Active credentials",String(activeCredentials.length)],
       ["Last sync",x.lastSyncAt||cfg.lastSyncAt?formatDate(x.lastSyncAt||cfg.lastSyncAt,true):"Never"],
       ["Rate limit",String(x.rateLimitPerMinute||cfg.rateLimitPerMinute||300)+" requests/minute"]
@@ -765,6 +769,7 @@ function renderScim(){
     ["SCIM Base URL",base],
     ["ServiceProviderConfig",base+"/ServiceProviderConfig"],
     ["Users",base+"/Users"],
+    ["Groups",base+"/Groups"],
     ["Authentication","Bearer token"]
   ];
   for(const [label,value] of endpoints){
@@ -799,10 +804,69 @@ function renderScim(){
     }
   }
 
+  groupRoot.replaceChildren();
+  if(!configured){
+    const empty=document.createElement("div");empty.className="empty-management";
+    empty.textContent="Configure SCIM before enabling Group Push.";
+    groupRoot.appendChild(empty);
+  }else if(!groups.length){
+    const empty=document.createElement("div");empty.className="empty-management";
+    empty.textContent=groupSyncEnabled
+      ?"Group Push is enabled. Groups will appear here after Entra ID or Okta synchronizes them."
+      :"Enable Group Push, then configure group synchronization in your identity provider.";
+    groupRoot.appendChild(empty);
+  }else{
+    const safeRoles=["verifier","auditor","developer","compliance"];
+    for(const group of groups){
+      const row=document.createElement("div");row.className="management-row";
+      const details=document.createElement("div");
+      const title=document.createElement("strong");title.textContent=group.displayName||group.id||"SCIM group";
+      const meta=document.createElement("p");
+      meta.textContent=String(group.memberCount??0)+" members"+(group.externalId?" · "+group.externalId:"");
+      const chips=document.createElement("div");chips.className="row-meta";
+      const syncChip=document.createElement("span");syncChip.className="small-chip";syncChip.textContent="SCIM group";
+      const mapChip=document.createElement("span");mapChip.className="small-chip";
+      mapChip.textContent=group.mappingEnabled&&group.mappedRole
+        ?"maps to "+group.mappedRole+" · priority "+String(group.mappingPriority??100)
+        :"unmapped";
+      chips.append(syncChip,mapChip);details.append(title,meta,chips);row.append(details);
+
+      const actions=document.createElement("div");actions.className="management-actions";
+      const role=document.createElement("select");role.className="compact-select";
+      role.dataset.scimGroupRole=group.id;
+      const blank=document.createElement("option");blank.value="";blank.textContent="No role mapping";role.appendChild(blank);
+      for(const r of safeRoles){
+        const option=document.createElement("option");option.value=r;
+        option.textContent=r.charAt(0).toUpperCase()+r.slice(1);
+        option.selected=group.mappedRole===r&&group.mappingEnabled!==false;
+        role.appendChild(option);
+      }
+      const priority=document.createElement("input");
+      priority.type="number";priority.min="1";priority.max="1000";priority.step="1";
+      priority.value=String(group.mappingPriority??100);
+      priority.className="compact-select";
+      priority.setAttribute("aria-label","SCIM group mapping priority");
+      priority.dataset.scimGroupPriority=group.id;
+
+      const save=document.createElement("button");save.type="button";save.className="button secondary small";
+      save.dataset.saveScimGroupMapping=group.id;save.textContent="Save mapping";
+      actions.append(role,priority,save);
+
+      if(group.mappingId){
+        const remove=document.createElement("button");remove.type="button";remove.className="button ghost small";
+        remove.dataset.deleteScimGroupMapping=group.id;remove.textContent="Remove mapping";
+        actions.appendChild(remove);
+      }
+      row.appendChild(actions);groupRoot.appendChild(row);
+    }
+  }
+
   $("enableScimButton").classList.toggle("hidden",configured);
   $("enableScimButton").disabled=!ssoReady;
   $("rotateScimTokenButton").classList.toggle("hidden",!active);
   $("saveScimPolicyButton").classList.toggle("hidden",!configured);
+  $("enableScimGroupSyncButton").classList.toggle("hidden",!active||groupSyncEnabled);
+  $("disableScimGroupSyncButton").classList.toggle("hidden",!active||!groupSyncEnabled);
   $("disableScimButton").classList.toggle("hidden",!active);
   $("reenableScimButton").classList.toggle("hidden",!configured||active);
 }
