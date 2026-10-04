@@ -478,7 +478,9 @@ const server=http.createServer({
     res.writeHead(200,headers({
       "Content-Type":"text/plain; charset=utf-8",
       "Content-Length":data.length,
-      "Cache-Control":"public, max-age=300"
+      "Cache-Control":"no-cache, no-store, must-revalidate, max-age=0",
+      "Pragma":"no-cache",
+      "Expires":"0"
     }));
     if(req.method==="HEAD")res.end();else res.end(data);
     return;
