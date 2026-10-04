@@ -102,8 +102,8 @@ const types={
   ".ico":"image/x-icon",".txt":"text/plain; charset=utf-8"
 };
 
-const PUBLIC_TOP_LEVEL_FILES=new Set(["index.html"]);
-const PUBLIC_DIRECTORIES=new Set(["web","verifier","reviewer","legal","pilot","support","developers"]);
+const PUBLIC_TOP_LEVEL_FILES=new Set(["index.html","security.txt"]);
+const PUBLIC_DIRECTORIES=new Set(["web","verifier","reviewer","legal","pilot","support","developers","status","security"]);
 const PUBLIC_EXTENSIONS=new Set([".html",".js",".css",".json",".svg",".png",".jpg",".jpeg",".webp",".ico",".txt"]);
 
 
@@ -342,8 +342,43 @@ function consumeRuntimeRateLimit(req){
   return {allowed:bucket.count<=RATE_LIMIT_PER_MINUTE,remaining,resetSeconds};
 }
 function isRateLimitedPath(pathname){
-  return pathname==="/runtime-config.json"||pathname==="/version"||pathname.startsWith("/v1/")||pathname.startsWith("/scim/v2")||pathname.startsWith("/internal/");
+  return pathname==="/runtime-config.json"||pathname==="/version"||pathname==="/status.json"||pathname.startsWith("/v1/")||pathname.startsWith("/scim/v2")||pathname.startsWith("/internal/");
 }
+async function statusSnapshot(){
+  const checkedAt=new Date().toISOString();
+  const runtime=RUNTIME_DISABLED?"quarantined":"operational";
+  let platform="degraded";
+  if(!RUNTIME_DISABLED){
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),3000);
+    try{
+      const response=await fetch(SUPABASE_URL+"/auth/v1/health",{
+        method:"GET",
+        headers:{apikey:SUPABASE_PUBLISHABLE_KEY,accept:"application/json"},
+        signal:controller.signal
+      });
+      platform=response.ok?"operational":"degraded";
+    }catch{
+      platform="degraded";
+    }finally{
+      clearTimeout(timer);
+    }
+  }
+  const overall=runtime==="operational"&&platform==="operational"
+    ?"operational"
+    :runtime==="operational"?"degraded":"unavailable";
+  return{
+    overall,
+    checkedAt,
+    components:{
+      runtime,
+      platform,
+      partnerApi:overall==="operational"?"operational":"degraded",
+      scim:overall==="operational"?"operational":"degraded"
+    }
+  };
+}
+
 function applyRuntimeRateLimit(req,res,pathname){
   if(!isRateLimitedPath(pathname))return true;
   const r=consumeRuntimeRateLimit(req);
@@ -379,6 +414,11 @@ const server=http.createServer({
   if(url.pathname==="/healthz"){
     if(!["GET","HEAD"].includes(req.method||"GET"))return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD"});
     return sendJson(res,200,{status:RUNTIME_DISABLED?"quarantined":"ok"},{"Cache-Control":"no-cache, no-store, must-revalidate, max-age=0, private","Pragma":"no-cache","Expires":"0"});
+  }
+  if(url.pathname==="/status.json"){
+    if(!["GET","HEAD"].includes(req.method||"GET"))return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD"});
+    const snapshot=await statusSnapshot();
+    return sendJson(res,200,snapshot,{"Cache-Control":"no-cache, no-store, must-revalidate, max-age=0","Pragma":"no-cache","Expires":"0"});
   }
   if(!hostAllowed(req))return sendJson(res,421,{error:{code:"HOST_NOT_ALLOWED"}});
   if(EDGE_ORIGIN_SECRET&&!secretEqual(String(req.headers["x-trustrelay-edge-origin"]||""),EDGE_ORIGIN_SECRET)){
@@ -429,6 +469,19 @@ const server=http.createServer({
   }
   if(!["GET","HEAD"].includes(req.method||"GET")){
     return sendJson(res,405,{error:{code:"METHOD_NOT_ALLOWED"}},{Allow:"GET, HEAD"});
+  }
+
+  if(url.pathname==="/.well-known/security.txt"){
+    let data;
+    try{data=fs.readFileSync(path.join(ROOT,"security.txt"))}
+    catch{return sendJson(res,404,{error:{code:"NOT_FOUND"}})}
+    res.writeHead(200,headers({
+      "Content-Type":"text/plain; charset=utf-8",
+      "Content-Length":data.length,
+      "Cache-Control":"public, max-age=300"
+    }));
+    if(req.method==="HEAD")res.end();else res.end(data);
+    return;
   }
 
   const file=safeFile(url.pathname);
