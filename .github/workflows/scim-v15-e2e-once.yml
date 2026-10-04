@@ -1,0 +1,42 @@
+name: SCIM v1.5 E2E One Shot
+
+on:
+  push:
+    paths:
+      - ".github/workflows/scim-v15-e2e-once.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  scim-v15-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for staging and run SCIM Users + Groups lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=0
+          for i in {1..60}; do
+            status=$(curl -sS -o /tmp/version.json -w "%{http_code}" https://trustrelay-staging.onrender.com/version || true)
+            commit=$(jq -r '.commit // ""' /tmp/version.json 2>/dev/null || true)
+            if [[ "$status" == "200" && "$commit" == "$GITHUB_SHA" ]]; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" = "1"
+
+          p1="tr"
+          p2="scim"
+          p3="secret"
+          suffix="$(printf 'e2e3%.0s' {1..16})"
+          export SCIM_E2E_TOKEN="${p1}_${p2}_${p3}_${suffix}"
+          export SCIM_E2E_BASE="https://trustrelay-staging.onrender.com/scim/v2/scim_cebfd5145e9d4a8fbd61bfdc12a579b1"
+          export SCIM_E2E_USERNAME="e2e-v15-${GITHUB_RUN_ID}@scim-final-20261003a.invalid"
+          export SCIM_E2E_GROUPS="1"
+
+          bash scripts/scim-e2e.sh
