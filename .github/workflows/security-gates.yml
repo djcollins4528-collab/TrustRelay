@@ -56,6 +56,20 @@ jobs:
               print("\n".join(sorted(set(bad))))
               sys.exit(1)
 
+      - name: Reject legacy JWT subject decoders
+        shell: python
+        run: |
+          import pathlib, re, sys
+          bad = []
+          for path in pathlib.Path("supabase/functions").glob("*/index.ts"):
+              text = path.read_text(encoding="utf-8")
+              if re.search(r"function\s+sub\s*\(req\)", text):
+                  bad.append(str(path))
+          if bad:
+              print("Legacy unverified JWT subject decoders found:")
+              print("\n".join(sorted(bad)))
+              sys.exit(1)
+
       - name: Verify production static-surface isolation
         shell: bash
         run: |
