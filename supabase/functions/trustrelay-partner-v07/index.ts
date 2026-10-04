@@ -105,22 +105,31 @@ function evaluate(authority, request) {
     return {decision:"ESCALATE",reasonCode:"POLICY_REVIEW_REQUIRED",reasonDetail:"The grant contains policy rules that require manual review."};
   }
 
-  if (rules.allowedCurrencies && Array.isArray(rules.allowedCurrencies)) {
-    if (request.amount != null && !request.currency) {
+  const hasCurrencyPolicy = Array.isArray(rules.allowedCurrencies);
+  const hasAmountPolicy = rules.maxAmount != null;
+  if ((hasCurrencyPolicy || hasAmountPolicy) && request.amount == null) {
+    return {decision:"DENY",reasonCode:"AMOUNT_REQUIRED",reasonDetail:"An amount is required when the grant contains monetary policy."};
+  }
+
+  if (hasCurrencyPolicy) {
+    if (!request.currency) {
       return {decision:"DENY",reasonCode:"CURRENCY_REQUIRED",reasonDetail:"A currency is required for this monetary request."};
     }
-    if (request.currency && !rules.allowedCurrencies.includes(request.currency)) {
+    if (!rules.allowedCurrencies.includes(request.currency)) {
       return {decision:"DENY",reasonCode:"CURRENCY_NOT_ALLOWED",reasonDetail:"The requested currency is not permitted by the grant."};
     }
   }
 
-  if (rules.maxAmount != null && request.amount != null) {
+  if (hasAmountPolicy) {
     const amount = Number(request.amount);
     const limit = Number(rules.maxAmount);
+    if (!Number.isFinite(limit) || limit < 0) {
+      return {decision:"ESCALATE",reasonCode:"POLICY_REVIEW_REQUIRED",reasonDetail:"The amount rule could not be evaluated automatically."};
+    }
     if (!Number.isFinite(amount) || amount < 0) {
       return {decision:"DENY",reasonCode:"AMOUNT_INVALID",reasonDetail:"The requested amount is invalid."};
     }
-    if (Number.isFinite(limit) && amount > limit) {
+    if (amount > limit) {
       if (escalation.aboveLimit === "ESCALATE") {
         return {decision:"ESCALATE",reasonCode:"AMOUNT_ABOVE_LIMIT",reasonDetail:"The amount exceeds the grant limit and requires escalation."};
       }
