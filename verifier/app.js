@@ -1035,6 +1035,27 @@ function setup(){
     finally{busy(b,false)}
   };
 
+  $("enableScimGroupSyncButton").onclick=async()=>{
+    const b=$("enableScimGroupSyncButton");busy(b,true,"Enabling…");
+    try{
+      await scimAdminEdge({action:"group_sync",orgId:state.orgId,enabled:true});
+      state.scim=await scimStatus();renderScim();
+      toast("SCIM Group Push enabled. Configure group synchronization in Entra ID or Okta.","success");
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
+    finally{busy(b,false)}
+  };
+
+  $("disableScimGroupSyncButton").onclick=async()=>{
+    if(!confirm("Disable SCIM Group Push? Existing group records and mappings will be retained, but SCIM-managed users will fall back to the default SCIM role until Group Push is re-enabled."))return;
+    const b=$("disableScimGroupSyncButton");busy(b,true,"Disabling…");
+    try{
+      await scimAdminEdge({action:"group_sync",orgId:state.orgId,enabled:false});
+      state.scim=await scimStatus();renderScim();
+      toast("SCIM Group Push disabled. SCIM-managed roles were reconciled to the default role.","success");
+    }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
+    finally{busy(b,false)}
+  };
+
   $("disableScimButton").onclick=async()=>{
     if(!confirm("Disable SCIM provisioning? All active SCIM credentials will be revoked. Existing organization memberships remain unchanged."))return;
     const b=$("disableScimButton");busy(b,true,"Disabling…");
@@ -1074,6 +1095,51 @@ function setup(){
       toast("SCIM credential revoked.","success");
     }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
     finally{busy(b,false)}
+  });
+
+  $("scimGroupList").addEventListener("click",async event=>{
+    const save=event.target.closest("[data-save-scim-group-mapping]");
+    if(save){
+      const groupId=save.dataset.saveScimGroupMapping;
+      const role=document.querySelector('[data-scim-group-role="'+CSS.escape(groupId)+'"]')?.value||"";
+      const priority=Number(document.querySelector('[data-scim-group-priority="'+CSS.escape(groupId)+'"]')?.value||100);
+      const existing=(state.scim?.groups||[]).find(g=>g.id===groupId);
+      busy(save,true,"Saving…");
+      try{
+        if(!role){
+          if(existing?.mappingId){
+            await scimAdminEdge({action:"group_mapping_delete",orgId:state.orgId,groupId});
+            toast("SCIM group role mapping removed.","success");
+          }else{
+            toast("Choose a TrustRelay role to create a mapping.","error");
+            return;
+          }
+        }else{
+          await scimAdminEdge({
+            action:"group_mapping_set",orgId:state.orgId,groupId,role,
+            priority:Math.max(1,Math.min(1000,Number.isFinite(priority)?priority:100)),
+            enabled:true
+          });
+          toast("SCIM group role mapping saved.","success");
+        }
+        state.scim=await scimStatus();renderScim();
+      }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
+      finally{busy(save,false)}
+      return;
+    }
+
+    const remove=event.target.closest("[data-delete-scim-group-mapping]");
+    if(remove){
+      const groupId=remove.dataset.deleteScimGroupMapping;
+      if(!confirm("Remove this SCIM group role mapping? Affected SCIM-managed users will be reconciled to their next mapped group or the default SCIM role."))return;
+      busy(remove,true,"Removing…");
+      try{
+        await scimAdminEdge({action:"group_mapping_delete",orgId:state.orgId,groupId});
+        state.scim=await scimStatus();renderScim();
+        toast("SCIM group role mapping removed.","success");
+      }catch(err){toast(String(err.code||err.message).replaceAll("_"," "),"error")}
+      finally{busy(remove,false)}
+    }
   });
 
   $("decisionResult").addEventListener("click", (event) => {
